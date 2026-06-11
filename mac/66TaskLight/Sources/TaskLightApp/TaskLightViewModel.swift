@@ -128,7 +128,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func observedCount() -> Int {
-        dashboard.observations_state?.counts.active ?? 0
+        observedDisplayCount()
     }
 
     func observedDisplayCount() -> Int {
@@ -176,7 +176,8 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func visibleObservedThreads() -> [TaskLightObservationRecord] {
-        (dashboard.observations_state?.observations ?? []).filter { $0.isActive }
+        (dashboard.observations_state?.observations ?? [])
+            .filter { $0.isActive && $0.managed_task_id == nil }
     }
 
     func luckyCatCompactStatusText() -> String {
@@ -212,21 +213,31 @@ final class TaskLightViewModel: ObservableObject {
         return "M\(minutes)"
     }
 
+    func compactDataLabel() -> String {
+        "M\(managedActiveCount()) O\(observedDisplayCount())"
+    }
+
     func compactProgressValue() -> CGFloat {
-        if blockedDisplayCount() > 0 {
-            return 0.68
+        if let task = compactReferenceTask() {
+            let fallback: CGFloat
+            switch task.effective_status {
+            case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+                fallback = 0.68
+            case TaskLightStatus.done_unverified.rawValue:
+                fallback = 0.88
+            case TaskLightStatus.done_verified.rawValue:
+                fallback = 1
+            case TaskLightStatus.queued.rawValue:
+                fallback = 0.08
+            case TaskLightStatus.running.rawValue:
+                fallback = 0.56
+            default:
+                fallback = 0
+            }
+            return clampedProgress(task.progress, fallback: fallback)
         }
-        if pendingDisplayCount() > 0 && runningDisplayCount() == 0 {
-            return 0.86
-        }
-        if runningDisplayCount() > 0 {
-            return 0.56
-        }
-        if observedDisplayCount() > 0 {
+        if hasObservedActivity() {
             return 0.22
-        }
-        if doneDisplayCount() > 0 {
-            return 1
         }
         return 0
     }
@@ -318,20 +329,13 @@ final class TaskLightViewModel: ObservableObject {
         if dashboard.counts.blocked > 0 || dashboard.counts.stale > 0 {
             return TaskLightStatus.blocked.rawValue
         }
-        if let observations = dashboard.observations_state {
-            if observations.counts.attention > 0 {
-                let highConfidenceAttention = observations.observations.contains {
-                    ($0.status == "observed_attention") && $0.confidence >= 0.75
-                }
-                if highConfidenceAttention {
-                    return TaskLightStatus.blocked.rawValue
-                }
-            }
+        if hasHighConfidenceObservedAttention() {
+            return TaskLightStatus.blocked.rawValue
         }
         if dashboard.counts.running > 0 || dashboard.counts.queued > 0 || dashboard.counts.done_unverified > 0 {
             return TaskLightStatus.running.rawValue
         }
-        if (dashboard.observations_state?.counts.active ?? 0) > 0 {
+        if hasObservedActivity() {
             return TaskLightStatus.running.rawValue
         }
         if dashboard.last_verified_at != nil {
@@ -386,18 +390,50 @@ final class TaskLightViewModel: ObservableObject {
 
     private func compactReferenceTask() -> TaskLightTaskSummary? {
         if let current = dashboard.current_task_id,
-           let currentTask = dashboard.tasks.first(where: { $0.task_id == current }) {
+           let currentTask = dashboard.tasks.first(where: { $0.task_id == current }),
+           isCompactPrimaryStatus(currentTask.effective_status) {
             return currentTask
         }
-        if let active = dashboard.tasks.first(where: {
-            $0.effective_status == TaskLightStatus.running.rawValue
-                || $0.effective_status == TaskLightStatus.queued.rawValue
-                || $0.effective_status == TaskLightStatus.done_unverified.rawValue
-                || $0.effective_status == TaskLightStatus.blocked.rawValue
-                || $0.effective_status == TaskLightStatus.stale.rawValue
-        }) {
-            return active
+
+        let priority = [
+            TaskLightStatus.blocked.rawValue,
+            TaskLightStatus.stale.rawValue,
+            TaskLightStatus.running.rawValue,
+            TaskLightStatus.queued.rawValue,
+            TaskLightStatus.done_unverified.rawValue,
+            TaskLightStatus.done_verified.rawValue
+        ]
+        for status in priority {
+            if let task = dashboard.tasks.first(where: { $0.effective_status == status }) {
+                return task
+            }
         }
-        return dashboard.tasks.first
+        return nil
+    }
+
+    private func isCompactPrimaryStatus(_ status: String) -> Bool {
+        status == TaskLightStatus.blocked.rawValue
+            || status == TaskLightStatus.stale.rawValue
+            || status == TaskLightStatus.running.rawValue
+            || status == TaskLightStatus.queued.rawValue
+            || status == TaskLightStatus.done_unverified.rawValue
+            || status == TaskLightStatus.done_verified.rawValue
+    }
+
+    private func hasObservedActivity() -> Bool {
+        !visibleObservedThreads().isEmpty
+    }
+
+    private func hasHighConfidenceObservedAttention() -> Bool {
+        visibleObservedThreads().contains {
+            $0.status == TaskLightObservationStatus.observed_attention.rawValue && $0.confidence >= 0.75
+        }
+    }
+
+    private func clampedProgress(_ progress: Double?, fallback: CGFloat) -> CGFloat {
+        guard let progress else {
+            return fallback
+        }
+        return CGFloat(min(1, max(0, progress)))
     }
 }

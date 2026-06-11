@@ -18,6 +18,7 @@ trap cleanup EXIT INT TERM
 
 export TASKLIGHT_STATE_DIR="$STATE_DIR"
 export TASKLIGHT_CURRENT_TASK_HEARTBEAT_INTERVAL=1
+export TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS=10
 export CODEX_THREAD_ID="$THREAD_ID"
 
 start_json="$("$SCRIPT_PATH" start --title "smoke current codex thread" --phase smoke --progress 0.2)"
@@ -75,6 +76,33 @@ task = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 assert binding["status"] == "released", binding
 assert binding["released_at"], binding
 assert task["status"] == "done_verified", task
+PY
+
+export TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS=2
+idle_json="$("$SCRIPT_PATH" start --title "smoke current codex idle release" --phase smoke_idle --progress 0.3)"
+idle_task_id="$(printf '%s\n' "$idle_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["task"]["task_id"])')"
+WATCH_PID="$(python3 - "$binding_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["watch_pid"])
+PY
+)"
+
+sleep 4
+
+python3 - "$binding_path" "$STATE_DIR/tasks/$idle_task_id.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+binding = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+task = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert binding["status"] == "released", binding
+assert binding["released_at"], binding
+assert task["status"] == "cancelled", task
 PY
 
 if env -u CODEX_THREAD_ID TASKLIGHT_STATE_DIR="$STATE_DIR" "$SCRIPT_PATH" show >/dev/null 2>&1; then

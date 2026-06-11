@@ -222,6 +222,9 @@ Behavior:
 - `start` creates or reuses the current thread's managed task
 - the helper starts a lightweight background heartbeat watcher so long thinking
   time does not falsely turn the task stale
+- the watcher is lease-based: if no explicit helper command updates the binding
+  within `TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `180`), it clears
+  the managed task and releases the binding so the panel can return to idle
 - `done`, `verify`, `block`, and `clear` stop the watcher and mark the thread
   binding as released
 - `done` still only writes `done_unverified`; only `verify` can produce green

@@ -7,6 +7,7 @@ STATE_DIR="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
 THREAD_ID="${CODEX_THREAD_ID:-}"
 THREAD_BINDINGS_DIR="${TASKLIGHT_THREAD_BINDINGS_DIR:-$STATE_DIR/thread_bindings}"
 HEARTBEAT_INTERVAL="${TASKLIGHT_CURRENT_TASK_HEARTBEAT_INTERVAL:-20}"
+ACTIVE_LEASE_SECONDS="${TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS:-180}"
 DEFAULT_PHASE="${TASKLIGHT_CURRENT_TASK_PHASE:-codex_session}"
 DEFAULT_PROGRESS="${TASKLIGHT_CURRENT_TASK_PROGRESS:-0.12}"
 
@@ -143,20 +144,68 @@ is_nonterminal_status() {
 }
 
 start_watcher() {
-  local watch_path tasklight_bin interval
+  local watch_path tasklight_bin interval active_lease_seconds
   watch_path="$(binding_path)"
   tasklight_bin="$TASKLIGHT_BIN"
   interval="$HEARTBEAT_INTERVAL"
-  nohup python3 - "$watch_path" "$tasklight_bin" "$interval" >/dev/null 2>&1 <<'PY' &
+  active_lease_seconds="$ACTIVE_LEASE_SECONDS"
+  nohup python3 - "$watch_path" "$tasklight_bin" "$interval" "$active_lease_seconds" >/dev/null 2>&1 <<'PY' &
 import json
+import os
 import subprocess
 import sys
 import time
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 path = Path(sys.argv[1])
 tasklight_bin = sys.argv[2]
 interval = float(sys.argv[3])
+active_lease_seconds = float(sys.argv[4])
+
+def parse_ts(value):
+    if not value:
+        return None
+    normalized = str(value).replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+def now_string():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+def write_payload(payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=True, sort_keys=True, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_name, path)
+    dir_fd = os.open(path.parent, os.O_DIRECTORY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+def release_idle_binding(payload):
+    task_id = payload.get("task_id")
+    if task_id:
+        subprocess.run(
+            [tasklight_bin, "clear", "--task-id", str(task_id)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    now = now_string()
+    payload["status"] = "released"
+    payload["released_at"] = now
+    payload["updated_at"] = now
+    payload["watch_pid"] = None
+    write_payload(payload)
 
 while True:
     time.sleep(interval)
@@ -164,6 +213,14 @@ while True:
         raise SystemExit(0)
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("status") != "active":
+        raise SystemExit(0)
+    updated_at = parse_ts(payload.get("updated_at"))
+    if updated_at is None:
+        release_idle_binding(payload)
+        raise SystemExit(0)
+    idle_seconds = datetime.now(timezone.utc).timestamp() - updated_at.timestamp()
+    if idle_seconds > active_lease_seconds:
+        release_idle_binding(payload)
         raise SystemExit(0)
     task_id = payload.get("task_id")
     phase = payload.get("phase") or "codex_session"

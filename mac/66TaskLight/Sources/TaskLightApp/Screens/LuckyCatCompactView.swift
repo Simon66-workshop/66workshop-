@@ -21,7 +21,7 @@ struct LuckyCatCompactView: View {
             progress: viewModel.compactProgressValue(),
             highlightsBell: viewModel.compactShowsAlertBell(),
             statusTitle: displayTitle,
-            elapsedLabel: viewModel.compactElapsedLabel()
+            elapsedLabel: viewModel.compactDataLabel()
         ) {
             ZStack {
                 HStack(spacing: 10) {

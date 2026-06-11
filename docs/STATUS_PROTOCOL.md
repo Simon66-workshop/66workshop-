@@ -126,7 +126,10 @@ The sidecar is keyed by `CODEX_THREAD_ID` and carries binding metadata such as:
 
 The binding sidecar is not part of `state.json` aggregation. It exists only to let
 the current Codex session resolve the correct managed task id and keep a local
-heartbeat watcher alive.
+heartbeat watcher alive. The watcher is bounded by
+`TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `180`). If the binding is
+not updated within that lease, the watcher clears the managed task and marks the
+binding `released`, so an idle Codex session does not remain blue indefinitely.
 
 ## Observation Layer
 
