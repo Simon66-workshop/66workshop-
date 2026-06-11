@@ -1,0 +1,39 @@
+import SwiftUI
+
+struct CatFaceView: View {
+    let status: LuckyCatStatus
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 30) {
+                Eye()
+                Eye()
+            }.offset(y: -20)
+            Circle().fill(Color.pink.opacity(0.85)).frame(width: 12, height: 9).offset(y: -2)
+            Text("⌣")
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.brown)
+                .offset(y: 9)
+            HStack(spacing: 54) {
+                Whiskers()
+                Whiskers().scaleEffect(x: -1, y: 1)
+            }.offset(y: 10)
+        }
+    }
+}
+
+private struct Eye: View {
+    var body: some View {
+        Capsule().fill(Color.brown).frame(width: 22, height: 6).rotationEffect(.degrees(-8))
+    }
+}
+
+private struct Whiskers: View {
+    var body: some View {
+        VStack(spacing: 5) {
+            Capsule().fill(Color.pink.opacity(0.55)).frame(width: 22, height: 3).rotationEffect(.degrees(10))
+            Capsule().fill(Color.pink.opacity(0.55)).frame(width: 22, height: 3)
+            Capsule().fill(Color.pink.opacity(0.55)).frame(width: 22, height: 3).rotationEffect(.degrees(-10))
+        }
+    }
+}

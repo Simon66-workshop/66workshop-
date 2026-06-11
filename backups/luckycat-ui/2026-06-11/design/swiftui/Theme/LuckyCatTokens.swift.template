@@ -1,0 +1,30 @@
+import SwiftUI
+
+enum LuckyCatTokens {
+    enum ColorToken {
+        static let cream = Color(hex: "#FFF1DE")
+        static let creamDeep = Color(hex: "#F6DDBF")
+        static let textPrimary = Color(hex: "#4B372E")
+        static let textSecondary = Color(hex: "#8A7568")
+        static let red = Color(hex: "#FF6B6B")
+        static let blue = Color(hex: "#5DB8FF")
+        static let green = Color(hex: "#76D86B")
+        static let amber = Color(hex: "#FFB35C")
+        static let cyan = Color(hex: "#4CD9EA")
+        static let gold = Color(hex: "#D8A63B")
+        static let collarRed = Color(hex: "#E9553F")
+        static let idleGray = Color(hex: "#B8B1AA")
+    }
+}
+
+extension Color {
+    init(hex: String) {
+        let scanner = Scanner(string: hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
+        var value: UInt64 = 0
+        scanner.scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xff) / 255
+        let g = Double((value >> 8) & 0xff) / 255
+        let b = Double(value & 0xff) / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}

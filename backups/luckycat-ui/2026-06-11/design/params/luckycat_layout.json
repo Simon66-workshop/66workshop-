@@ -1,0 +1,57 @@
+{
+  "compactPanel": {
+    "width": 360,
+    "height": 220,
+    "cornerRadius": 34,
+    "padding": 22,
+    "spacing": 20
+  },
+  "compactMini": {
+    "width": 300,
+    "height": 176,
+    "cornerRadius": 30,
+    "padding": 18,
+    "spacing": 14
+  },
+  "expandedPanel": {
+    "width": 680,
+    "height": 500,
+    "cornerRadius": 34,
+    "padding": 22,
+    "sidebarWidth": 210
+  },
+  "mascot": {
+    "width": 118,
+    "height": 150,
+    "bellSize": 28,
+    "statusOrbSize": 54,
+    "earSize": 38,
+    "pawSize": 34
+  },
+  "pawCounterChip": {
+    "width": 56,
+    "height": 74,
+    "cornerRadius": 18,
+    "paddingTop": 8,
+    "gap": 4,
+    "spacing": 12
+  },
+  "taskCard": {
+    "height": 52,
+    "cornerRadius": 14,
+    "paddingX": 14,
+    "paddingY": 10,
+    "gap": 8
+  },
+  "observedThreadCard": {
+    "height": 58,
+    "cornerRadius": 14,
+    "paddingX": 14,
+    "paddingY": 10,
+    "opacity": 0.78
+  },
+  "windowControls": {
+    "buttonSize": 18,
+    "gap": 10
+  }
+}

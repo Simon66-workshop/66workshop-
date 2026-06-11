@@ -1,0 +1,16 @@
+import Foundation
+
+enum LuckyCatLayout {
+    static let compactWidth: CGFloat = 360
+    static let compactHeight: CGFloat = 220
+    static let expandedWidth: CGFloat = 680
+    static let expandedHeight: CGFloat = 500
+    static let panelCornerRadius: CGFloat = 34
+    static let panelPadding: CGFloat = 22
+    static let mascotWidth: CGFloat = 118
+    static let mascotHeight: CGFloat = 150
+    static let pawChipWidth: CGFloat = 56
+    static let pawChipHeight: CGFloat = 74
+    static let pawChipCornerRadius: CGFloat = 18
+    static let chipSpacing: CGFloat = 12
+}

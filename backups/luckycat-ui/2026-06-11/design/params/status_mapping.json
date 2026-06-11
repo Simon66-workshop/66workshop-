@@ -1,0 +1,76 @@
+{
+  "globalLampRules": [
+    {
+      "priority": 1,
+      "condition": "any managed task is blocked or stale",
+      "lamp": "red",
+      "sound": "blocked/red lane"
+    },
+    {
+      "priority": 2,
+      "condition": "high confidence observed_attention",
+      "lamp": "red",
+      "sound": "optional; default silent for observed"
+    },
+    {
+      "priority": 3,
+      "condition": "managed running/queued/done_unverified or any observed_active",
+      "lamp": "blue",
+      "sound": "none"
+    },
+    {
+      "priority": 4,
+      "condition": "no active/observed and latest managed completion is done_verified",
+      "lamp": "green",
+      "sound": "done_verified"
+    },
+    {
+      "priority": 5,
+      "condition": "no tasks and no active observation",
+      "lamp": "gray/idle",
+      "sound": "none"
+    }
+  ],
+  "chips": {
+    "blocked": {
+      "label": "阻塞",
+      "count": "blocked + stale",
+      "color": "red"
+    },
+    "running": {
+      "label": "运行",
+      "count": "running + queued",
+      "color": "blue"
+    },
+    "done": {
+      "label": "完成",
+      "count": "done_verified",
+      "color": "green"
+    },
+    "pending": {
+      "label": "待验",
+      "count": "pending_verify_count",
+      "color": "amber"
+    },
+    "observed": {
+      "label": "观察",
+      "count": "observed_active",
+      "color": "cyan"
+    }
+  },
+  "taskCardOrder": [
+    "blocked",
+    "stale",
+    "running",
+    "queued",
+    "done_unverified",
+    "done_verified",
+    "cancelled"
+  ],
+  "nonNegotiables": [
+    "done_unverified is never green",
+    "observed threads are never done_verified",
+    "observed disappeared is silent",
+    "state writer remains tasklight CLI"
+  ]
+}

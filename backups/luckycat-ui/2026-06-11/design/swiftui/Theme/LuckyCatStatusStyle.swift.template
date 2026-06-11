@@ -1,0 +1,21 @@
+import SwiftUI
+
+enum LuckyCatStatus: String {
+    case idle
+    case running
+    case blocked
+    case done
+    case pending
+    case observed
+
+    var tint: Color {
+        switch self {
+        case .idle: return LuckyCatTokens.ColorToken.idleGray
+        case .running: return LuckyCatTokens.ColorToken.blue
+        case .blocked: return LuckyCatTokens.ColorToken.red
+        case .done: return LuckyCatTokens.ColorToken.green
+        case .pending: return LuckyCatTokens.ColorToken.amber
+        case .observed: return LuckyCatTokens.ColorToken.cyan
+        }
+    }
+}
