@@ -1,0 +1,42 @@
+import SwiftUI
+
+struct LuckyCatMascotView: View {
+    let status: LuckyCatStatus
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .fill(LuckyCatTokens.ColorToken.cream)
+                .overlay(RoundedRectangle(cornerRadius: 42).stroke(Color.white.opacity(0.7), lineWidth: 1))
+            CatEar(side: .left).offset(x: -36, y: -58)
+            CatEar(side: .right).offset(x: 36, y: -58)
+            CatFaceView(status: status).offset(y: -8)
+            CatBellView().offset(y: 54)
+        }
+        .frame(width: LuckyCatLayout.mascotWidth, height: LuckyCatLayout.mascotHeight)
+    }
+}
+
+private enum CatEarSide { case left, right }
+
+private struct CatEar: View {
+    let side: CatEarSide
+    var body: some View {
+        Triangle()
+            .fill(LuckyCatTokens.ColorToken.creamDeep)
+            .overlay(Triangle().fill(Color.pink.opacity(0.45)).padding(8))
+            .frame(width: 38, height: 42)
+            .rotationEffect(.degrees(side == .left ? -12 : 12))
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}

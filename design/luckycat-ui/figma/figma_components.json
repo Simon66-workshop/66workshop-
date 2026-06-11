@@ -1,0 +1,134 @@
+{
+  "pageStructure": [
+    "00 Cover",
+    "01 Tokens",
+    "02 Components",
+    "03 Compact States",
+    "04 Expanded Dashboard",
+    "05 Redline SwiftUI Specs",
+    "06 Export Assets"
+  ],
+  "components": [
+    {
+      "name": "66TaskLight/LuckyCatPanel",
+      "variants": {
+        "mode": [
+          "compact",
+          "expanded"
+        ],
+        "globalStatus": [
+          "idle",
+          "running",
+          "blocked",
+          "done"
+        ]
+      },
+      "size": {
+        "compact": "360x220",
+        "expanded": "680x500"
+      }
+    },
+    {
+      "name": "66TaskLight/CatMascot",
+      "variants": {
+        "mood": [
+          "idle",
+          "happy",
+          "alert",
+          "running"
+        ],
+        "paw": [
+          "left",
+          "right",
+          "none"
+        ]
+      },
+      "params": {
+        "width": 118,
+        "height": 150
+      }
+    },
+    {
+      "name": "66TaskLight/StatusOrb",
+      "variants": {
+        "status": [
+          "idle",
+          "running",
+          "blocked",
+          "done",
+          "pending",
+          "observed"
+        ]
+      },
+      "params": {
+        "size": 54
+      }
+    },
+    {
+      "name": "66TaskLight/PawCounterChip",
+      "variants": {
+        "status": [
+          "blocked",
+          "running",
+          "done",
+          "pending",
+          "observed",
+          "idle"
+        ]
+      },
+      "params": {
+        "width": 56,
+        "height": 74,
+        "cornerRadius": 18
+      }
+    },
+    {
+      "name": "66TaskLight/TaskCard",
+      "variants": {
+        "status": [
+          "blocked",
+          "stale",
+          "running",
+          "pending",
+          "done"
+        ]
+      }
+    },
+    {
+      "name": "66TaskLight/ObservedThreadCard",
+      "variants": {
+        "status": [
+          "observed_active",
+          "observed_quiet",
+          "observed_attention"
+        ]
+      }
+    },
+    {
+      "name": "66TaskLight/GlassSurface",
+      "variants": {
+        "density": [
+          "thin",
+          "regular",
+          "thick"
+        ],
+        "tone": [
+          "warm",
+          "cool",
+          "red",
+          "blue",
+          "green"
+        ]
+      }
+    },
+    {
+      "name": "66TaskLight/WindowControls",
+      "variants": {
+        "state": [
+          "normal",
+          "hover"
+        ]
+      }
+    }
+  ]
+}

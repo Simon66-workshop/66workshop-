@@ -1,0 +1,25 @@
+import SwiftUI
+
+struct LuckyCatGlassPanel<Content: View>: View {
+    let status: LuckyCatStatus
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(LuckyCatLayout.panelPadding)
+            .background(
+                RoundedRectangle(cornerRadius: LuckyCatLayout.panelCornerRadius, style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LuckyCatLayout.panelCornerRadius, style: .continuous)
+                            .fill(LuckyCatTokens.ColorToken.cream.opacity(0.48))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: LuckyCatLayout.panelCornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.68), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.16), radius: 34, y: 14)
+            .shadow(color: status.tint.opacity(0.18), radius: 24, y: 0)
+    }
+}

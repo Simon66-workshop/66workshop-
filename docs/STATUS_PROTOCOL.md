@@ -1,0 +1,331 @@
+# 66TaskLight Multi-Task Status Protocol
+
+## Purpose
+
+66TaskLight is a local-first task status bus for Codex and Hermes workflows on macOS.
+It is offline-only, fail-closed, and designed for many concurrent wrappers without
+overwriting each other.
+
+## Storage Layout
+
+Canonical files live under `~/.66tasklight/` by default:
+
+- `state.json`
+- `tasks/<task_id>.json`
+- `thread_bindings/<CODEX_THREAD_ID>.json`
+- `observations/<observation_id>.json`
+- `observations_state.json`
+- `events.jsonl`
+- `played_events.json`
+- `current.json` as a compatibility mirror for legacy single-task readers
+- `.lock` for serialized writers
+
+All paths, sound names, and refresh intervals are configurable through environment
+variables:
+
+- `TASKLIGHT_STATE_DIR`
+- `TASKLIGHT_STATE_PATH`
+- `TASKLIGHT_TASKS_DIR`
+- `TASKLIGHT_CURRENT_PATH`
+- `TASKLIGHT_THREAD_BINDINGS_DIR`
+- `TASKLIGHT_EVENTS_PATH`
+- `TASKLIGHT_PLAYED_EVENTS_PATH`
+- `TASKLIGHT_LOCK_PATH`
+- `TASKLIGHT_BLOCKED_SOUND`
+- `TASKLIGHT_DONE_SOUND`
+- `TASKLIGHT_STALE_SOUND` legacy/ignored in M2.1+; stale reuses the blocked/red lane
+- `TASKLIGHT_OBSERVATIONS_DIR`
+- `TASKLIGHT_OBSERVATIONS_STATE_PATH`
+- `TASKLIGHT_TTL_SECONDS`
+- `TASKLIGHT_VERIFICATION_TTL_SECONDS`
+- `TASKLIGHT_REFRESH_SECONDS`
+
+## Task States
+
+Legal task states:
+
+- `queued`
+- `running`
+- `blocked`
+- `done_unverified`
+- `done_verified`
+- `stale`
+- `cancelled`
+
+Diagnostic only:
+
+- `invalid_json`
+
+`invalid_json` is not a normal transition state. It is used when a per-task JSON file
+cannot be decoded. It must not poison the rest of the board.
+
+## Per-Task File Schema
+
+Each `tasks/<task_id>.json` file stores a single task record. Relevant fields include:
+
+- `schema_version`
+- `task_id`
+- `short_task_id`
+- `title`
+- `slug`
+- `status`
+- `raw_status`
+- `effective_status`
+- `phase`
+- `progress`
+- `reason`
+- `message`
+- `evidence`
+- `summary`
+- `created_at`
+- `started_at`
+- `updated_at`
+- `heartbeat_at`
+- `done_at`
+- `verified_at`
+- `cancelled_at`
+- `ttl_seconds`
+- `source`
+- `last_error`
+- `current_event_id`
+- `file_path`
+- `alert_fingerprint`
+- `sound_type`
+- `is_invalid_json`
+- `invalid_json_error`
+
+`done_unverified` is the intermediate completion state. It means the task command
+has ended, but the acceptance gate has not passed yet. It stays blue until verified
+and must not trigger the green completion sound.
+
+## Observation Layer
+
+## Current Thread Binding
+
+Current Codex desktop work can be bound explicitly to the managed path through a
+thread sidecar file. This does not add a new task state and does not change the
+authoritative task schema.
+
+Sidecar path:
+
+- `thread_bindings/<CODEX_THREAD_ID>.json`
+
+The sidecar is keyed by `CODEX_THREAD_ID` and carries binding metadata such as:
+
+- `thread_id`
+- `task_id`
+- `title`
+- `cwd`
+- `created_at`
+- `updated_at`
+- `phase`
+- `progress`
+- `watch_pid`
+- `released_at`
+- `status` (`active` or `released`)
+
+The binding sidecar is not part of `state.json` aggregation. It exists only to let
+the current Codex session resolve the correct managed task id and keep a local
+heartbeat watcher alive.
+
+## Observation Layer
+
+`observe-local` is a separate local discovery pass that watches running Codex child
+processes which look like real task execution. It does not write `done_verified`
+and does not change managed task state.
+
+Observed thread files live under `observations/<observation_id>.json` and are
+summarized in `observations_state.json`.
+
+Observed statuses:
+
+- `observed_active`
+- `observed_quiet`
+- `observed_attention`
+- `observed_disappeared`
+
+Rules:
+
+- observed threads are display-only and never overwrite managed task records,
+- observed threads default to silent audio,
+- `observed_disappeared` is removed from the active board after a few missed scans,
+- the whitelist only accepts `codex` CLI-shaped child processes such as
+  `codex exec`, `codex run`, `codex chat`, `codex shell`, or `codex resume`,
+- Codex Desktop infrastructure such as `app-server`, `node_repl`, `chronicle`,
+  crash handlers, Computer Use, and Hermes gateway processes are excluded,
+- if a scan sees `TASKLIGHT_TASK_ID=...`, the process is treated as managed-linked
+  and is not duplicated in the observed board.
+
+Global lamp interplay:
+
+- managed `blocked` or `stale` still forces red,
+- high-confidence `observed_attention` can also force red,
+- managed running/pending or any active observed thread keeps the lamp blue,
+- only managed verified completion can return the lamp to green when nothing else is active.
+
+## Aggregate State Schema
+
+`state.json` is the authoritative aggregate snapshot for the app. It is rebuilt after
+every task mutation.
+
+Top-level fields include:
+
+- `schema_version`
+- `source`
+- `source_health`
+- `lamp_status`
+- `global_status`
+- `generated_at`
+- `updated_at`
+- `current_task_id`
+- `last_verified_at`
+- `last_event_at`
+- `counts`
+- `tasks`
+- `invalid_tasks`
+
+The `counts` object includes:
+
+- `blocked`
+- `stale`
+- `running`
+- `queued`
+- `done_verified`
+- `done_unverified`
+- `pending_verify_count`
+- `cancelled`
+- `invalid_json`
+- `active`
+- `total`
+- `red`
+- `blue`
+- `green`
+- `gray`
+
+## Global Lamp Rules
+
+The compact lamp uses the aggregate status, not any single task file.
+
+1. If any task is `blocked` or `stale`, the global lamp is red.
+2. If no task is blocked/stale but any task is `queued`, `running`, or `done_unverified`,
+   the global lamp is blue.
+3. If no active task exists and the latest verified completion is `done_verified`,
+   the global lamp is green.
+4. Otherwise the lamp is gray/idle.
+5. `invalid_json` is isolated and does not change the lamp on its own.
+
+## Task Transition Rules
+
+- `start` creates a new task id and writes a new task record as `running`.
+- `heartbeat --task-id <id>` is valid for live active tasks and refreshes phase/progress.
+- `done --task-id <id>` marks the task `done_unverified`.
+- `verify --task-id <id>` promotes `done_unverified` to `done_verified`.
+- `block --task-id <id> --reason <enum>` writes `blocked`.
+- `clear --task-id <id>` marks `cancelled` and preserves history.
+
+Blocker reasons must match exactly:
+
+- `dirty_worktree`
+- `missing_input`
+- `test_failed`
+- `acceptance_failed`
+- `permission_denied`
+- `timeout`
+- `stale_state`
+- `invalid_json`
+- `codex_exit_failed`
+- `needs_human_review`
+- `hardware_missing`
+
+Invalid transitions fail closed. When possible, they write a blocked or diagnostic
+record instead of pretending success.
+
+## TTL And Stale Behavior
+
+`stale` is computed from `heartbeat_at` and the configured TTL for running tasks.
+`done_unverified` uses `done_at` or `updated_at` plus
+`TASKLIGHT_VERIFICATION_TTL_SECONDS`.
+
+- If a running task exceeds TTL, the visible state becomes `stale`.
+- If a `done_unverified` task exceeds the verification TTL, the visible state
+  becomes `stale` and is treated as a red diagnostic state.
+- The app must treat stale as red.
+- `state.json` corruption is a separate health problem and must not crash the app.
+- A corrupt task JSON becomes `invalid_json` for that task only.
+
+## Atomicity Rules
+
+- Task records and `state.json` are written with atomic temp-file replace semantics.
+- Current-thread binding sidecars use the same atomic temp-file replace rule.
+- `events.jsonl` is append-only and each event is appended as one JSON line.
+- Writers hold the file lock while mutating task records, appending events, and rebuilding
+  the aggregate snapshot.
+- No half-written JSON should ever be visible to a reader.
+
+## Event Log Schema
+
+Each `events.jsonl` row includes the required fields:
+
+- `event_id`
+- `task_id`
+- `from`
+- `to`
+- `created_at`
+- `sound_type`
+
+Events may also carry `reason`, `message`, `summary`, `phase`, `progress`, and `title`
+for traceability.
+
+`sound_type` is used by the desktop app for red/green alert playback. Valid values are
+`blocked`, `done_verified`, or `none`.
+`done_unverified` must not emit an alert sound.
+
+## Sound Ledger
+
+`played_events.json` stores the durable audio dedupe ledger:
+
+- `muted`
+- `played_event_ids`
+- `sound_windows`
+- `updated_at`
+
+The app uses this ledger to ensure:
+
+- old events do not replay after restart,
+- the same `event_id` never sounds twice,
+- repeated blocked or verified-completion bursts within 5 seconds collapse into one sound.
+
+`stale` is treated as a red diagnostic state. If a stale task needs to participate
+in any audio path, it must reuse the blocked/red alert lane rather than introducing
+a separate stale sound class.
+
+## Compatibility Behavior
+
+`current.json` remains as a compatibility mirror for older single-task flows.
+It is not the authoritative source in M2.0.
+
+`observations_state.json` is the authoritative snapshot for the observation layer
+and is read separately from the managed task state.
+
+Readers should prefer:
+
+1. `state.json`
+2. `tasks/<task_id>.json`
+3. `observations_state.json` for observed threads
+4. `current.json` as a legacy fallback
+
+If `state.json` is unreadable, the app must fail closed and show a stale or blocked
+diagnostic rather than crashing. If a single task file is unreadable, isolate it as
+`invalid_json` and keep the rest of the board visible.
+
+## UI Skin Boundary
+
+The LuckyCat 66VS macOS skin is a read-only presentation layer on top of the
+existing protocol.
+
+- it reads `state.json`, `observations_state.json`, per-task files, and legacy
+  `current.json` fallback,
+- it must not introduce new protocol fields,
+- it must not write task state directly,
+- it must not change the meaning of `done_unverified`, `done_verified`,
+  `blocked`, `stale`, or any observed-thread status.

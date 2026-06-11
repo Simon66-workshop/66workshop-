@@ -1,0 +1,31 @@
+import SwiftUI
+
+struct LuckyCatCompactView: View {
+    let model: TaskLightDashboardModel
+
+    var body: some View {
+        LuckyCatGlassPanel(status: model.luckyCatStatus) {
+            HStack(spacing: 20) {
+                LuckyCatMascotView(status: model.luckyCatStatus)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.displayTitle)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(LuckyCatTokens.ColorToken.textPrimary)
+                        Text("M\(model.managedActiveCount) · O\(model.observedActiveCount)")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundStyle(LuckyCatTokens.ColorToken.textSecondary)
+                    }
+                    HStack(spacing: LuckyCatLayout.chipSpacing) {
+                        LuckyCatPawCounterChip(status: .blocked, count: model.blockedCount, label: "阻塞")
+                        LuckyCatPawCounterChip(status: .running, count: model.runningCount, label: "运行")
+                        LuckyCatPawCounterChip(status: .done, count: model.doneCount, label: "完成")
+                        LuckyCatPawCounterChip(status: .pending, count: model.pendingVerifyCount, label: "待验")
+                        LuckyCatPawCounterChip(status: .observed, count: model.observedActiveCount, label: "观察")
+                    }
+                }
+            }
+        }
+        .frame(width: LuckyCatLayout.compactWidth, height: LuckyCatLayout.compactHeight)
+    }
+}

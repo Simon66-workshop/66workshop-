@@ -1,0 +1,76 @@
+{
+  "name": "66TaskLight LuckyCat Tokens",
+  "colors": {
+    "cream": "#FFF1DE",
+    "creamDeep": "#F6DDBF",
+    "glass": "rgba(255, 248, 238, 0.72)",
+    "border": "rgba(255, 255, 255, 0.68)",
+    "shadow": "rgba(80, 48, 24, 0.18)",
+    "textPrimary": "#4B372E",
+    "textSecondary": "#8A7568",
+    "red": "#FF6B6B",
+    "blue": "#5DB8FF",
+    "green": "#76D86B",
+    "amber": "#FFB35C",
+    "cyan": "#4CD9EA",
+    "gold": "#D8A63B",
+    "goldDeep": "#A97717",
+    "collarRed": "#E9553F",
+    "idleGray": "#B8B1AA"
+  },
+  "typography": {
+    "title": {
+      "text": "GLOBAL_STATUS_DISPLAY",
+      "fontSize": 28,
+      "weight": "bold",
+      "tracking": 0.2
+    },
+    "subtitle": {
+      "example": "M2 · O1",
+      "fontSize": 18,
+      "weight": "semibold",
+      "tracking": 1.0
+    },
+    "counterNumber": {
+      "fontSize": 22,
+      "weight": "bold"
+    },
+    "counterLabel": {
+      "fontSize": 10,
+      "weight": "medium"
+    },
+    "taskTitle": {
+      "fontSize": 13,
+      "weight": "semibold"
+    },
+    "taskMeta": {
+      "fontSize": 11,
+      "weight": "regular"
+    }
+  },
+  "shadows": {
+    "panel": {
+      "x": 0,
+      "y": 14,
+      "blur": 34,
+      "color": "rgba(80, 48, 24, 0.18)"
+    },
+    "chip": {
+      "x": 0,
+      "y": 8,
+      "blur": 18,
+      "color": "rgba(96, 62, 38, 0.16)"
+    },
+    "orbGlow": {
+      "x": 0,
+      "y": 0,
+      "blur": 22,
+      "color": "status tint at 42%"
+    }
+  },
+  "materials": {
+    "panel": "SwiftUI .regularMaterial or AppKit NSVisualEffectView bridge",
+    "chip": "SwiftUI .thinMaterial over cream tint",
+    "glow": "status color overlay with low opacity"
+  }
+}

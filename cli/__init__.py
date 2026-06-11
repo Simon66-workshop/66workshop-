@@ -1,0 +1,2 @@
+"""66TaskLight CLI package."""
+

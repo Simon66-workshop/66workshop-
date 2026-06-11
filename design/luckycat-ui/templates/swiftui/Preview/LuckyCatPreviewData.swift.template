@@ -1,0 +1,12 @@
+import Foundation
+
+// Keep this file self-contained for previews. Map actual project model fields in Codex implementation.
+struct LuckyCatPreviewData {
+    static let sampleCounts = [
+        "blocked": 1,
+        "running": 2,
+        "done": 1,
+        "pending": 1,
+        "observed": 3
+    ]
+}

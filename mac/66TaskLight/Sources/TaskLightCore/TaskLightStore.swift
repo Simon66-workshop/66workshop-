@@ -1,0 +1,654 @@
+import Foundation
+import Darwin
+
+public final class TaskLightStore {
+    public let config: TaskLightConfig
+    private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
+
+    public init(config: TaskLightConfig = .fromEnvironment()) {
+        self.config = config
+        self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
+        self.encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+    }
+
+    public func ensureLayout() {
+        try? FileManager.default.createDirectory(at: config.stateDirectory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config.tasksDirectoryURL, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config.observationsDirectoryURL, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: config.playedEventsURL.path) {
+            let ledger = TaskLightPlayedEventsLedger()
+            try? writeJSONAtomic(ledger, to: config.playedEventsURL)
+        }
+        if !FileManager.default.fileExists(atPath: config.observationsStateURL.path) {
+            let observations = TaskLightObservationsState()
+            try? writeJSONAtomic(observations, to: config.observationsStateURL)
+        }
+    }
+
+    public func taskURL(taskID: String) -> URL {
+        config.tasksDirectoryURL.appendingPathComponent("\(taskID).json")
+    }
+
+    public func loadDashboard() -> TaskLightAggregateState {
+        ensureLayout()
+        let stateResult = readStateSnapshot()
+        let scan = scanTaskFiles()
+        let observations = loadObservationsState()
+
+        var dashboard: TaskLightAggregateState
+        if !scan.valid.isEmpty || !scan.invalid.isEmpty {
+            let sourceHealth = stateResult.health
+            let built = buildAggregate(valid: scan.valid, invalid: scan.invalid, sourceHealth: sourceHealth)
+            dashboard = refreshLiveState(built)
+            dashboard.observations_state = observations
+            return dashboard
+        }
+
+        if let state = stateResult.state {
+            dashboard = refreshLiveState(markSourceHealth(state, sourceHealth: stateResult.health))
+            dashboard.observations_state = observations
+            return dashboard
+        }
+
+        if let legacy = loadLegacyCurrentRecord() {
+            dashboard = refreshLiveState(buildAggregate(valid: [summary(from: legacy, filePath: config.currentURL)], invalid: [], sourceHealth: stateResult.health))
+            dashboard.observations_state = observations
+            return dashboard
+        }
+
+        dashboard = emptyState(sourceHealth: stateResult.health)
+        dashboard.observations_state = observations
+        return dashboard
+    }
+
+    public func loadTask(taskID: String) -> TaskLightTaskSummary? {
+        ensureLayout()
+        let scan = scanTaskFiles()
+        if let match = scan.valid.first(where: { $0.task_id == taskID }) {
+            return match
+        }
+        if let match = scan.invalid.first(where: { $0.task_id == taskID }) {
+            return match
+        }
+        if let legacy = loadLegacyCurrentRecord(), legacy.task_id == taskID {
+            return summary(from: legacy, filePath: config.currentURL)
+        }
+        return nil
+    }
+
+    public func loadEvents() -> [TaskLightEventRecord] {
+        ensureLayout()
+        guard let raw = try? String(contentsOf: config.eventsURL, encoding: .utf8), !raw.isEmpty else {
+            return []
+        }
+        return raw
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line in
+                guard let data = String(line).data(using: .utf8) else { return nil }
+                return try? decoder.decode(TaskLightEventRecord.self, from: data)
+            }
+    }
+
+    public func loadPlayedLedger() -> TaskLightPlayedEventsLedger {
+        ensureLayout()
+        guard let ledger: TaskLightPlayedEventsLedger = try? readJSON(from: config.playedEventsURL) else {
+            return TaskLightPlayedEventsLedger()
+        }
+        return ledger
+    }
+
+    public func savePlayedLedger(_ ledger: TaskLightPlayedEventsLedger) {
+        ensureLayout()
+        try? writeJSONAtomic(ledger, to: config.playedEventsURL)
+    }
+
+    public func appendEvent(_ event: TaskLightEventRecord) {
+        ensureLayout()
+        let encoded = (try? encoder.encode(event)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        let line = encoded + "\n"
+        let fd = open(config.eventsURL.path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.withCString { pointer in
+            write(fd, pointer, strlen(pointer))
+        }
+        fsync(fd)
+    }
+
+    public func clear(taskID: String) {
+        runCLI(arguments: ["clear", "--task-id", taskID])
+    }
+
+    private struct ScanResult {
+        var valid: [TaskLightTaskSummary]
+        var invalid: [TaskLightTaskSummary]
+    }
+
+    private struct StateReadResult {
+        var state: TaskLightAggregateState?
+        var health: TaskLightSourceHealth
+    }
+
+    private func readStateSnapshot() -> StateReadResult {
+        guard FileManager.default.fileExists(atPath: config.stateURL.path) else {
+            return StateReadResult(state: nil, health: .reconstructed)
+        }
+        do {
+            let state: TaskLightAggregateState = try readJSON(from: config.stateURL)
+            return StateReadResult(state: state, health: .healthy)
+        } catch {
+            return StateReadResult(state: nil, health: .corrupt_state)
+        }
+    }
+
+    private func loadLegacyCurrentRecord() -> TaskLightTaskRecord? {
+        guard FileManager.default.fileExists(atPath: config.currentURL.path) else {
+            return nil
+        }
+        guard let record: TaskLightTaskRecord = try? readJSON(from: config.currentURL) else {
+            return nil
+        }
+        if record.task_id.isEmpty && (record.status == "idle" || record.status == TaskLightStatus.idle.rawValue) {
+            return nil
+        }
+        return record
+    }
+
+    private struct ObservationScanResult {
+        var valid: [TaskLightObservationRecord]
+        var invalidCount: Int
+    }
+
+    private func loadObservationsState() -> TaskLightObservationsState {
+        let stateResult = readObservationsSnapshot()
+        if let state = stateResult.state {
+            return markObservationSourceHealth(state, sourceHealth: stateResult.health)
+        }
+        let scan = scanObservationFiles()
+        if !scan.valid.isEmpty || scan.invalidCount > 0 {
+            let built = buildObservationAggregate(records: scan.valid, sourceHealth: stateResult.health)
+            return built
+        }
+        return emptyObservationsState(sourceHealth: stateResult.health)
+    }
+
+    private struct ObservationStateReadResult {
+        var state: TaskLightObservationsState?
+        var health: TaskLightSourceHealth
+    }
+
+    private func readObservationsSnapshot() -> ObservationStateReadResult {
+        guard FileManager.default.fileExists(atPath: config.observationsStateURL.path) else {
+            return ObservationStateReadResult(state: nil, health: .reconstructed)
+        }
+        do {
+            let state: TaskLightObservationsState = try readJSON(from: config.observationsStateURL)
+            return ObservationStateReadResult(state: state, health: .healthy)
+        } catch {
+            return ObservationStateReadResult(state: nil, health: .corrupt_state)
+        }
+    }
+
+    private func scanObservationFiles() -> ObservationScanResult {
+        guard FileManager.default.fileExists(atPath: config.observationsDirectoryURL.path) else {
+            return ObservationScanResult(valid: [], invalidCount: 0)
+        }
+        var valid: [TaskLightObservationRecord] = []
+        var invalidCount = 0
+        let urls = (try? FileManager.default.contentsOfDirectory(at: config.observationsDirectoryURL, includingPropertiesForKeys: nil)) ?? []
+        for url in urls.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where url.pathExtension == "json" {
+            do {
+                let record: TaskLightObservationRecord = try readJSON(from: url)
+                if record.observation_id.isEmpty {
+                    invalidCount += 1
+                    continue
+                }
+                valid.append(record)
+            } catch {
+                invalidCount += 1
+            }
+        }
+        return ObservationScanResult(valid: valid, invalidCount: invalidCount)
+    }
+
+    private func emptyObservationsState(sourceHealth: TaskLightSourceHealth) -> TaskLightObservationsState {
+        TaskLightObservationsState(
+            source_health: sourceHealth.rawValue,
+            lamp_status: sourceHealth == .corrupt_state ? "stale" : "idle",
+            global_status: "idle",
+            counts: TaskLightObservationCounts(),
+            observations: []
+        )
+    }
+
+    private func markObservationSourceHealth(_ state: TaskLightObservationsState, sourceHealth: TaskLightSourceHealth) -> TaskLightObservationsState {
+        var copy = state
+        copy.source_health = sourceHealth.rawValue
+        if sourceHealth == .corrupt_state {
+            copy.lamp_status = "stale"
+        }
+        return copy
+    }
+
+    private func buildObservationAggregate(records: [TaskLightObservationRecord], sourceHealth: TaskLightSourceHealth) -> TaskLightObservationsState {
+        let active = records.filter { $0.isActive && $0.managed_task_id == nil }.sorted(by: observationSort)
+        var counts = TaskLightObservationCounts()
+        var lamp = "idle"
+        for record in records {
+            counts.total += 1
+            if record.managed_task_id != nil {
+                counts.linked_managed += 1
+                continue
+            }
+            switch TaskLightObservationStatus(rawValue: record.status) ?? .observed_quiet {
+            case .observed_active:
+                counts.active += 1
+                lamp = lamp == "idle" ? "running" : lamp
+            case .observed_quiet:
+                counts.quiet += 1
+                counts.active += 1
+                lamp = lamp == "idle" ? "running" : lamp
+            case .observed_attention:
+                counts.attention += 1
+                counts.active += 1
+                if record.confidence >= 0.75 {
+                    lamp = "blocked"
+                } else if lamp == "idle" {
+                    lamp = "running"
+                }
+            case .observed_disappeared:
+                counts.disappeared += 1
+            }
+        }
+        let globalStatus = lamp == "idle" ? "idle" : lamp
+        let lampStatus = sourceHealth == .corrupt_state ? "stale" : globalStatus
+        return TaskLightObservationsState(
+            source_health: sourceHealth.rawValue,
+            lamp_status: lampStatus,
+            global_status: globalStatus,
+            counts: counts,
+            observations: active
+        )
+    }
+
+    private func observationSort(_ lhs: TaskLightObservationRecord, _ rhs: TaskLightObservationRecord) -> Bool {
+        let lhsRank = observationRank(lhs.status)
+        let rhsRank = observationRank(rhs.status)
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+        if lhs.confidence != rhs.confidence {
+            return lhs.confidence > rhs.confidence
+        }
+        if lhs.last_seen_at != rhs.last_seen_at {
+            return (lhs.last_seen_at ?? lhs.detected_at ?? "") > (rhs.last_seen_at ?? rhs.detected_at ?? "")
+        }
+        return lhs.observation_id < rhs.observation_id
+    }
+
+    private func observationRank(_ status: String) -> Int {
+        switch status {
+        case TaskLightObservationStatus.observed_attention.rawValue:
+            return 0
+        case TaskLightObservationStatus.observed_active.rawValue:
+            return 1
+        case TaskLightObservationStatus.observed_quiet.rawValue:
+            return 2
+        case TaskLightObservationStatus.observed_disappeared.rawValue:
+            return 3
+        default:
+            return 4
+        }
+    }
+
+    private func scanTaskFiles() -> ScanResult {
+        guard FileManager.default.fileExists(atPath: config.tasksDirectoryURL.path) else {
+            return ScanResult(valid: [], invalid: [])
+        }
+        var valid: [TaskLightTaskSummary] = []
+        var invalid: [TaskLightTaskSummary] = []
+        let urls = (try? FileManager.default.contentsOfDirectory(at: config.tasksDirectoryURL, includingPropertiesForKeys: nil)) ?? []
+        for url in urls.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where url.pathExtension == "json" {
+            do {
+                let record: TaskLightTaskRecord = try readJSON(from: url)
+                if record.task_id.isEmpty {
+                    invalid.append(invalidSummary(taskID: url.deletingPathExtension().lastPathComponent, filePath: url, error: "missing task_id"))
+                    continue
+                }
+                valid.append(summary(from: record, filePath: url))
+            } catch {
+                invalid.append(invalidSummary(taskID: url.deletingPathExtension().lastPathComponent, filePath: url, error: error.localizedDescription))
+            }
+        }
+        return ScanResult(valid: valid, invalid: invalid)
+    }
+
+    private func summary(from record: TaskLightTaskRecord, filePath: URL) -> TaskLightTaskSummary {
+        let live = record.liveStatus(ttlSeconds: config.ttlSeconds, verificationTTLSeconds: config.verificationTTLSeconds)
+        let shortID = record.shortTaskID
+        let lastError: String? = {
+            if live == .stale {
+                return record.status == TaskLightStatus.done_unverified.rawValue ? "acceptance gate expired" : "heartbeat expired"
+            }
+            return record.last_error
+        }()
+        return TaskLightTaskSummary(
+            schema_version: record.schema_version,
+            task_id: record.task_id,
+            short_task_id: shortID,
+            title: record.title,
+            slug: record.slug,
+            status: live.rawValue,
+            raw_status: record.status,
+            effective_status: live.rawValue,
+            phase: record.phase,
+            progress: record.progress,
+            reason: record.reason,
+            message: record.message,
+            evidence: record.evidence,
+            summary: record.summary,
+            created_at: record.created_at,
+            started_at: record.started_at ?? record.created_at,
+            updated_at: record.updated_at,
+            heartbeat_at: record.heartbeat_at,
+            done_at: record.done_at,
+            verified_at: record.verified_at,
+            cancelled_at: record.cancelled_at,
+            ttl_seconds: record.ttl_seconds,
+            last_error: lastError,
+            file_path: filePath.path,
+            alert_fingerprint: record.alertFingerprint(effectiveStatus: live),
+            sound_type: (live == .blocked || live == .stale) ? "blocked" : (live == .done_verified ? "done_verified" : nil),
+            is_invalid_json: false,
+            invalid_json_error: nil
+        )
+    }
+
+    private func invalidSummary(taskID: String, filePath: URL, error: String) -> TaskLightTaskSummary {
+        TaskLightTaskSummary(
+            schema_version: 3,
+            task_id: taskID,
+            short_task_id: taskID.components(separatedBy: "-").last ?? taskID,
+            title: taskID,
+            slug: taskID,
+            status: TaskLightStatus.invalid_json.rawValue,
+            raw_status: TaskLightStatus.invalid_json.rawValue,
+            effective_status: TaskLightStatus.invalid_json.rawValue,
+            phase: nil,
+            progress: nil,
+            reason: nil,
+            message: nil,
+            evidence: nil,
+            summary: nil,
+            created_at: TaskLightTaskRecord.nowString(),
+            started_at: TaskLightTaskRecord.nowString(),
+            updated_at: TaskLightTaskRecord.nowString(),
+            heartbeat_at: nil,
+            done_at: nil,
+            verified_at: nil,
+            cancelled_at: nil,
+            ttl_seconds: Int(config.ttlSeconds),
+            last_error: error,
+            file_path: filePath.path,
+            alert_fingerprint: nil,
+            sound_type: nil,
+            is_invalid_json: true,
+            invalid_json_error: error
+        )
+    }
+
+    private func emptyState(sourceHealth: TaskLightSourceHealth) -> TaskLightAggregateState {
+        var counts = TaskLightCounts()
+        counts.gray = 1
+        return TaskLightAggregateState(
+            source_health: sourceHealth.rawValue,
+            lamp_status: sourceHealth == .corrupt_state ? "stale" : "idle",
+            global_status: "idle",
+            counts: counts,
+            tasks: [],
+            invalid_tasks: []
+        )
+    }
+
+    private func markSourceHealth(_ state: TaskLightAggregateState, sourceHealth: TaskLightSourceHealth) -> TaskLightAggregateState {
+        var copy = state
+        copy.source_health = sourceHealth.rawValue
+        if sourceHealth == .corrupt_state {
+            copy.lamp_status = "stale"
+        }
+        return copy
+    }
+
+    private func buildAggregate(valid: [TaskLightTaskSummary], invalid: [TaskLightTaskSummary], sourceHealth: TaskLightSourceHealth) -> TaskLightAggregateState {
+        let sortedValid = valid.sorted(by: taskSort)
+        let sortedInvalid = invalid.sorted(by: { lhs, rhs in
+            (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id)
+        })
+        var counts = TaskLightCounts()
+        var latestVerified: String?
+        var latestEvent: String?
+        var currentTaskID: String?
+
+        for task in sortedValid {
+            counts.total += 1
+            switch TaskLightStatus(rawValue: task.effective_status) ?? .idle {
+            case .blocked:
+                counts.blocked += 1
+                counts.red += 1
+            case .stale:
+                counts.stale += 1
+                counts.red += 1
+            case .running:
+                counts.running += 1
+                counts.blue += 1
+            case .queued:
+                counts.queued += 1
+                counts.blue += 1
+            case .done_verified:
+                counts.done_verified += 1
+                counts.green += 1
+                if let verified = task.verified_at, latestVerified == nil || verified > (latestVerified ?? "") {
+                    latestVerified = verified
+                }
+            case .done_unverified:
+                counts.done_unverified += 1
+                counts.pending_verify_count += 1
+                counts.blue += 1
+            case .cancelled:
+                counts.cancelled += 1
+            case .idle, .invalid_json:
+                break
+            }
+            if let updated = task.updated_at, latestEvent == nil || updated > (latestEvent ?? "") {
+                latestEvent = updated
+                currentTaskID = task.task_id
+            }
+        }
+        counts.invalid_json = sortedInvalid.count
+        counts.total += sortedInvalid.count
+        counts.active = counts.running + counts.queued + counts.done_unverified
+        if counts.red == 0, counts.blue == 0, counts.green == 0 {
+            counts.gray = 1
+        }
+
+        let global: String
+        if counts.red > 0 {
+            global = TaskLightStatus.blocked.rawValue
+        } else if counts.blue > 0 {
+            global = TaskLightStatus.running.rawValue
+        } else if counts.green > 0 && counts.active == 0 && counts.blocked == 0 && counts.stale == 0 {
+            global = TaskLightStatus.done_verified.rawValue
+        } else {
+            global = TaskLightStatus.idle.rawValue
+        }
+
+        let lamp = sourceHealth == .corrupt_state ? TaskLightStatus.stale.rawValue : global
+        return TaskLightAggregateState(
+            source_health: sourceHealth.rawValue,
+            lamp_status: lamp,
+            global_status: global,
+            generated_at: TaskLightTaskRecord.nowString(),
+            updated_at: TaskLightTaskRecord.nowString(),
+            current_task_id: currentTaskID,
+            last_verified_at: latestVerified,
+            last_event_at: latestEvent,
+            counts: counts,
+            tasks: sortedValid,
+            invalid_tasks: sortedInvalid
+        )
+    }
+
+    private func refreshLiveState(_ state: TaskLightAggregateState) -> TaskLightAggregateState {
+        let sourceHealth = TaskLightSourceHealth(rawValue: state.source_health) ?? .healthy
+        var refreshedValid: [TaskLightTaskSummary] = []
+        let refreshedInvalid: [TaskLightTaskSummary] = state.invalid_tasks
+        var counts = TaskLightCounts()
+        var latestVerified = state.last_verified_at
+        var latestEvent = state.last_event_at
+        var currentTaskID = state.current_task_id
+
+        for task in state.tasks {
+            let live = task.liveStatus(ttlSeconds: config.ttlSeconds, verificationTTLSeconds: config.verificationTTLSeconds)
+            var copy = task
+            copy.status = live.rawValue
+            copy.effective_status = live.rawValue
+            if live == .stale {
+                copy.last_error = task.raw_status == TaskLightStatus.done_unverified.rawValue ? "acceptance gate expired" : "heartbeat expired"
+                copy.sound_type = "blocked"
+            }
+            refreshedValid.append(copy)
+
+            counts.total += 1
+            switch live {
+            case .blocked:
+                counts.blocked += 1
+                counts.red += 1
+            case .stale:
+                counts.stale += 1
+                counts.red += 1
+            case .running:
+                counts.running += 1
+                counts.blue += 1
+            case .queued:
+                counts.queued += 1
+                counts.blue += 1
+            case .done_verified:
+                counts.done_verified += 1
+                counts.green += 1
+                if let verified = copy.verified_at, latestVerified == nil || verified > (latestVerified ?? "") {
+                    latestVerified = verified
+                }
+            case .done_unverified:
+                counts.done_unverified += 1
+                counts.pending_verify_count += 1
+                counts.blue += 1
+            case .cancelled:
+                counts.cancelled += 1
+            case .idle, .invalid_json:
+                break
+            }
+            if let updated = copy.updated_at, latestEvent == nil || updated > (latestEvent ?? "") {
+                latestEvent = updated
+                currentTaskID = copy.task_id
+            }
+        }
+
+        counts.invalid_json = refreshedInvalid.count
+        counts.total += refreshedInvalid.count
+        counts.active = counts.running + counts.queued + counts.done_unverified
+        if counts.red == 0, counts.blue == 0, counts.green == 0 {
+            counts.gray = 1
+        }
+
+        let global: String
+        if counts.red > 0 {
+            global = TaskLightStatus.blocked.rawValue
+        } else if counts.blue > 0 {
+            global = TaskLightStatus.running.rawValue
+        } else if counts.green > 0 && counts.active == 0 && counts.blocked == 0 && counts.stale == 0 {
+            global = TaskLightStatus.done_verified.rawValue
+        } else {
+            global = TaskLightStatus.idle.rawValue
+        }
+        let lamp = sourceHealth == .corrupt_state ? TaskLightStatus.stale.rawValue : global
+
+        return TaskLightAggregateState(
+            source_health: sourceHealth.rawValue,
+            lamp_status: lamp,
+            global_status: global,
+            generated_at: state.generated_at,
+            updated_at: TaskLightTaskRecord.nowString(),
+            current_task_id: currentTaskID,
+            last_verified_at: latestVerified,
+            last_event_at: latestEvent,
+            counts: counts,
+            tasks: refreshedValid.sorted(by: taskSort),
+            invalid_tasks: refreshedInvalid.sorted(by: { lhs, rhs in (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id) })
+        )
+    }
+
+    private func taskSort(_ lhs: TaskLightTaskSummary, _ rhs: TaskLightTaskSummary) -> Bool {
+        let lhsRank = sortRank(lhs.effective_status)
+        let rhsRank = sortRank(rhs.effective_status)
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+        if lhs.updated_at != rhs.updated_at {
+            return (lhs.updated_at ?? "") > (rhs.updated_at ?? "")
+        }
+        return lhs.task_id < rhs.task_id
+    }
+
+    private func sortRank(_ status: String) -> Int {
+        switch status {
+        case TaskLightStatus.blocked.rawValue:
+            return 0
+        case TaskLightStatus.stale.rawValue:
+            return 1
+        case TaskLightStatus.running.rawValue:
+            return 2
+        case TaskLightStatus.queued.rawValue:
+            return 3
+        case TaskLightStatus.done_verified.rawValue:
+            return 4
+        case TaskLightStatus.done_unverified.rawValue:
+            return 5
+        case TaskLightStatus.cancelled.rawValue:
+            return 6
+        case TaskLightStatus.invalid_json.rawValue:
+            return 7
+        default:
+            return 8
+        }
+    }
+
+    private func readJSON<T: Decodable>(from url: URL) throws -> T {
+        let data = try Data(contentsOf: url)
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func writeJSONAtomic<T: Encodable>(_ value: T, to url: URL) throws {
+        let data = try encoder.encode(value)
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private func runCLI(arguments: [String]) {
+        let rootURL = Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let cliURL = rootURL.appendingPathComponent("cli/tasklight.py")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [cliURL.path] + arguments
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            NSLog("tasklight CLI failed: \(error.localizedDescription)")
+        }
+    }
+}
