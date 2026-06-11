@@ -7,6 +7,7 @@ STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-smoke-invalid.XXXXXX")"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-smoke-invalid-logs.XXXXXX")"
 
 cleanup() {
+  pkill -x 66TaskLight >/dev/null 2>&1 || true
   rm -rf "$STATE_DIR" "$TMP_DIR"
 }
 trap cleanup EXIT

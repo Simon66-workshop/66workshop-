@@ -15,11 +15,12 @@ export TASKLIGHT_STATE_DIR="$STATE_DIR"
 export TASKLIGHT_SIGNAL_SPOOL_DIR="$STATE_DIR/signals"
 export TASKLIGHT_TURN_BINDINGS_DIR="$STATE_DIR/turn_bindings"
 export TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH="$STATE_DIR/hook_bridge_offsets.json"
+export TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH="$STATE_DIR/hook_bridge_health.json"
 export TASKLIGHT_HOOK_BRIDGE_LOG_DIR="$STATE_DIR/logs"
 export TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL"
 export TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS=2
 export TASKLIGHT_HOOK_TURN_LEASE_SECONDS=60
-export TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS=20
+export TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS=6
 export TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS=86400
 
 mkdir -p "$TASKLIGHT_SIGNAL_SPOOL_DIR"
@@ -126,6 +127,13 @@ TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL" TASKLIGHT_STATE_DIR="$STATE_DIR" "$ROOT_DIR
 
 "$ROOT_DIR/script/install_hook_bridge_launch_agent.sh" >/dev/null
 wait_for_status ok
+python3 - "$TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert payload["status"] == "ok", payload
+PY
 
 append_signal "turn_started" "turn-agent" "turn-start"
 for index in 1 2 3 4 5; do

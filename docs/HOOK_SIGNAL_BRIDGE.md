@@ -125,7 +125,7 @@ This keeps LuckyCat blue during active work while reducing repeated
 
 `TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `60`.
 
-`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`.
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `6`.
 
 If an active turn binding has no fresh hook signal after the lease, the bridge
 silently calls `tasklight release` only when the task is still active. This does
@@ -133,7 +133,68 @@ not play red or green sound and does not write `done_verified`.
 
 If the last signal is `item_completed`, the shorter completed-idle release window
 is used. This fail-closed behavior prevents turns that finished tool activity but
-missed a `stop` hook from keeping LuckyCat in `RUNNING` indefinitely.
+did not emit `stop` from holding LuckyCat in `RUNNING`.
+
+Completed-idle release is a soft timeout. The binding records
+`release_kind=soft_timeout`, `released_by=completed_idle_timeout`, and
+`allow_late_stop=true`. If a real `stop` hook arrives later for the same turn,
+the bridge must recover the task to `done_unverified` instead of leaving it
+cancelled.
+
+## Stop Priority Guard
+
+`stop` signals have higher priority than timeout release and heartbeat
+coalescing:
+
+- `stop` is never coalesced.
+- `stop` is not ignored only because the turn binding was soft-released.
+- `stop` after soft timeout writes `done_unverified`.
+- repeated `stop` on `done_unverified` is idempotent.
+- `stop` after `done_verified` is ignored and does not downgrade the task.
+- `stop` after explicit blocked/tool-failed/approval-pending records a
+  diagnostic and keeps the blocker.
+- user clear/cancel remains hard-cancelled and is not recovered by late stop.
+
+Processed decisions are explicit: `stop_to_done_unverified`,
+`stop_idempotent_done_unverified`, `stop_ignored_already_verified`,
+`stop_after_blocked_diagnostic`, or a specific ignored stop reason.
+
+## Bridge Health
+
+The bridge writes a read-only health sidecar after every bridge pass:
+
+```text
+~/.66tasklight/hook_bridge_health.json
+```
+
+The file records `status`, `last_run_at`, `last_seen_at`, processed counts,
+released binding counts, active turn bindings, and the most recent local error.
+The macOS App reads this file for the expanded diagnostic line only; health
+status does not change the global lamp.
+
+Override the path with:
+
+```bash
+TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH=/path/to/hook_bridge_health.json
+```
+
+## State Projector Integration
+
+M3.2a keeps the bridge as the managed task writer, but moves final LuckyCat
+display decisions into `script/state_projector.py`.
+
+The bridge still consumes hook signals and writes managed task state plus
+`turn_bindings`. The projector reads those task files and turn bindings to
+produce `~/.66tasklight/ui_state.json`.
+
+This split matters because a backend task can remain `running` while the UI
+should stop showing RUNNING after the matching hook turn is no longer fresh. The
+projector applies active hook TTL, completed-idle release projection, stale hook
+blocker suppression, pending verification projection, and recent completion
+windowing.
+
+Swift should read `ui_state.json` for display instead of reimplementing these
+rules.
 
 When a newer hook turn is active, older hook-projected tasks that are already
 `done_unverified` or `stale` are also silently released. This keeps a previous

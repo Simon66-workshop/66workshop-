@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from contextlib import contextmanager
 
 
 SCHEMA_VERSION = "0.1"
@@ -22,6 +24,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
 TERMINAL_STATUSES = {"blocked", "done_unverified", "done_verified", "cancelled"}
 ACTIVE_STATUSES = {"running", "queued", "stale"}
+REACTIVATABLE_RELEASE_REASONS = {"completed_idle_timeout", "lease_timeout"}
+REACTIVATING_EVENTS = {"turn_started", "item_started"}
 ACTIVE_EVENTS = {"turn_started", "item_started", "item_completed"}
 BLOCK_EVENTS = {"approval_pending", "tool_failed"}
 DONE_EVENTS = {"stop"}
@@ -88,6 +92,26 @@ def turn_bindings_dir(config_state_dir: Path) -> Path:
 
 def offsets_path(config_state_dir: Path) -> Path:
     return Path(os.environ.get("TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH", str(config_state_dir / "hook_bridge_offsets.json"))).expanduser()
+
+
+def health_path(config_state_dir: Path) -> Path:
+    return Path(os.environ.get("TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH", str(config_state_dir / "hook_bridge_health.json"))).expanduser()
+
+
+def lock_path(config_state_dir: Path) -> Path:
+    return config_state_dir / "hook_bridge.lock"
+
+
+@contextmanager
+def bridge_lock(config_state_dir: Path):
+    path = lock_path(config_state_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def tasklight_bin() -> str:
@@ -234,6 +258,24 @@ def new_binding(signal: dict[str, Any], bindings_dir: Path) -> tuple[Path, dict[
     return path, binding
 
 
+def replace_released_task(binding: dict[str, Any], signal: dict[str, Any]) -> str:
+    previous_task_ids = list(binding.get("previous_task_ids") or [])
+    previous_task_id = str(binding.get("task_id") or "")
+    if previous_task_id and previous_task_id not in previous_task_ids:
+        previous_task_ids.append(previous_task_id)
+    title = str(binding.get("title") or f"Codex turn {str(signal['turn_id'])[:8]}")
+    task_id = start_task(title)
+    timestamp = now_iso()
+    binding["task_id"] = task_id
+    binding["status"] = "active"
+    binding["previous_task_ids"] = previous_task_ids[-20:]
+    binding["reactivated_at"] = timestamp
+    binding["reactivation_count"] = int(binding.get("reactivation_count") or 0) + 1
+    binding["released_at"] = None
+    binding.pop("release_reason", None)
+    return task_id
+
+
 def get_or_create_binding(signal: dict[str, Any], bindings_dir: Path) -> tuple[Path, dict[str, Any]]:
     found = find_binding(bindings_dir, str(signal["turn_id"]))
     if found:
@@ -339,6 +381,73 @@ def record_heartbeat_write(
             ledger.pop(stale_key, None)
 
 
+def update_stop_diagnostics(offsets: dict[str, Any], decision: str, *, late_recovered: bool = False) -> None:
+    diagnostics = offsets.setdefault("stop_diagnostics", {})
+    diagnostics["latest_stop_decision"] = decision
+    diagnostics["latest_stop_seen_at"] = now_iso()
+    if late_recovered:
+        diagnostics["late_stop_recovered_count"] = int(diagnostics.get("late_stop_recovered_count") or 0) + 1
+    if decision.startswith("stop_ignored"):
+        diagnostics["stop_ignored_count"] = int(diagnostics.get("stop_ignored_count") or 0) + 1
+    diagnostics["stop_seen_count"] = int(diagnostics.get("stop_seen_count") or 0) + 1
+
+
+def update_release_diagnostics(offsets: dict[str, Any], release_reason: str) -> None:
+    diagnostics = offsets.setdefault("stop_diagnostics", {})
+    if release_reason in REACTIVATABLE_RELEASE_REASONS:
+        diagnostics["soft_release_count"] = int(diagnostics.get("soft_release_count") or 0) + 1
+    diagnostics["latest_release_reason"] = release_reason
+    diagnostics["latest_release_seen_at"] = now_iso()
+
+
+def count_active_bindings(bindings_dir: Path) -> int:
+    if not bindings_dir.exists():
+        return 0
+    active = 0
+    for path in bindings_dir.glob("*.json"):
+        payload = load_json(path, {})
+        if payload.get("status") == "active":
+            active += 1
+    return active
+
+
+def health_payload(
+    *,
+    status: str,
+    offsets: dict[str, Any] | None,
+    processed_count: int,
+    expired_count: int,
+    superseded_count: int,
+    active_turn_bindings: int,
+    last_error: str | None,
+) -> dict[str, Any]:
+    timestamp = now_iso()
+    stop_diagnostics = (offsets or {}).get("stop_diagnostics") if isinstance(offsets, dict) else {}
+    if not isinstance(stop_diagnostics, dict):
+        stop_diagnostics = {}
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "status": status,
+        "last_run_at": timestamp,
+        "last_seen_at": (offsets or {}).get("last_seen_at"),
+        "processed_count": processed_count,
+        "expired_count": expired_count,
+        "superseded_count": superseded_count,
+        "active_turn_bindings": active_turn_bindings,
+        "latest_stop_decision": stop_diagnostics.get("latest_stop_decision"),
+        "latest_stop_seen_at": stop_diagnostics.get("latest_stop_seen_at"),
+        "late_stop_recovered_count": int(stop_diagnostics.get("late_stop_recovered_count") or 0),
+        "soft_release_count": int(stop_diagnostics.get("soft_release_count") or 0),
+        "stop_ignored_count": int(stop_diagnostics.get("stop_ignored_count") or 0),
+        "last_error": last_error,
+        "updated_at": timestamp,
+    }
+
+
+def write_health(path: Path, payload: dict[str, Any]) -> None:
+    atomic_write_json(path, payload)
+
+
 def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, Any], coalesce_seconds: float) -> dict[str, Any]:
     if signal.get("source") != "codex_hook":
         return {"decision": "ignored_non_hook"}
@@ -357,6 +466,16 @@ def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, 
     phase = event_phase(event_type)
     decision = "ignored_unknown"
 
+    if (
+        binding.get("status") == "released"
+        and event_type in REACTIVATING_EVENTS
+        and current_status == "cancelled"
+        and binding.get("release_reason") in REACTIVATABLE_RELEASE_REASONS
+    ):
+        task_id = replace_released_task(binding, signal)
+        current_status = task_status(task_id)
+        decision = "reactivated_released_turn"
+
     thread_id = signal.get("thread_id")
     if thread_id and not binding.get("thread_id"):
         binding["thread_id"] = thread_id
@@ -368,7 +487,26 @@ def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, 
         binding["aliases"] = aliases
 
     if current_status in TERMINAL_STATUSES:
-        decision = f"ignored_terminal_{current_status}"
+        if event_type == "stop":
+            allow_late_stop = bool(binding.get("allow_late_stop")) or binding.get("release_kind") == "soft_timeout" or binding.get("release_reason") in REACTIVATABLE_RELEASE_REASONS
+            if current_status == "done_verified":
+                decision = "stop_ignored_already_verified"
+            elif current_status == "done_unverified":
+                decision = "stop_idempotent_done_unverified"
+            elif current_status == "blocked":
+                decision = "stop_after_blocked_diagnostic"
+            elif current_status == "cancelled" and allow_late_stop:
+                done(task_id, "Codex turn stopped; awaiting verify")
+                decision = "stop_to_done_unverified"
+                update_stop_diagnostics(offsets, decision, late_recovered=True)
+            elif current_status == "cancelled":
+                decision = "stop_ignored_user_cancelled"
+            else:
+                decision = f"stop_ignored_terminal_{current_status}"
+            if decision != "stop_to_done_unverified":
+                update_stop_diagnostics(offsets, decision)
+        else:
+            decision = f"ignored_terminal_{current_status}"
     elif event_type in ACTIVE_EVENTS:
         progress = progress_for(event_type)
         if should_write_heartbeat(offsets, task_id, turn_id, phase, progress, coalesce_seconds):
@@ -385,16 +523,22 @@ def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, 
         decision = "blocked_codex_exit_failed"
     elif event_type == "stop":
         done(task_id, "Codex turn stopped; awaiting verify")
-        decision = "done_unverified"
+        decision = "stop_to_done_unverified"
+        update_stop_diagnostics(offsets, decision)
 
-    binding["status"] = "released" if decision == "done_unverified" else binding.get("status", "active")
+    binding["status"] = "released" if decision.startswith("stop_") else binding.get("status", "active")
     binding["phase"] = phase
     binding["updated_at"] = timestamp
     binding["last_signal_at"] = timestamp
     binding["last_signal_event"] = event_type
+    binding["last_bridge_decision"] = decision
     binding["signal_count"] = int(binding.get("signal_count") or 0) + 1
     if binding["status"] == "released":
         binding["released_at"] = binding.get("released_at") or timestamp
+        if decision.startswith("stop_"):
+            binding["release_kind"] = binding.get("release_kind") or "stop"
+            binding["released_by"] = "stop"
+            binding["allow_late_stop"] = False
     atomic_write_json(path, binding)
     return {"decision": decision, "task_id": task_id, "binding": str(path)}
 
@@ -488,7 +632,7 @@ def binding_release_after_seconds(binding: dict[str, Any], lease_seconds: float,
     return lease_seconds
 
 
-def expire_bindings(bindings_dir: Path, lease_seconds: float, completed_idle_seconds: float) -> list[dict[str, Any]]:
+def expire_bindings(bindings_dir: Path, lease_seconds: float, completed_idle_seconds: float, offsets: dict[str, Any]) -> list[dict[str, Any]]:
     expired: list[dict[str, Any]] = []
     if not bindings_dir.exists():
         return expired
@@ -504,14 +648,20 @@ def expire_bindings(bindings_dir: Path, lease_seconds: float, completed_idle_sec
         task_id = str(binding.get("task_id") or "")
         status = task_status(task_id) if task_id else None
         timestamp = now_iso()
+        release_reason = "completed_idle_timeout" if binding.get("last_signal_event") == "item_completed" else "lease_timeout"
         if task_id and status in ACTIVE_STATUSES:
             release(task_id)
-            expired.append({"task_id": task_id, "decision": "released"})
+            expired.append({"task_id": task_id, "decision": "released", "release_reason": release_reason})
         else:
-            expired.append({"task_id": task_id, "decision": f"binding_released_task_{status}"})
+            expired.append({"task_id": task_id, "decision": f"binding_released_task_{status}", "release_reason": release_reason})
         binding["status"] = "released"
         binding["released_at"] = binding.get("released_at") or timestamp
+        binding["release_reason"] = release_reason
+        binding["release_kind"] = "soft_timeout"
+        binding["released_by"] = release_reason
+        binding["allow_late_stop"] = True
         binding["updated_at"] = timestamp
+        update_release_diagnostics(offsets, release_reason)
         atomic_write_json(path, binding)
     return expired
 
@@ -563,9 +713,15 @@ def release_superseded_released_tasks(bindings_dir: Path) -> list[dict[str, Any]
 
 def bridge_once(args: argparse.Namespace) -> dict[str, Any]:
     config_state_dir = state_dir()
+    with bridge_lock(config_state_dir):
+        return bridge_once_unlocked(args, config_state_dir)
+
+
+def bridge_once_unlocked(args: argparse.Namespace, config_state_dir: Path) -> dict[str, Any]:
     signals_dir = Path(args.signal_dir).expanduser() if args.signal_dir else signal_dir(config_state_dir)
     bindings_dir = Path(args.turn_bindings_dir).expanduser() if args.turn_bindings_dir else turn_bindings_dir(config_state_dir)
     offsets_file = Path(args.offsets_path).expanduser() if args.offsets_path else offsets_path(config_state_dir)
+    health_file = Path(args.health_path).expanduser() if args.health_path else health_path(config_state_dir)
     lease_seconds = float(args.lease_seconds)
     completed_idle_seconds = float(args.completed_idle_release_seconds)
     max_age_seconds = float(args.max_signal_age_seconds)
@@ -578,20 +734,35 @@ def bridge_once(args: argparse.Namespace) -> dict[str, Any]:
         result = apply_signal(signal, bindings_dir, offsets, coalesce_seconds=coalesce_seconds)
         mark_processed(offsets, signal, result)
         results.append(result)
-    expired = expire_bindings(bindings_dir, lease_seconds=lease_seconds, completed_idle_seconds=completed_idle_seconds)
+    expired = expire_bindings(bindings_dir, lease_seconds=lease_seconds, completed_idle_seconds=completed_idle_seconds, offsets=offsets)
     superseded = release_superseded_released_tasks(bindings_dir)
     offsets["last_run_at"] = now_iso()
     atomic_write_json(offsets_file, offsets)
+    active_turn_bindings = count_active_bindings(bindings_dir)
+    write_health(
+        health_file,
+        health_payload(
+            status="ok",
+            offsets=offsets,
+            processed_count=len(new_signals),
+            expired_count=len(expired),
+            superseded_count=len(superseded),
+            active_turn_bindings=active_turn_bindings,
+            last_error=None,
+        ),
+    )
     return {
         "signals_dir": str(signals_dir),
         "turn_bindings_dir": str(bindings_dir),
         "offsets_path": str(offsets_file),
+        "health_path": str(health_file),
         "coalesce_seconds": coalesce_seconds,
         "completed_idle_release_seconds": completed_idle_seconds,
         "processed_count": len(new_signals),
         "results": results,
         "expired": expired,
         "superseded": superseded,
+        "active_turn_bindings": active_turn_bindings,
         "status": "ok",
     }
 
@@ -604,8 +775,9 @@ def main() -> int:
     parser.add_argument("--signal-dir")
     parser.add_argument("--turn-bindings-dir")
     parser.add_argument("--offsets-path")
+    parser.add_argument("--health-path")
     parser.add_argument("--lease-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "60")))
-    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "20")))
+    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "6")))
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_POLL_SECONDS", "1")))
     parser.add_argument("--max-signal-age-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS", "600")))
     parser.add_argument("--coalesce-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS", "2")))
@@ -616,7 +788,26 @@ def main() -> int:
         return 0
 
     while True:
-        bridge_once(args)
+        try:
+            bridge_once(args)
+        except Exception as exc:
+            config_state_dir = state_dir()
+            bindings_dir = Path(args.turn_bindings_dir).expanduser() if args.turn_bindings_dir else turn_bindings_dir(config_state_dir)
+            offsets_file = Path(args.offsets_path).expanduser() if args.offsets_path else offsets_path(config_state_dir)
+            health_file = Path(args.health_path).expanduser() if args.health_path else health_path(config_state_dir)
+            offsets = load_json(offsets_file, offsets_default())
+            write_health(
+                health_file,
+                health_payload(
+                    status="error",
+                    offsets=offsets,
+                    processed_count=0,
+                    expired_count=0,
+                    superseded_count=0,
+                    active_turn_bindings=count_active_bindings(bindings_dir),
+                    last_error=str(exc),
+                ),
+            )
         time.sleep(args.poll_seconds)
 
 

@@ -7,6 +7,7 @@ STATE_DIR="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
 SIGNAL_DIR="${TASKLIGHT_SIGNAL_SPOOL_DIR:-$STATE_DIR/signals}"
 TURN_BINDINGS_DIR="${TASKLIGHT_TURN_BINDINGS_DIR:-$STATE_DIR/turn_bindings}"
 OFFSETS_PATH="${TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH:-$STATE_DIR/hook_bridge_offsets.json}"
+HEALTH_PATH="${TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH:-$STATE_DIR/hook_bridge_health.json}"
 LOG_DIR="${TASKLIGHT_HOOK_BRIDGE_LOG_DIR:-$STATE_DIR/logs}"
 ERR_LOG="$LOG_DIR/hook_bridge.err.log"
 PLIST_DIR="${TASKLIGHT_HOOK_BRIDGE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
@@ -33,19 +34,20 @@ if [ -z "$process_pid" ]; then
   process_pid="none"
 fi
 
-_health_output="$(python3 - "$SIGNAL_DIR" "$TURN_BINDINGS_DIR" "$OFFSETS_PATH" "$MAX_BRIDGE_AGE_SECONDS" <<'PY'
+_health_output="$(python3 - "$SIGNAL_DIR" "$TURN_BINDINGS_DIR" "$OFFSETS_PATH" "$HEALTH_PATH" "$MAX_BRIDGE_AGE_SECONDS" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 signal_dir = Path(sys.argv[1]).expanduser()
 bindings_dir = Path(sys.argv[2]).expanduser()
 offsets_path = Path(sys.argv[3]).expanduser()
-max_age = float(sys.argv[4])
+health_path = Path(sys.argv[4]).expanduser()
+max_age = float(sys.argv[5])
 
 
 def parse_ts(value):
@@ -90,19 +92,29 @@ if bindings_dir.exists():
             active += 1
 
 offsets_status = "missing"
-last_run_at = None
-last_seen_at = None
-last_run_ts = None
+offset_last_run_at = None
+offset_last_seen_at = None
 if offsets_path.exists():
     try:
         offsets = json.loads(offsets_path.read_text(encoding="utf-8"))
         offsets_status = "readable"
-        last_run_at = offsets.get("last_run_at")
-        last_seen_at = offsets.get("last_seen_at")
-        last_run_ts = parse_ts(last_run_at)
+        offset_last_run_at = offsets.get("last_run_at")
+        offset_last_seen_at = offsets.get("last_seen_at")
     except (json.JSONDecodeError, OSError):
         offsets_status = "unreadable"
 
+health_status = "missing"
+health = {}
+if health_path.exists():
+    try:
+        health = json.loads(health_path.read_text(encoding="utf-8"))
+        health_status = "readable"
+    except (json.JSONDecodeError, OSError):
+        health_status = "unreadable"
+
+last_run_at = health.get("last_run_at") or offset_last_run_at
+last_seen_at = health.get("last_seen_at") or offset_last_seen_at
+last_run_ts = parse_ts(last_run_at)
 now = time.time()
 signal_age = "none" if latest_signal_ts is None else str(max(0, int(now - latest_signal_ts)))
 bridge_age = "none" if last_run_ts is None else str(max(0, int(now - last_run_ts)))
@@ -110,8 +122,11 @@ bridge_fresh = last_run_ts is not None and now - last_run_ts <= max_age
 
 print(f"signal_dir={signal_dir}")
 print(f"latest_signal_age_sec={signal_age}")
-print(f"active_turn_bindings={active}")
+print(f"active_turn_bindings={health.get('active_turn_bindings', active)}")
 print(f"offsets_status={offsets_status}")
+print(f"hook_bridge_health_path={health_path}")
+print(f"hook_bridge_health_status={health_status}")
+print(f"hook_bridge_health_state={health.get('status', 'none') if health_status == 'readable' else 'none'}")
 print(f"latest_bridge_process_time={last_run_at or 'none'}")
 print(f"latest_bridge_seen_time={last_seen_at or 'none'}")
 print(f"latest_bridge_age_sec={bridge_age}")
@@ -122,13 +137,17 @@ PY
 latest_signal_age_sec="$(printf '%s\n' "$_health_output" | awk -F= '/^latest_signal_age_sec=/{print $2}' | tail -1)"
 active_turn_bindings="$(printf '%s\n' "$_health_output" | awk -F= '/^active_turn_bindings=/{print $2}' | tail -1)"
 offsets_status="$(printf '%s\n' "$_health_output" | awk -F= '/^offsets_status=/{print $2}' | tail -1)"
+health_status="$(printf '%s\n' "$_health_output" | awk -F= '/^hook_bridge_health_status=/{print $2}' | tail -1)"
+health_state="$(printf '%s\n' "$_health_output" | awk -F= '/^hook_bridge_health_state=/{print $2}' | tail -1)"
 latest_bridge_process_time="$(printf '%s\n' "$_health_output" | awk -F= '/^latest_bridge_process_time=/{print $2}' | tail -1)"
 bridge_fresh="$(printf '%s\n' "$_health_output" | awk -F= '/^bridge_fresh=/{print $2}' | tail -1)"
 
 status="ok"
 if [ "$plist_exists" = "no" ] || [ "$launchctl_status" != "running" ] || [ "$process_pid" = "none" ]; then
   status="not_running"
-elif [ "$offsets_status" = "unreadable" ]; then
+elif [ "$offsets_status" = "unreadable" ] || [ "$health_status" = "unreadable" ]; then
+  status="error"
+elif [ "$health_state" = "error" ]; then
   status="error"
 elif [ "$bridge_fresh" != "yes" ]; then
   status="stale"
@@ -145,6 +164,9 @@ echo "process_pid=$process_pid"
 printf '%s\n' "$_health_output" | sed -n '/^signal_dir=/p'
 echo "latest_signal_age_sec=${latest_signal_age_sec:-none}"
 echo "active_turn_bindings=${active_turn_bindings:-0}"
+printf '%s\n' "$_health_output" | sed -n '/^hook_bridge_health_path=/p'
+echo "hook_bridge_health_status=${health_status:-missing}"
+echo "hook_bridge_health_state=${health_state:-none}"
 echo "latest_bridge_process_time=${latest_bridge_process_time:-none}"
 echo "log_tail=$log_tail"
 echo "STATUS=$status"

@@ -17,6 +17,7 @@ public final class TaskLightStore {
         try? FileManager.default.createDirectory(at: config.stateDirectory, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.tasksDirectoryURL, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.observationsDirectoryURL, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config.uiClientsDirectoryURL, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: config.playedEventsURL.path) {
             let ledger = TaskLightPlayedEventsLedger()
             try? writeJSONAtomic(ledger, to: config.playedEventsURL)
@@ -61,6 +62,49 @@ public final class TaskLightStore {
         dashboard = emptyState(sourceHealth: stateResult.health)
         dashboard.observations_state = observations
         return dashboard
+    }
+
+    public func loadUIState() -> TaskLightUIState {
+        ensureLayout()
+        if let projected: TaskLightUIState = try? readJSON(from: config.uiStateURL),
+           isUIStateFresh(projected) {
+            return projected
+        }
+        let fallbackReason: String
+        if !FileManager.default.fileExists(atPath: config.uiStateURL.path) {
+            fallbackReason = "projector_missing"
+        } else {
+            let decoded: TaskLightUIState? = try? readJSON(from: config.uiStateURL)
+            if decoded == nil {
+                fallbackReason = "projector_unreadable"
+            } else {
+                fallbackReason = "projector_stale"
+            }
+        }
+        return fallbackUIState(from: loadDashboard(), reason: fallbackReason)
+    }
+
+    public func saveUIClientRecord(
+        bundleID: String,
+        bundlePath: String,
+        executablePath: String,
+        buildID: String
+    ) {
+        ensureLayout()
+        let pid = Int(ProcessInfo.processInfo.processIdentifier)
+        let url = config.uiClientsDirectoryURL.appendingPathComponent("\(pid).json")
+        let existing: TaskLightUIClientRecord? = try? readJSON(from: url)
+        let record = TaskLightUIClientRecord(
+            pid: pid,
+            bundle_id: bundleID,
+            bundle_path: bundlePath,
+            executable_path: executablePath,
+            build_id: buildID,
+            state_dir: config.stateDirectory.path,
+            started_at: existing?.started_at ?? TaskLightTaskRecord.nowString(),
+            updated_at: TaskLightTaskRecord.nowString()
+        )
+        try? writeJSONAtomic(record, to: url)
     }
 
     public func loadTask(taskID: String) -> TaskLightTaskSummary? {
@@ -129,6 +173,120 @@ public final class TaskLightStore {
     private struct StateReadResult {
         var state: TaskLightAggregateState?
         var health: TaskLightSourceHealth
+    }
+
+    private func isUIStateFresh(_ uiState: TaskLightUIState) -> Bool {
+        let maxAge = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_MAX_AGE_SECONDS"].flatMap(Double.init) ?? 5
+        guard let generatedAt = TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) else {
+            return false
+        }
+        return Date().timeIntervalSince(generatedAt) <= maxAge
+    }
+
+    private func fallbackUIState(from dashboard: TaskLightAggregateState, reason: String) -> TaskLightUIState {
+        let observedActive = dashboard.observations_state?.observations.filter {
+            $0.isActive && $0.managed_task_id == nil && $0.confidence >= 0.70
+        }.count ?? 0
+        let counts = TaskLightUICounts(
+            blocked: dashboard.counts.blocked,
+            stale: dashboard.counts.stale,
+            running: dashboard.counts.running,
+            queued: dashboard.counts.queued,
+            pending_verify_count: dashboard.counts.pending_verify_count,
+            done_verified_visible: dashboard.counts.done_verified,
+            observed_active: observedActive,
+            managed_active: dashboard.counts.blocked + dashboard.counts.stale + dashboard.counts.running + dashboard.counts.queued + dashboard.counts.done_unverified
+        )
+        let global: String
+        let title: String
+        if counts.blocked + counts.stale > 0 {
+            global = TaskLightStatus.blocked.rawValue
+            title = "BLOCKED"
+        } else if counts.running + counts.queued > 0 || counts.observed_active > 0 {
+            global = TaskLightStatus.running.rawValue
+            title = "RUNNING"
+        } else if counts.pending_verify_count > 0 {
+            global = "pending"
+            title = "PENDING"
+        } else if counts.done_verified_visible > 0 {
+            global = TaskLightStatus.done_verified.rawValue
+            title = "DONE"
+        } else {
+            global = TaskLightStatus.idle.rawValue
+            title = "IDLE"
+        }
+        let tasks = dashboard.tasks.map { summary in
+            TaskLightUITask(
+                task_id: summary.task_id,
+                short_task_id: summary.short_task_id,
+                title: summary.title,
+                source: "swift_fallback",
+                raw_status: summary.raw_status,
+                effective_status: summary.effective_status,
+                display_scope: fallbackDisplayScope(for: summary.effective_status),
+                state_cause: "swift_fallback:\(summary.effective_status)",
+                fresh: summary.effective_status == TaskLightStatus.running.rawValue || summary.effective_status == TaskLightStatus.queued.rawValue,
+                phase: summary.phase,
+                progress: summary.progress,
+                reason: summary.reason,
+                message: summary.message,
+                summary: summary.summary,
+                started_at: summary.started_at,
+                updated_at: summary.updated_at,
+                done_at: summary.done_at,
+                verified_at: summary.verified_at,
+                file_path: summary.file_path,
+                confidence: 0.50
+            )
+        }
+        let observations = (dashboard.observations_state?.observations ?? []).map { record in
+            TaskLightUIObservation(
+                observation_id: record.observation_id,
+                title: record.title,
+                status: record.status,
+                confidence: record.confidence,
+                display_scope: record.isActive && record.confidence >= 0.70 ? "active_execution" : "history",
+                fresh: record.isActive,
+                pid: record.pid,
+                command_short: record.command_short,
+                cwd: record.cwd,
+                last_seen_at: record.last_seen_at
+            )
+        }
+        return TaskLightUIState(
+            source: "swift_fallback",
+            global_status: global,
+            lamp_status: global,
+            global_display_title: title,
+            state_confidence: 0.50,
+            counts: counts,
+            tasks: tasks,
+            observations: observations,
+            diagnostics: TaskLightUIDiagnostics(
+                hook_bridge_status: "unknown",
+                active_turn_bindings: nil,
+                state_dir: config.stateDirectory.path,
+                projector_reason: ["fallback"],
+                fallback_reason: reason
+            )
+        )
+    }
+
+    private func fallbackDisplayScope(for status: String) -> String {
+        switch status {
+        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+            return "open_blocker"
+        case TaskLightStatus.running.rawValue, TaskLightStatus.queued.rawValue:
+            return "active_execution"
+        case TaskLightStatus.done_unverified.rawValue:
+            return "pending_verify"
+        case TaskLightStatus.done_verified.rawValue:
+            return "recent_done"
+        case TaskLightStatus.invalid_json.rawValue:
+            return "invalid"
+        default:
+            return "history"
+        }
     }
 
     private func readStateSnapshot() -> StateReadResult {

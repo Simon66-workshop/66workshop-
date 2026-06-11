@@ -91,6 +91,65 @@ do {
     let a = store.loadDashboard()
     check(a.global_status == "idle", "empty dashboard idle")
 
+    let uiNow = TaskLightTaskRecord.nowString()
+    let projectedUIState = TaskLightUIState(
+        global_status: "running",
+        lamp_status: "running",
+        global_display_title: "RUNNING",
+        state_confidence: 0.95,
+        counts: TaskLightUICounts(running: 1, managed_active: 1),
+        tasks: [
+            TaskLightUITask(
+                task_id: "20260609-120000-ui-99999999",
+                short_task_id: "99999999",
+                title: "UI projected task",
+                source: "state_projector",
+                raw_status: "running",
+                effective_status: "running",
+                display_scope: "active_execution",
+                state_cause: "hook:item_started",
+                fresh: true,
+                phase: "tool_running",
+                progress: 0.5,
+                started_at: uiNow,
+                updated_at: uiNow,
+                confidence: 0.95
+            )
+        ],
+        diagnostics: TaskLightUIDiagnostics(
+            hook_bridge_status: "ok",
+            active_turn_bindings: 1,
+            state_dir: stateDirectory.path,
+            projector_reason: ["active_execution"]
+        )
+    )
+    try JSONEncoder().encode(projectedUIState).write(to: config.uiStateURL)
+    let loadedUIState = store.loadUIState()
+    check(loadedUIState.source == "state_projector", "ui_state preferred when fresh")
+    check(loadedUIState.global_display_title == "RUNNING", "ui_state title decodes")
+    check(loadedUIState.counts.running == 1, "ui_state counts decode")
+
+    try "{broken".data(using: .utf8)!.write(to: config.uiStateURL)
+    let fallbackUIState = store.loadUIState()
+    check(fallbackUIState.source == "swift_fallback", "corrupt ui_state falls back")
+    check(fallbackUIState.diagnostics.fallback_reason == "projector_unreadable", "fallback reason records unreadable projector")
+
+    var staleProjectedUIState = projectedUIState
+    staleProjectedUIState.projector_generated_at = "2020-01-01T00:00:00Z"
+    try JSONEncoder().encode(staleProjectedUIState).write(to: config.uiStateURL)
+    let staleFallbackUIState = store.loadUIState()
+    check(staleFallbackUIState.source == "swift_fallback", "stale ui_state falls back")
+    check(staleFallbackUIState.diagnostics.fallback_reason == "projector_stale", "fallback reason records stale projector")
+
+    store.saveUIClientRecord(
+        bundleID: "com.66tasklight.checks",
+        bundlePath: "/tmp/66TaskLightChecks.app",
+        executablePath: "/tmp/66TaskLightChecks",
+        buildID: "checks"
+    )
+    let uiClientURL = config.uiClientsDirectoryURL.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
+    check(FileManager.default.fileExists(atPath: uiClientURL.path), "ui client diagnostic writes")
+
     let taskOne = store.loadDashboard()
     check(taskOne.counts.gray >= 1, "gray count present for idle")
 

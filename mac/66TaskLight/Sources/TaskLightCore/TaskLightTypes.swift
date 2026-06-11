@@ -26,6 +26,9 @@ public struct TaskLightConfig {
     public var currentURL: URL
     public var observationsDirectoryURL: URL
     public var observationsStateURL: URL
+    public var hookBridgeHealthURL: URL
+    public var uiStateURL: URL
+    public var uiClientsDirectoryURL: URL
     public var eventsURL: URL
     public var playedEventsURL: URL
     public var lockURL: URL
@@ -45,7 +48,10 @@ public struct TaskLightConfig {
         doneSoundName: String,
         staleSoundName: String,
         observationsDirectoryURL: URL? = nil,
-        observationsStateURL: URL? = nil
+        observationsStateURL: URL? = nil,
+        hookBridgeHealthURL: URL? = nil,
+        uiStateURL: URL? = nil,
+        uiClientsDirectoryURL: URL? = nil
     ) {
         self.stateDirectory = stateDirectory
         self.stateURL = stateDirectory.appendingPathComponent("state.json")
@@ -53,6 +59,9 @@ public struct TaskLightConfig {
         self.currentURL = stateDirectory.appendingPathComponent("current.json")
         self.observationsDirectoryURL = observationsDirectoryURL ?? stateDirectory.appendingPathComponent("observations")
         self.observationsStateURL = observationsStateURL ?? stateDirectory.appendingPathComponent("observations_state.json")
+        self.hookBridgeHealthURL = hookBridgeHealthURL ?? stateDirectory.appendingPathComponent("hook_bridge_health.json")
+        self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
+        self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.eventsURL = stateDirectory.appendingPathComponent("events.jsonl")
         self.playedEventsURL = stateDirectory.appendingPathComponent("played_events.json")
         self.lockURL = stateDirectory.appendingPathComponent(".lock")
@@ -75,6 +84,9 @@ public struct TaskLightConfig {
         let staleSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_STALE_SOUND"] ?? "Funk"
         let observationsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_OBSERVATIONS_DIR"].map { URL(fileURLWithPath: $0) }
         let observationsStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_OBSERVATIONS_STATE_PATH"].map { URL(fileURLWithPath: $0) }
+        let hookBridgeHealthURL = ProcessInfo.processInfo.environment["TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH"].map { URL(fileURLWithPath: $0) }
+        let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
+        let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
             stateDirectory: stateDirectory,
             ttlSeconds: ttlSeconds,
@@ -84,7 +96,10 @@ public struct TaskLightConfig {
             doneSoundName: doneSoundName,
             staleSoundName: staleSoundName,
             observationsDirectoryURL: observationsDirectoryURL,
-            observationsStateURL: observationsStateURL
+            observationsStateURL: observationsStateURL,
+            hookBridgeHealthURL: hookBridgeHealthURL,
+            uiStateURL: uiStateURL,
+            uiClientsDirectoryURL: uiClientsDirectoryURL
         )
     }
 }
@@ -699,6 +714,310 @@ public struct TaskLightAggregateState: Codable, Equatable {
         self.tasks = tasks
         self.invalid_tasks = invalid_tasks
         self.observations_state = observations_state
+    }
+}
+
+public struct TaskLightUICounts: Codable, Equatable {
+    public var blocked: Int
+    public var stale: Int
+    public var running: Int
+    public var queued: Int
+    public var pending_verify_count: Int
+    public var done_verified_visible: Int
+    public var observed_active: Int
+    public var managed_active: Int
+
+    public init(
+        blocked: Int = 0,
+        stale: Int = 0,
+        running: Int = 0,
+        queued: Int = 0,
+        pending_verify_count: Int = 0,
+        done_verified_visible: Int = 0,
+        observed_active: Int = 0,
+        managed_active: Int = 0
+    ) {
+        self.blocked = blocked
+        self.stale = stale
+        self.running = running
+        self.queued = queued
+        self.pending_verify_count = pending_verify_count
+        self.done_verified_visible = done_verified_visible
+        self.observed_active = observed_active
+        self.managed_active = managed_active
+    }
+}
+
+public struct TaskLightUITask: Codable, Equatable, Identifiable {
+    public var task_id: String
+    public var short_task_id: String?
+    public var title: String
+    public var turn_id: String?
+    public var source: String?
+    public var raw_status: String
+    public var effective_status: String
+    public var display_scope: String
+    public var last_signal_age_sec: Double?
+    public var state_cause: String?
+    public var fresh: Bool
+    public var phase: String?
+    public var progress: Double?
+    public var reason: String?
+    public var message: String?
+    public var summary: String?
+    public var started_at: String?
+    public var updated_at: String?
+    public var done_at: String?
+    public var verified_at: String?
+    public var file_path: String?
+    public var confidence: Double?
+
+    public var id: String { task_id }
+
+    public init(
+        task_id: String,
+        short_task_id: String? = nil,
+        title: String,
+        turn_id: String? = nil,
+        source: String? = nil,
+        raw_status: String = "idle",
+        effective_status: String = "idle",
+        display_scope: String = "history",
+        last_signal_age_sec: Double? = nil,
+        state_cause: String? = nil,
+        fresh: Bool = false,
+        phase: String? = nil,
+        progress: Double? = nil,
+        reason: String? = nil,
+        message: String? = nil,
+        summary: String? = nil,
+        started_at: String? = nil,
+        updated_at: String? = nil,
+        done_at: String? = nil,
+        verified_at: String? = nil,
+        file_path: String? = nil,
+        confidence: Double? = nil
+    ) {
+        self.task_id = task_id
+        self.short_task_id = short_task_id
+        self.title = title
+        self.turn_id = turn_id
+        self.source = source
+        self.raw_status = raw_status
+        self.effective_status = effective_status
+        self.display_scope = display_scope
+        self.last_signal_age_sec = last_signal_age_sec
+        self.state_cause = state_cause
+        self.fresh = fresh
+        self.phase = phase
+        self.progress = progress
+        self.reason = reason
+        self.message = message
+        self.summary = summary
+        self.started_at = started_at
+        self.updated_at = updated_at
+        self.done_at = done_at
+        self.verified_at = verified_at
+        self.file_path = file_path
+        self.confidence = confidence
+    }
+
+    public func asTaskSummary() -> TaskLightTaskSummary {
+        TaskLightTaskSummary(
+            task_id: task_id,
+            short_task_id: short_task_id ?? String(task_id.suffix(8)),
+            title: title,
+            slug: title.lowercased().replacingOccurrences(of: " ", with: "-"),
+            status: effective_status,
+            raw_status: raw_status,
+            effective_status: effective_status,
+            phase: phase,
+            progress: progress,
+            reason: reason,
+            message: message,
+            evidence: state_cause,
+            summary: summary,
+            created_at: started_at ?? updated_at,
+            started_at: started_at,
+            updated_at: updated_at,
+            done_at: done_at,
+            verified_at: verified_at,
+            file_path: file_path,
+            is_invalid_json: effective_status == TaskLightStatus.invalid_json.rawValue,
+            invalid_json_error: effective_status == TaskLightStatus.invalid_json.rawValue ? state_cause : nil
+        )
+    }
+}
+
+public struct TaskLightUIObservation: Codable, Equatable, Identifiable {
+    public var observation_id: String
+    public var title: String
+    public var status: String
+    public var confidence: Double
+    public var display_scope: String
+    public var fresh: Bool
+    public var last_seen_age_sec: Double?
+    public var pid: Int?
+    public var command_short: String?
+    public var cwd: String?
+    public var last_seen_at: String?
+
+    public var id: String { observation_id }
+
+    public init(
+        observation_id: String,
+        title: String,
+        status: String = TaskLightObservationStatus.observed_quiet.rawValue,
+        confidence: Double = 0,
+        display_scope: String = "history",
+        fresh: Bool = false,
+        last_seen_age_sec: Double? = nil,
+        pid: Int? = nil,
+        command_short: String? = nil,
+        cwd: String? = nil,
+        last_seen_at: String? = nil
+    ) {
+        self.observation_id = observation_id
+        self.title = title
+        self.status = status
+        self.confidence = confidence
+        self.display_scope = display_scope
+        self.fresh = fresh
+        self.last_seen_age_sec = last_seen_age_sec
+        self.pid = pid
+        self.command_short = command_short
+        self.cwd = cwd
+        self.last_seen_at = last_seen_at
+    }
+
+    public func asObservationRecord() -> TaskLightObservationRecord {
+        TaskLightObservationRecord(
+            observation_id: observation_id,
+            pid: pid ?? 0,
+            ppid: 0,
+            command: command_short ?? title,
+            command_short: command_short ?? title,
+            cwd: cwd,
+            title: title,
+            detected_at: nil,
+            last_seen_at: last_seen_at,
+            status: status,
+            confidence: confidence
+        )
+    }
+}
+
+public struct TaskLightUIDiagnostics: Codable, Equatable {
+    public var hook_bridge_status: String?
+    public var active_turn_bindings: Int?
+    public var latest_active_turn_age_sec: Double?
+    public var latest_observed_age_sec: Double?
+    public var running_mismatch_warning: Bool?
+    public var state_dir: String?
+    public var app_bundle_path: String?
+    public var build_id: String?
+    public var projector_reason: [String]?
+    public var observed_false_positive_count: Int?
+    public var fallback_reason: String?
+
+    public init(
+        hook_bridge_status: String? = nil,
+        active_turn_bindings: Int? = nil,
+        latest_active_turn_age_sec: Double? = nil,
+        latest_observed_age_sec: Double? = nil,
+        running_mismatch_warning: Bool? = nil,
+        state_dir: String? = nil,
+        app_bundle_path: String? = nil,
+        build_id: String? = nil,
+        projector_reason: [String]? = nil,
+        observed_false_positive_count: Int? = nil,
+        fallback_reason: String? = nil
+    ) {
+        self.hook_bridge_status = hook_bridge_status
+        self.active_turn_bindings = active_turn_bindings
+        self.latest_active_turn_age_sec = latest_active_turn_age_sec
+        self.latest_observed_age_sec = latest_observed_age_sec
+        self.running_mismatch_warning = running_mismatch_warning
+        self.state_dir = state_dir
+        self.app_bundle_path = app_bundle_path
+        self.build_id = build_id
+        self.projector_reason = projector_reason
+        self.observed_false_positive_count = observed_false_positive_count
+        self.fallback_reason = fallback_reason
+    }
+}
+
+public struct TaskLightUIState: Codable, Equatable {
+    public var schema_version: String
+    public var source: String
+    public var projector_generated_at: String
+    public var global_status: String
+    public var lamp_status: String
+    public var global_display_title: String
+    public var state_confidence: Double
+    public var counts: TaskLightUICounts
+    public var tasks: [TaskLightUITask]
+    public var observations: [TaskLightUIObservation]
+    public var diagnostics: TaskLightUIDiagnostics
+
+    public init(
+        schema_version: String = "0.1",
+        source: String = "state_projector",
+        projector_generated_at: String = TaskLightTaskRecord.nowString(),
+        global_status: String = "idle",
+        lamp_status: String = "idle",
+        global_display_title: String = "IDLE",
+        state_confidence: Double = 1,
+        counts: TaskLightUICounts = TaskLightUICounts(),
+        tasks: [TaskLightUITask] = [],
+        observations: [TaskLightUIObservation] = [],
+        diagnostics: TaskLightUIDiagnostics = TaskLightUIDiagnostics()
+    ) {
+        self.schema_version = schema_version
+        self.source = source
+        self.projector_generated_at = projector_generated_at
+        self.global_status = global_status
+        self.lamp_status = lamp_status
+        self.global_display_title = global_display_title
+        self.state_confidence = state_confidence
+        self.counts = counts
+        self.tasks = tasks
+        self.observations = observations
+        self.diagnostics = diagnostics
+    }
+}
+
+public struct TaskLightUIClientRecord: Codable, Equatable {
+    public var schema_version: String
+    public var pid: Int
+    public var bundle_id: String
+    public var bundle_path: String
+    public var executable_path: String
+    public var build_id: String
+    public var state_dir: String
+    public var started_at: String
+    public var updated_at: String
+
+    public init(
+        schema_version: String = "0.1",
+        pid: Int,
+        bundle_id: String,
+        bundle_path: String,
+        executable_path: String,
+        build_id: String,
+        state_dir: String,
+        started_at: String = TaskLightTaskRecord.nowString(),
+        updated_at: String = TaskLightTaskRecord.nowString()
+    ) {
+        self.schema_version = schema_version
+        self.pid = pid
+        self.bundle_id = bundle_id
+        self.bundle_path = bundle_path
+        self.executable_path = executable_path
+        self.build_id = build_id
+        self.state_dir = state_dir
+        self.started_at = started_at
+        self.updated_at = updated_at
     }
 }
 

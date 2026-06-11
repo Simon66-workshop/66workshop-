@@ -252,11 +252,19 @@ class TaskLightTests(unittest.TestCase):
                 "lstart": "Tue Jun 10 12:00:02 2026",
                 "command": "codex exec TASKLIGHT_TASK_ID=20260609-000000-demo-abc12345 smoke-managed-thread",
             },
+            {
+                "pid": 4324,
+                "ppid": 200,
+                "uid": os.getuid(),
+                "lstart": "Tue Jun 10 12:00:03 2026",
+                "command": "python3 /tmp/66tasklight/script/hook_signal_bridge.py --watch",
+            },
         ]
         cwd_map = {
             4321: "/tmp/codex-observed",
             4322: "/tmp/codex-observed",
             4323: "/tmp/codex-observed",
+            4324: "/tmp/66tasklight",
         }
         with patch("cli.tasklight._parse_ps_snapshot", return_value=live_rows), patch(
             "cli.tasklight._process_cwd", side_effect=lambda pid: cwd_map.get(pid)

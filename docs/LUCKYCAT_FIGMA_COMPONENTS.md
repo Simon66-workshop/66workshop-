@@ -42,7 +42,7 @@ Build Figma components first, then let Codex implement SwiftUI from fixed names,
 - Paw chip labels and counts:
   - `阻塞`: `blocked + stale`
   - `运行`: `running + queued`
-  - `完成`: `done_verified`
+  - `完成`: current visible or recent-window `done_verified`, not all-time history
   - `待验`: `pending_verify_count / done_unverified`
   - `观察`: visible `observed_active` threads
 - Title: dynamic global display title

@@ -7,6 +7,8 @@ PACKAGE_DIR="$ROOT_DIR/mac/66TaskLight"
 python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 (cd "$PACKAGE_DIR" && swift build)
 (cd "$PACKAGE_DIR" && swift run TaskLightChecks)
+"$ROOT_DIR/script/smoke_ui_refresh_latency.sh"
+"$ROOT_DIR/script/smoke_state_projector.sh"
 "$ROOT_DIR/script/smoke_multitask.sh"
 "$ROOT_DIR/script/smoke_verify_gate.sh"
 "$ROOT_DIR/script/smoke_ttl.sh"
@@ -16,9 +18,13 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_appserver_bridge.sh"
 "$ROOT_DIR/script/smoke_hooks_config.sh"
 "$ROOT_DIR/script/smoke_hook_signal_bridge.sh"
+"$ROOT_DIR/script/smoke_stop_priority_guard.sh"
 "$ROOT_DIR/script/smoke_hook_bridge_launch_agent.sh"
 "$ROOT_DIR/script/smoke_signal_fusion.sh"
 "$ROOT_DIR/script/smoke_private_probe_confidence.sh"
 "$ROOT_DIR/script/smoke_current_thread_turn_identity.sh"
 "$ROOT_DIR/script/smoke_observer_health.sh"
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+"$ROOT_DIR/script/check_state_projector.sh" >/dev/null
 "$ROOT_DIR/script/build_and_run.sh" --verify
+"$ROOT_DIR/script/check_ui_client.sh" >/dev/null

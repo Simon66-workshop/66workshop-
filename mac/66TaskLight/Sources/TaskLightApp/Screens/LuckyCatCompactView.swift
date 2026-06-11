@@ -36,7 +36,7 @@ struct LuckyCatCompactView: View {
                     CompactPhasePaw(
                         label: "完成",
                         status: .done,
-                        count: viewModel.doneDisplayCount(),
+                        count: viewModel.visibleDoneDisplayCount(),
                         isPrimary: viewModel.compactActivePaw() == .complete
                     )
                     CompactPhasePaw(

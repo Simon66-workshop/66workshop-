@@ -10,8 +10,9 @@ export TASKLIGHT_STATE_DIR="$STATE_DIR"
 export TASKLIGHT_SIGNAL_SPOOL_DIR="$STATE_DIR/signals"
 export TASKLIGHT_TURN_BINDINGS_DIR="$STATE_DIR/turn_bindings"
 export TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH="$STATE_DIR/hook_bridge_offsets.json"
+export TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH="$STATE_DIR/hook_bridge_health.json"
 export TASKLIGHT_HOOK_TURN_LEASE_SECONDS=30
-export TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS=30
+export TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS=6
 export TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS=86400
 
 mkdir -p "$TASKLIGHT_SIGNAL_SPOOL_DIR"
@@ -53,6 +54,17 @@ PY
 
 run_bridge() {
   python3 "$BRIDGE" --once >/dev/null
+}
+
+assert_health_ok() {
+  python3 - "$TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert payload["status"] == "ok", payload
+assert "active_turn_bindings" in payload, payload
+PY
 }
 
 count_value() {
@@ -138,6 +150,7 @@ task_dup="$(task_for_turn turn-dup)"
 
 append_signal "turn_started" "turn-a"
 run_bridge
+assert_health_ok
 task_a="$(task_for_turn turn-a)"
 [[ "$(task_status "$task_a")" == "running" ]]
 
@@ -247,6 +260,40 @@ sleep 1.2
 run_bridge
 [[ "$(task_status "$task_g")" == "cancelled" ]]
 [[ "$(task_phase "$task_g")" == "released" ]]
+python3 - "$TASKLIGHT_TURN_BINDINGS_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+for path in Path(sys.argv[1]).glob("*.json"):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("turn_id") == "turn-g":
+        assert payload.get("release_reason") == "completed_idle_timeout", payload
+        raise SystemExit
+raise SystemExit(1)
+PY
+
+append_signal "item_started" "turn-g"
+run_bridge
+task_g_reactivated="$(task_for_turn turn-g)"
+[[ "$task_g_reactivated" != "$task_g" ]]
+[[ "$(task_status "$task_g")" == "cancelled" ]]
+[[ "$(task_status "$task_g_reactivated")" == "running" ]]
+[[ "$(task_phase "$task_g_reactivated")" == "tool_running" ]]
+python3 - "$TASKLIGHT_TURN_BINDINGS_DIR" "$task_g" <<'PY'
+import json
+import sys
+from pathlib import Path
+base = Path(sys.argv[1])
+previous_task = sys.argv[2]
+for path in base.glob("*.json"):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("turn_id") == "turn-g":
+        assert previous_task in payload.get("previous_task_ids", []), payload
+        assert payload.get("status") == "active", payload
+        assert payload.get("reactivation_count", 0) >= 1, payload
+        raise SystemExit
+raise SystemExit(1)
+PY
 
 "$ROOT_DIR/script/check_hook_bridge.sh" >/dev/null
 

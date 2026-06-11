@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Darwin
 import Foundation
 import TaskLightCore
 
@@ -14,20 +15,27 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     @Published var dashboard: TaskLightAggregateState
+    @Published var uiState: TaskLightUIState
     @Published var expanded: Bool
     @Published var muted: Bool
+    @Published var hookBridgeHealth: HookBridgeHealthDiagnostic?
 
     let config: TaskLightConfig
     let store: TaskLightStore
 
     private var timer: Timer?
     private var ledger: TaskLightPlayedEventsLedger
+    private var stateDirectoryFileDescriptor: CInt?
+    private var stateDirectorySource: DispatchSourceFileSystemObject?
+    private var pendingStateFileRefresh: DispatchWorkItem?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
         self.store = store ?? TaskLightStore(config: config)
         self.store.ensureLayout()
         self.dashboard = self.store.loadDashboard()
+        self.uiState = self.store.loadUIState()
+        self.hookBridgeHealth = Self.loadHookBridgeHealth(from: self.config.hookBridgeHealthURL)
         let defaults = UserDefaults.standard
         self.expanded = defaults.object(forKey: TaskLightLedgerKeys.expanded) as? Bool ?? false
         self.ledger = self.store.loadPlayedLedger()
@@ -36,6 +44,7 @@ final class TaskLightViewModel: ObservableObject {
 
     func start() {
         refresh()
+        startStateFileWatcher()
         timer?.invalidate()
         let timer = Timer(timeInterval: config.refreshSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -48,8 +57,17 @@ final class TaskLightViewModel: ObservableObject {
 
     func refresh() {
         dashboard = store.loadDashboard()
+        uiState = store.loadUIState()
+        hookBridgeHealth = Self.loadHookBridgeHealth(from: config.hookBridgeHealthURL)
+        saveUIClientDiagnostic()
         handleAlertPlayback()
         persistUIState()
+    }
+
+    deinit {
+        timer?.invalidate()
+        pendingStateFileRefresh?.cancel()
+        stateDirectorySource?.cancel()
     }
 
     func toggleExpanded() {
@@ -112,19 +130,15 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func statusLabel() -> String {
-        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
-            return "stale"
-        }
-        return overallLampStatus()
+        uiState.lamp_status
     }
 
     func compactCountsLabel() -> String {
-        let observedCount = dashboard.observations_state?.counts.active ?? 0
-        return "R \(dashboard.counts.blocked + dashboard.counts.stale)  B \(dashboard.counts.running + dashboard.counts.queued + dashboard.counts.done_unverified)  G \(dashboard.counts.done_verified)  P \(dashboard.counts.pending_verify_count)  O \(observedCount)"
+        "R \(blockedDisplayCount())  B \(runningDisplayCount())  G \(visibleDoneDisplayCount())  P \(pendingDisplayCount())  O \(observedDisplayCount())"
     }
 
     func managedActiveCount() -> Int {
-        dashboard.counts.blocked + dashboard.counts.stale + dashboard.counts.running + dashboard.counts.queued + dashboard.counts.done_unverified
+        uiState.counts.managed_active
     }
 
     func observedCount() -> Int {
@@ -132,23 +146,27 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func observedDisplayCount() -> Int {
-        visibleObservedThreads().count
+        uiState.counts.observed_active
     }
 
     func blockedDisplayCount() -> Int {
-        dashboard.counts.blocked + dashboard.counts.stale
+        uiState.counts.blocked + uiState.counts.stale
     }
 
     func runningDisplayCount() -> Int {
-        dashboard.counts.running + dashboard.counts.queued
+        uiState.counts.running + uiState.counts.queued
     }
 
     func doneDisplayCount() -> Int {
-        dashboard.counts.done_verified
+        uiState.counts.done_verified_visible
+    }
+
+    func visibleDoneDisplayCount() -> Int {
+        uiState.counts.done_verified_visible
     }
 
     func pendingDisplayCount() -> Int {
-        dashboard.counts.pending_verify_count
+        uiState.counts.pending_verify_count
     }
 
     func managedCount() -> Int {
@@ -156,9 +174,9 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func sortedManagedTasks() -> [TaskLightTaskSummary] {
-        dashboard.tasks.sorted { lhs, rhs in
-            let lhsRank = taskSortRank(lhs.effective_status)
-            let rhsRank = taskSortRank(rhs.effective_status)
+        uiState.tasks.map { $0.asTaskSummary() }.sorted { lhs, rhs in
+            let lhsRank = taskSortRank(uiDisplayScope(for: lhs.task_id, fallback: lhs.effective_status))
+            let rhsRank = taskSortRank(uiDisplayScope(for: rhs.task_id, fallback: rhs.effective_status))
             if lhsRank != rhsRank {
                 return lhsRank < rhsRank
             }
@@ -170,14 +188,15 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func invalidManagedTasks() -> [TaskLightTaskSummary] {
-        dashboard.invalid_tasks.sorted { lhs, rhs in
+        uiState.tasks.filter { $0.display_scope == "invalid" }.map { $0.asTaskSummary() }.sorted { lhs, rhs in
             (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id)
         }
     }
 
     func visibleObservedThreads() -> [TaskLightObservationRecord] {
-        (dashboard.observations_state?.observations ?? [])
-            .filter { $0.isActive && $0.managed_task_id == nil }
+        uiState.observations
+            .filter { $0.display_scope == "active_execution" }
+            .map { $0.asObservationRecord() }
     }
 
     func luckyCatCompactStatusText() -> String {
@@ -198,44 +217,22 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func luckyCatPresentationTitle() -> String {
-        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
-            return "BLOCKED"
-        }
-        if blockedDisplayCount() > 0 || hasHighConfidenceObservedAttention() {
-            return "BLOCKED"
-        }
-        if runningDisplayCount() > 0 || observedDisplayCount() > 0 {
-            return "RUNNING"
-        }
-        if pendingDisplayCount() > 0 {
-            return "PENDING"
-        }
-        if dashboard.last_verified_at != nil {
-            return "DONE"
-        }
-        return "IDLE"
+        uiState.global_display_title
     }
 
     func luckyCatPresentationStatus() -> LuckyCatVisualStatus {
-        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
+        switch uiState.lamp_status {
+        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
             return .blocked
-        }
-        if blockedDisplayCount() > 0 || hasHighConfidenceObservedAttention() {
-            return .blocked
-        }
-        if runningDisplayCount() > 0 {
+        case TaskLightStatus.running.rawValue:
             return .running
-        }
-        if observedDisplayCount() > 0 {
-            return .observed
-        }
-        if pendingDisplayCount() > 0 {
+        case "pending", TaskLightStatus.done_unverified.rawValue:
             return .pending
-        }
-        if dashboard.last_verified_at != nil {
+        case TaskLightStatus.done_verified.rawValue:
             return .done
+        default:
+            return observedDisplayCount() > 0 ? .observed : .idle
         }
-        return .idle
     }
 
     func signalDiagnosticLabel() -> String {
@@ -248,6 +245,24 @@ final class TaskLightViewModel: ObservableObject {
         let state = binding.last_inferred_status ?? binding.private_status ?? binding.status ?? "unknown"
         let decision = binding.last_fusion_decision ?? "none"
         return "Signal \(source) · \(quality) · c\(confidence) · \(state) · \(decision)"
+    }
+
+    func stateSourceDiagnosticLabel() -> String {
+        let reason = uiState.diagnostics.projector_reason?.joined(separator: ",") ?? "none"
+        let activeAge = secondsLabel(uiState.diagnostics.latest_active_turn_age_sec)
+        let observedAge = secondsLabel(uiState.diagnostics.latest_observed_age_sec)
+        let uiAge = secondsLabel(uiStateAgeSeconds())
+        let fallback = uiState.diagnostics.fallback_reason ?? "none"
+        let mismatch = (uiState.diagnostics.running_mismatch_warning ?? false) ? " mismatch" : ""
+        return "State Source · \(uiState.source) · \(uiState.global_status) · reason \(reason) · activeAge \(activeAge) · observedAge \(observedAge) · uiAge \(uiAge) · fallback \(fallback)\(mismatch)"
+    }
+
+    func bridgeHealthDiagnosticLabel() -> String {
+        let status = uiState.diagnostics.hook_bridge_status ?? hookBridgeHealth?.status ?? "unknown"
+        let active = uiState.diagnostics.active_turn_bindings ?? hookBridgeHealth?.active_turn_bindings ?? 0
+        let observedAge = secondsLabel(uiState.diagnostics.latest_observed_age_sec)
+        let bundle = uiState.diagnostics.app_bundle_path ?? "no-client"
+        return "Bridge Health · \(status) · active \(active) · obsAge \(observedAge) · \(bundle)"
     }
 
     func compactElapsedLabel() -> String {
@@ -312,10 +327,54 @@ final class TaskLightViewModel: ObservableObject {
         if observedDisplayCount() > 0 {
             return .recon
         }
-        if doneDisplayCount() > 0 {
+        if visibleDoneDisplayCount() > 0 {
             return .complete
         }
         return nil
+    }
+
+    private func doneVisibleWindowSeconds() -> TimeInterval {
+        let raw = ProcessInfo.processInfo.environment["TASKLIGHT_DONE_VISIBLE_HOURS"]
+        let hours = raw.flatMap(Double.init) ?? 24
+        return max(0, hours) * 3600
+    }
+
+    private func startStateFileWatcher() {
+        guard stateDirectorySource == nil else { return }
+        let stateDirectory = config.stateURL.deletingLastPathComponent()
+        let descriptor = open(stateDirectory.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            self?.scheduleStateFileRefresh()
+        }
+        source.setCancelHandler {
+            close(descriptor)
+        }
+        stateDirectoryFileDescriptor = descriptor
+        stateDirectorySource = source
+        source.resume()
+    }
+
+    private func scheduleStateFileRefresh() {
+        pendingStateFileRefresh?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.refresh()
+        }
+        pendingStateFileRefresh = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+    }
+
+    private static func loadHookBridgeHealth(from url: URL) -> HookBridgeHealthDiagnostic? {
+        guard let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(HookBridgeHealthDiagnostic.self, from: data)
     }
 
     func primaryClearTaskID() -> String? {
@@ -376,29 +435,25 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func overallLampStatus() -> String {
-        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
-            return TaskLightStatus.stale.rawValue
-        }
-        if dashboard.counts.blocked > 0 || dashboard.counts.stale > 0 {
-            return TaskLightStatus.blocked.rawValue
-        }
-        if hasHighConfidenceObservedAttention() {
-            return TaskLightStatus.blocked.rawValue
-        }
-        if dashboard.counts.running > 0 || dashboard.counts.queued > 0 || dashboard.counts.done_unverified > 0 {
-            return TaskLightStatus.running.rawValue
-        }
-        if hasObservedActivity() {
-            return TaskLightStatus.running.rawValue
-        }
-        if dashboard.last_verified_at != nil {
-            return TaskLightStatus.done_verified.rawValue
-        }
-        return TaskLightStatus.idle.rawValue
+        uiState.lamp_status
     }
 
     private func taskSortRank(_ status: String) -> Int {
         switch status {
+        case "open_blocker":
+            return 0
+        case "active_execution":
+            return 2
+        case "pending_verify":
+            return 4
+        case "recent_done":
+            return 5
+        case "invalid":
+            return 7
+        case "history":
+            return 8
+        case "released":
+            return 9
         case TaskLightStatus.blocked.rawValue:
             return 0
         case TaskLightStatus.stale.rawValue:
@@ -418,6 +473,24 @@ final class TaskLightViewModel: ObservableObject {
         default:
             return 8
         }
+    }
+
+    private func uiDisplayScope(for taskID: String, fallback: String) -> String {
+        uiState.tasks.first(where: { $0.task_id == taskID })?.display_scope ?? fallback
+    }
+
+    private func uiStateAgeSeconds() -> Double? {
+        guard let generatedAt = TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) else {
+            return nil
+        }
+        return max(0, Date().timeIntervalSince(generatedAt))
+    }
+
+    private func secondsLabel(_ value: Double?) -> String {
+        guard let value else {
+            return "none"
+        }
+        return String(format: "%.1fs", value)
     }
 
     private func playSound(for soundType: String) {
@@ -441,27 +514,29 @@ final class TaskLightViewModel: ObservableObject {
         defaults.set(muted, forKey: TaskLightLedgerKeys.muted)
     }
 
-    private func compactReferenceTask() -> TaskLightTaskSummary? {
-        if let current = dashboard.current_task_id,
-           let currentTask = dashboard.tasks.first(where: { $0.task_id == current }),
-           isCompactPrimaryStatus(currentTask.effective_status) {
-            return currentTask
-        }
+    private func saveUIClientDiagnostic() {
+        let bundle = Bundle.main
+        let bundleURL = bundle.bundleURL
+        let executableURL = bundle.executableURL ?? URL(fileURLWithPath: "")
+        let bundleID = bundle.bundleIdentifier ?? "com.local.66tasklight"
+        let resourceDate = (try? bundleURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+        let buildID = resourceDate.map { String(Int($0.timeIntervalSince1970)) } ?? TaskLightTaskRecord.nowString()
+        store.saveUIClientRecord(
+            bundleID: bundleID,
+            bundlePath: bundleURL.path,
+            executablePath: executableURL.path,
+            buildID: buildID
+        )
+    }
 
-        let priority = [
-            TaskLightStatus.blocked.rawValue,
-            TaskLightStatus.stale.rawValue,
-            TaskLightStatus.running.rawValue,
-            TaskLightStatus.queued.rawValue,
-            TaskLightStatus.done_unverified.rawValue,
-            TaskLightStatus.done_verified.rawValue
-        ]
-        for status in priority {
-            if let task = dashboard.tasks.first(where: { $0.effective_status == status }) {
-                return task
+    private func compactReferenceTask() -> TaskLightTaskSummary? {
+        let priority = ["open_blocker", "active_execution", "pending_verify", "recent_done"]
+        for scope in priority {
+            if let task = uiState.tasks.first(where: { $0.display_scope == scope }) {
+                return task.asTaskSummary()
             }
         }
-        return nil
+        return uiState.tasks.first?.asTaskSummary()
     }
 
     private func isCompactPrimaryStatus(_ status: String) -> Bool {
@@ -515,6 +590,50 @@ final class TaskLightViewModel: ObservableObject {
             return left > right
         }.first
     }
+
+    private func latestTurnBindingDiagnostic() -> TurnBindingDiagnostic? {
+        let directory = config.stateDirectory.appendingPathComponent("turn_bindings")
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        let bindings = urls
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> TurnBindingDiagnostic? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? decoder.decode(TurnBindingDiagnostic.self, from: data)
+            }
+        return bindings.sorted { lhs, rhs in
+            if (lhs.status == "active") != (rhs.status == "active") {
+                return lhs.status == "active"
+            }
+            let left = TaskLightTaskRecord.parseTimestamp(lhs.updated_at ?? lhs.created_at ?? "") ?? Date.distantPast
+            let right = TaskLightTaskRecord.parseTimestamp(rhs.updated_at ?? rhs.created_at ?? "") ?? Date.distantPast
+            return left > right
+        }.first
+    }
+
+    private func shortID(_ value: String) -> String {
+        if value == "none" || value == "unknown" {
+            return value
+        }
+        return String(value.prefix(8))
+    }
+
+    private func ageLabel(since timestamp: String?) -> String {
+        guard let date = TaskLightTaskRecord.parseTimestamp(timestamp) else {
+            return "--"
+        }
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 {
+            return "\(seconds)s"
+        }
+        return "\(seconds / 60)m"
+    }
 }
 
 private struct ThreadBindingDiagnostic: Decodable {
@@ -530,4 +649,29 @@ private struct ThreadBindingDiagnostic: Decodable {
     var last_source_quality: String?
     var last_inferred_status: String?
     var task_identity: String?
+}
+
+private struct TurnBindingDiagnostic: Decodable {
+    var task_id: String?
+    var turn_id: String?
+    var status: String?
+    var created_at: String?
+    var updated_at: String?
+    var last_signal_at: String?
+    var last_signal_event: String?
+    var last_bridge_decision: String?
+    var phase: String?
+    var release_reason: String?
+}
+
+struct HookBridgeHealthDiagnostic: Decodable, Equatable {
+    var status: String?
+    var last_run_at: String?
+    var last_seen_at: String?
+    var processed_count: Int?
+    var expired_count: Int?
+    var superseded_count: Int?
+    var active_turn_bindings: Int?
+    var last_error: String?
+    var updated_at: String?
 }

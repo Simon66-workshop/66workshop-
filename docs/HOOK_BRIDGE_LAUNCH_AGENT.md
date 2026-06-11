@@ -16,6 +16,7 @@ Default values:
 - label: `com.66tasklight.hook-bridge`
 - plist: `~/Library/LaunchAgents/com.66tasklight.hook-bridge.plist`
 - state dir: `~/.66tasklight`
+- health file: `~/.66tasklight/hook_bridge_health.json`
 - stdout log: `~/.66tasklight/logs/hook_bridge.out.log`
 - stderr log: `~/.66tasklight/logs/hook_bridge.err.log`
 - command: `python3 script/hook_signal_bridge.py --watch`
@@ -40,6 +41,8 @@ The check prints:
 - `signal_dir`
 - `latest_signal_age_sec`
 - `active_turn_bindings`
+- `hook_bridge_health_status`
+- `hook_bridge_health_state`
 - `latest_bridge_process_time`
 - `log_tail`
 - `STATUS`
@@ -66,6 +69,7 @@ The installer forwards these environment variables into the plist when present:
 - `TASKLIGHT_SIGNAL_SPOOL_DIR`
 - `TASKLIGHT_TURN_BINDINGS_DIR`
 - `TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH`
+- `TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH`
 - `TASKLIGHT_HOOK_TURN_LEASE_SECONDS`
 - `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`
 - `TASKLIGHT_HOOK_BRIDGE_POLL_SECONDS`
@@ -73,6 +77,10 @@ The installer forwards these environment variables into the plist when present:
 - `TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS`
 
 `TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS` defaults to `2`.
+
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `6`, so a turn whose
+last signal was `item_completed` is silently released quickly if no `stop`
+arrives.
 
 ## Safety
 

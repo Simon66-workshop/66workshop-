@@ -34,6 +34,12 @@ OBSERVATION_LINK_RE = re.compile(r"TASKLIGHT_TASK_ID=([A-Za-z0-9_.-]+)")
 OBSERVATION_COMMAND_EXCLUDE_SNIPPETS = (
     "tasklight.py observe-local",
     "tasklight.py observations",
+    "hook_signal_bridge.py",
+    "codex_current_task_watcher.py",
+    "codex_private_state_probe.py",
+    "codex_signal_fusion.py",
+    "codex_appserver_bridge.py",
+    "check_hook_bridge",
     "model_provider=\"openai-memgen\"",
     "chronicle/screen_recording",
     "screen_recording",

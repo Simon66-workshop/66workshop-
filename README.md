@@ -12,6 +12,7 @@ without overwriting each other.
 - Tracks `queued`, `running`, `blocked`, `done_unverified`, `done_verified`,
   `stale`, and `cancelled`
 - Rebuilds a multi-task aggregate snapshot in `~/.66tasklight/state.json`
+- Projects the final LuckyCat UI read model into `~/.66tasklight/ui_state.json`
 - Keeps per-task JSON files in `~/.66tasklight/tasks/<task_id>.json`
 - Keeps current-thread binding sidecars in `~/.66tasklight/thread_bindings/<CODEX_THREAD_ID>.json`
 - Keeps live observation snapshots in `~/.66tasklight/observations/` and `~/.66tasklight/observations_state.json`
@@ -56,6 +57,8 @@ paths and timing with environment variables:
 - `TASKLIGHT_STATE_PATH`
 - `TASKLIGHT_TASKS_DIR`
 - `TASKLIGHT_CURRENT_PATH`
+- `TASKLIGHT_UI_STATE_PATH`
+- `TASKLIGHT_UI_CLIENTS_DIR`
 - `TASKLIGHT_THREAD_BINDINGS_DIR`
 - `TASKLIGHT_EVENTS_PATH`
 - `TASKLIGHT_PLAYED_EVENTS_PATH`
@@ -68,6 +71,48 @@ paths and timing with environment variables:
 - `TASKLIGHT_TTL_SECONDS`
 - `TASKLIGHT_VERIFICATION_TTL_SECONDS`
 - `TASKLIGHT_REFRESH_SECONDS`
+
+## State Projector
+
+LuckyCat now reads the final UI state from `~/.66tasklight/ui_state.json`.
+`state.json` and `tasks/*.json` remain the backend compatibility model, but
+Swift no longer decides the global red/blue/green/pending precedence itself.
+
+Run the projector once:
+
+```bash
+python3 script/state_projector.py --once
+```
+
+Run it as a local watch process:
+
+```bash
+python3 script/state_projector.py --watch
+```
+
+Install it as a user LaunchAgent:
+
+```bash
+./script/install_state_projector_launch_agent.sh
+```
+
+Stop the LaunchAgent:
+
+```bash
+./script/uninstall_state_projector_launch_agent.sh
+```
+
+Check projector and app diagnostics:
+
+```bash
+./script/check_state_projector.sh
+./script/check_ui_client.sh
+```
+
+The projector is read-only with respect to task state. It writes only
+`ui_state.json`, `state_projector_health.json`, and bounded sanitized diagnostics
+in `normalized_signals.jsonl`. It does not read prompts, responses, auth files,
+or raw hook logs.
 
 ## Observer
 
@@ -126,8 +171,12 @@ The default macOS skin is the LuckyCat 66VS dashboard:
   - left label shows the global status title such as `BLOCKED`
   - right label shows the compact `M...` time/count readout
   - status color glow must not bleed horizontally beyond the orb
-- five paw chips are live state counters: `阻塞 = blocked + stale`, `运行 = running + queued`, `完成 = done_verified`, `待验 = pending_verify_count / done_unverified`, `观察 = visible observed_active threads`
+- five paw chips are live state counters: `阻塞 = blocked + stale`, `运行 = running + queued`, `完成 = recently visible done_verified`, `待验 = pending_verify_count / done_unverified`, `观察 = visible observed_active threads`
 - left front paw must read as one continuous limb with the body shell, without visible seam breaks
+
+The compact `完成` paw is intentionally not an all-time history counter. It counts
+`done_verified` tasks inside the visible completion window, defaulting to 24
+hours. Override the window with `TASKLIGHT_DONE_VISIBLE_HOURS`.
 
 This skin is read-only. It does not change protocol semantics, CLI writes,
 sound rules, or observation behavior.
@@ -330,13 +379,19 @@ for the same turn, phase, and progress write at most once per
 
 If the last hook signal is `item_completed` and no `stop` arrives, the bridge
 silently releases the turn after `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`
-seconds, default `20`. This prevents a completed-but-missing-stop turn from
+seconds, default `6`. This prevents a completed-but-missing-stop turn from
 holding LuckyCat in `RUNNING`.
+
+That timeout is a soft release only. If a real `Stop` hook arrives later for the
+same turn, the bridge recovers the task to `done_unverified`, so LuckyCat shows
+`PENDING`. `verify` is still the only path to green/DONE. User clear/cancel is a
+hard cancellation and is not revived by late stop.
 
 The bridge stores its local sidecars in:
 
 - `~/.66tasklight/turn_bindings/`
 - `~/.66tasklight/hook_bridge_offsets.json`
+- `~/.66tasklight/hook_bridge_health.json`
 
 Detailed bridge behavior lives in `docs/HOOK_SIGNAL_BRIDGE.md`. LaunchAgent
 operation details live in `docs/HOOK_BRIDGE_LAUNCH_AGENT.md`.

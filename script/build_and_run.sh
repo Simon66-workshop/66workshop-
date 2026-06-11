@@ -53,6 +53,10 @@ stage_bundle() {
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
@@ -127,7 +131,9 @@ PY
 report_verify_context() {
   local state_dir="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
   local state_json="$state_dir/state.json"
+  local ui_state="$state_dir/ui_state.json"
   local observations_state="$state_dir/observations_state.json"
+  local projector_health="$state_dir/state_projector_health.json"
 
   echo "bundle_path=$APP_BUNDLE"
   echo "launch_bundle_path=$RUNTIME_BUNDLE"
@@ -138,8 +144,11 @@ report_verify_context() {
   fi
   echo "state_dir=$state_dir"
   echo "state_json_status=$(json_status "$state_json")"
+  echo "ui_state_status=$(json_status "$ui_state")"
+  echo "state_projector_health_status=$(json_status "$projector_health" "missing_empty_ok")"
   echo "observations_state_status=$(json_status "$observations_state")"
   TASKLIGHT_STATE_DIR="$state_dir" "$ROOT_DIR/script/check_observer.sh"
+  TASKLIGHT_STATE_DIR="$state_dir" "$ROOT_DIR/script/check_state_projector.sh"
   echo "swift_build=success"
 }
 
