@@ -4,23 +4,31 @@ struct LuckyCatPawCounterChip: View {
     let status: LuckyCatVisualStatus
     let count: Int
     let label: String
+    var isActive: Bool = false
     var showsLabel: Bool = true
 
     var body: some View {
+        let hasCount = count > 0
+        let active = isActive || hasCount
+
         VStack(spacing: 2) {
             LuckyCatPawIcon(tint: status.tint)
                 .frame(width: 32, height: 28)
                 .padding(.top, 10)
+                .opacity(active ? 1 : 0.48)
 
             Text("\(count)")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(status.tint)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(active ? status.tint : LuckyCatTokens.Palette.textSecondary.opacity(0.52))
+                .shadow(color: active ? status.tint.opacity(0.22) : Color.clear, radius: 3, x: 0, y: 1)
 
             if showsLabel {
                 Text(label)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(status.tint.opacity(0.92))
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(active ? status.tint.opacity(0.94) : LuckyCatTokens.Palette.textSecondary.opacity(0.58))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .padding(.top, 1)
             } else {
                 HStack(spacing: 4) {
@@ -46,7 +54,7 @@ struct LuckyCatPawCounterChip: View {
                 )
                 .overlay(
                     PawTileShape()
-                        .fill(status.tint.opacity(0.11))
+                        .fill(status.tint.opacity(active ? 0.16 : 0.045))
                 )
                 .overlay(
                     PawTileShape()
@@ -55,9 +63,10 @@ struct LuckyCatPawCounterChip: View {
         )
         .overlay(
             PawTileShape()
-                .stroke(status.tint.opacity(0.14), lineWidth: 1)
+                .stroke(status.tint.opacity(active ? 0.28 : 0.10), lineWidth: active ? 1.4 : 1)
         )
-        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.55), radius: 10, x: 0, y: 6)
+        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.48), radius: 9, x: 0, y: 6)
+        .shadow(color: status.tint.opacity(active ? 0.18 : 0), radius: 8, x: 0, y: 2)
         .overlay(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.08))

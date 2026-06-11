@@ -2098,6 +2098,52 @@ class TaskLightStore:
                 details={"result": "cancelled"},
             )
 
+    def release_task(self, task_id: str) -> tuple[TaskLightTaskRecord | TaskLightTaskSummary, TaskLightAggregateState]:
+        validate_task_id(task_id)
+        with locked_state(self.config):
+            record, summary, missing = self._load_or_placeholder(task_id)
+            if summary is None:
+                return self._persist_synthetic_invalid(task_id, "release", "invalid_json", "task record unreadable")
+            if record is None:
+                released = TaskLightTaskRecord(
+                    task_id=task_id,
+                    title=task_id,
+                    slug=slugify(task_id),
+                    status="cancelled",
+                    phase="released",
+                    progress=0.0,
+                    created_at=iso_now(),
+                    started_at=iso_now(),
+                    updated_at=iso_now(),
+                    cancelled_at=iso_now(),
+                    ttl_seconds=self.config.ttl_seconds,
+                )
+                return self._persist_task_and_state(
+                    released,
+                    event_name="release",
+                    previous_status="missing",
+                    sound_type=None,
+                    details={"result": "released"},
+                )
+            effective = record.effective_status(
+                ttl_seconds=self.config.ttl_seconds,
+                verification_ttl_seconds=self.config.verification_ttl_seconds,
+            )
+            timestamp = iso_now()
+            record.status = "cancelled"
+            record.phase = "released"
+            record.cancelled_at = record.cancelled_at or timestamp
+            record.updated_at = timestamp
+            record.last_error = None
+            record.current_event_id = secrets.token_hex(16)
+            return self._persist_task_and_state(
+                record,
+                event_name="release",
+                previous_status=effective,
+                sound_type=None,
+                details={"result": "released"},
+            )
+
 
 def configure_from_args() -> TaskLightConfig:
     return TaskLightConfig.from_env()
@@ -2145,6 +2191,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     clear_parser = subparsers.add_parser("clear", help="Cancel a task")
     clear_parser.add_argument("--task-id", required=True)
+
+    release_parser = subparsers.add_parser("release", help="Release a current binding without sound")
+    release_parser.add_argument("--task-id", required=True)
 
     subparsers.add_parser("list", help="List tasks")
     show_parser = subparsers.add_parser("show", help="Show one task")
@@ -2206,6 +2255,10 @@ def dispatch(args: argparse.Namespace) -> int:
             return 1 if _is_failure_result(result) else 0
         if args.command == "clear":
             result, state = store.clear_task(args.task_id)
+            _emit_json(_stringify_result(result))
+            return 1 if _is_failure_result(result) else 0
+        if args.command == "release":
+            result, state = store.release_task(args.task_id)
             _emit_json(_stringify_result(result))
             return 1 if _is_failure_result(result) else 0
         if args.command == "list":

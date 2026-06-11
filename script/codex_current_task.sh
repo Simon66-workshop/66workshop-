@@ -3,13 +3,20 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TASKLIGHT_BIN="$ROOT_DIR/tasklight"
+WATCHER_SCRIPT="$ROOT_DIR/script/codex_current_task_watcher.py"
+PRIVATE_PROBE_SCRIPT="$ROOT_DIR/script/codex_private_state_probe.py"
+FUSION_SCRIPT="$ROOT_DIR/script/codex_signal_fusion.py"
 STATE_DIR="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
 THREAD_ID="${CODEX_THREAD_ID:-}"
 THREAD_BINDINGS_DIR="${TASKLIGHT_THREAD_BINDINGS_DIR:-$STATE_DIR/thread_bindings}"
-HEARTBEAT_INTERVAL="${TASKLIGHT_CURRENT_TASK_HEARTBEAT_INTERVAL:-20}"
-ACTIVE_LEASE_SECONDS="${TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS:-180}"
+HEARTBEAT_INTERVAL="${TASKLIGHT_CURRENT_TASK_HEARTBEAT_INTERVAL:-10}"
+ACTIVE_LEASE_SECONDS="${TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS:-45}"
 DEFAULT_PHASE="${TASKLIGHT_CURRENT_TASK_PHASE:-codex_session}"
 DEFAULT_PROGRESS="${TASKLIGHT_CURRENT_TASK_PROGRESS:-0.12}"
+STARTED_WATCH_PID=""
+BINDING_TURN_ID=""
+BINDING_EPOCH=""
+BINDING_TASK_IDENTITY=""
 
 require_thread_id() {
   if [[ -z "$THREAD_ID" ]]; then
@@ -101,6 +108,15 @@ payload.update(
         "status": status,
         "watch_pid": int(watch_pid) if watch_pid else None,
         "released_at": released_at or None,
+        "turn_id": os.environ.get("TASKLIGHT_BINDING_TURN_ID") or payload.get("turn_id"),
+        "binding_epoch": int(os.environ.get("TASKLIGHT_BINDING_EPOCH") or payload.get("binding_epoch") or 1),
+        "task_identity": os.environ.get("TASKLIGHT_BINDING_TASK_IDENTITY") or payload.get("task_identity"),
+        "quiet_count": int(os.environ.get("TASKLIGHT_BINDING_QUIET_COUNT") or payload.get("quiet_count") or 0),
+        "last_fusion_decision": payload.get("last_fusion_decision"),
+        "last_signal_confidence": payload.get("last_signal_confidence"),
+        "last_signal_source": payload.get("last_signal_source"),
+        "last_source_quality": payload.get("last_source_quality"),
+        "last_inferred_status": payload.get("last_inferred_status"),
     }
 )
 path.parent.mkdir(parents=True, exist_ok=True)
@@ -127,6 +143,11 @@ stop_watch_pid() {
   fi
 }
 
+watch_pid_is_alive() {
+  local pid="${1:-}"
+  [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1
+}
+
 current_task_status() {
   local task_id="$1"
   "$TASKLIGHT_BIN" show "$task_id" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status","missing"))'
@@ -149,92 +170,60 @@ start_watcher() {
   tasklight_bin="$TASKLIGHT_BIN"
   interval="$HEARTBEAT_INTERVAL"
   active_lease_seconds="$ACTIVE_LEASE_SECONDS"
-  nohup python3 - "$watch_path" "$tasklight_bin" "$interval" "$active_lease_seconds" >/dev/null 2>&1 <<'PY' &
-import json
+  STARTED_WATCH_PID="$(python3 - "$WATCHER_SCRIPT" "$watch_path" "$tasklight_bin" "$interval" "$active_lease_seconds" <<'PY'
 import os
 import subprocess
 import sys
-import time
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
 
-path = Path(sys.argv[1])
-tasklight_bin = sys.argv[2]
-interval = float(sys.argv[3])
-active_lease_seconds = float(sys.argv[4])
-
-def parse_ts(value):
-    if not value:
-        return None
-    normalized = str(value).replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-
-def now_string():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-def write_payload(payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=True, sort_keys=True, indent=2)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp_name, path)
-    dir_fd = os.open(path.parent, os.O_DIRECTORY)
-    try:
-        os.fsync(dir_fd)
-    finally:
-        os.close(dir_fd)
-
-def release_idle_binding(payload):
-    task_id = payload.get("task_id")
-    if task_id:
-        subprocess.run(
-            [tasklight_bin, "clear", "--task-id", str(task_id)],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    now = now_string()
-    payload["status"] = "released"
-    payload["released_at"] = now
-    payload["updated_at"] = now
-    payload["watch_pid"] = None
-    write_payload(payload)
-
-while True:
-    time.sleep(interval)
-    if not path.exists():
-        raise SystemExit(0)
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("status") != "active":
-        raise SystemExit(0)
-    updated_at = parse_ts(payload.get("updated_at"))
-    if updated_at is None:
-        release_idle_binding(payload)
-        raise SystemExit(0)
-    idle_seconds = datetime.now(timezone.utc).timestamp() - updated_at.timestamp()
-    if idle_seconds > active_lease_seconds:
-        release_idle_binding(payload)
-        raise SystemExit(0)
-    task_id = payload.get("task_id")
-    phase = payload.get("phase") or "codex_session"
-    progress = payload.get("progress")
-    if progress is None:
-        progress = 0.12
-    subprocess.run(
-        [tasklight_bin, "heartbeat", "--task-id", str(task_id), "--phase", str(phase), "--progress", str(progress)],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+watcher_script, watch_path, tasklight_bin, interval, active_lease_seconds = sys.argv[1:6]
+devnull = open(os.devnull, "wb")
+process = subprocess.Popen(
+    [
+        "python3",
+        watcher_script,
+        watch_path,
+        tasklight_bin,
+        interval,
+        active_lease_seconds,
+        os.environ.get("CODEX_THREAD_ID", ""),
+        os.environ.get("TASKLIGHT_PRIVATE_PROBE_SCRIPT", ""),
+        os.environ.get("TASKLIGHT_FUSION_SCRIPT", ""),
+    ],
+    stdin=subprocess.DEVNULL,
+    stdout=devnull,
+    stderr=devnull,
+    close_fds=True,
+    start_new_session=True,
+)
+print(process.pid)
 PY
-  printf '%s\n' "$!"
+)"
+}
+
+detect_turn_id() {
+  python3 "$PRIVATE_PROBE_SCRIPT" --thread-id "$THREAD_ID" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("turn_id") or "")' 2>/dev/null || true
+}
+
+prepare_binding_identity() {
+  local new_turn_id existing_epoch next_epoch
+  new_turn_id="$(detect_turn_id)"
+  existing_epoch="$(binding_field binding_epoch 2>/dev/null || printf '%s\n' "0")"
+  next_epoch="$((existing_epoch + 1))"
+  BINDING_TURN_ID="$new_turn_id"
+  if [[ -n "$new_turn_id" ]]; then
+    BINDING_EPOCH="${existing_epoch:-1}"
+    if [[ "$BINDING_EPOCH" == "0" ]]; then
+      BINDING_EPOCH="1"
+    fi
+    BINDING_TASK_IDENTITY="$THREAD_ID:$new_turn_id"
+  else
+    BINDING_EPOCH="$next_epoch"
+    BINDING_TASK_IDENTITY="$THREAD_ID:epoch-$BINDING_EPOCH"
+  fi
+  export TASKLIGHT_BINDING_TURN_ID="$BINDING_TURN_ID"
+  export TASKLIGHT_BINDING_EPOCH="$BINDING_EPOCH"
+  export TASKLIGHT_BINDING_TASK_IDENTITY="$BINDING_TASK_IDENTITY"
+  export TASKLIGHT_BINDING_QUIET_COUNT="0"
 }
 
 resolve_binding_task() {
@@ -281,6 +270,8 @@ PY
 
 require_thread_id
 ensure_layout
+export TASKLIGHT_PRIVATE_PROBE_SCRIPT="$PRIVATE_PROBE_SCRIPT"
+export TASKLIGHT_FUSION_SCRIPT="$FUSION_SCRIPT"
 
 command="${1:-}"
 if [[ -z "$command" ]]; then
@@ -320,10 +311,22 @@ case "$command" in
     fi
 
     task_id=""
+    prepare_binding_identity
     if existing_task_id="$(resolve_binding_task 2>/dev/null)"; then
       existing_status="$(current_task_status "$existing_task_id" || printf '%s\n' "missing")"
-      if is_nonterminal_status "$existing_status"; then
+      existing_identity="$(binding_field task_identity 2>/dev/null || true)"
+      if [[ -z "$BINDING_TURN_ID" && -n "$existing_identity" ]] && is_nonterminal_status "$existing_status"; then
+        BINDING_EPOCH="$(binding_field binding_epoch 2>/dev/null || printf '%s\n' "$BINDING_EPOCH")"
+        BINDING_TASK_IDENTITY="$existing_identity"
+        export TASKLIGHT_BINDING_EPOCH="$BINDING_EPOCH"
+        export TASKLIGHT_BINDING_TASK_IDENTITY="$BINDING_TASK_IDENTITY"
+      fi
+      if is_nonterminal_status "$existing_status" && [[ "$existing_identity" == "$BINDING_TASK_IDENTITY" ]]; then
         task_id="$existing_task_id"
+      elif is_nonterminal_status "$existing_status"; then
+        "$TASKLIGHT_BIN" release --task-id "$existing_task_id" >/dev/null 2>&1 || true
+      elif [[ "$existing_status" == "stale" ]]; then
+        "$TASKLIGHT_BIN" release --task-id "$existing_task_id" >/dev/null 2>&1 || true
       fi
       if existing_watch_pid="$(binding_field watch_pid 2>/dev/null || true)"; then
         stop_watch_pid "$existing_watch_pid"
@@ -336,7 +339,8 @@ case "$command" in
     fi
 
     "$TASKLIGHT_BIN" heartbeat --task-id "$task_id" --phase "$phase" --progress "$progress" >/dev/null
-    watch_pid="$(start_watcher)"
+    start_watcher
+    watch_pid="$STARTED_WATCH_PID"
     write_binding "$task_id" "$title" "$phase" "$progress" "active" "$watch_pid"
     show_binding
     ;;
@@ -365,8 +369,13 @@ case "$command" in
     fi
     task_id="$(resolve_binding_task)"
     title="$(resolve_binding_title 2>/dev/null || printf '%s\n' "$task_id")"
+    export TASKLIGHT_BINDING_QUIET_COUNT="0"
     "$TASKLIGHT_BIN" heartbeat --task-id "$task_id" --phase "$phase" --progress "$progress" >/dev/null
     watch_pid="$(binding_field watch_pid 2>/dev/null || true)"
+    if ! watch_pid_is_alive "$watch_pid"; then
+      start_watcher
+      watch_pid="$STARTED_WATCH_PID"
+    fi
     write_binding "$task_id" "$title" "$phase" "$progress" "active" "$watch_pid"
     show_binding
     ;;

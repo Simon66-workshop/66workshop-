@@ -13,6 +13,8 @@ Canonical files live under `~/.66tasklight/` by default:
 - `state.json`
 - `tasks/<task_id>.json`
 - `thread_bindings/<CODEX_THREAD_ID>.json`
+- `turn_bindings/<safe_source_key>.json`
+- `hook_bridge_offsets.json`
 - `observations/<observation_id>.json`
 - `observations_state.json`
 - `events.jsonl`
@@ -28,6 +30,12 @@ variables:
 - `TASKLIGHT_TASKS_DIR`
 - `TASKLIGHT_CURRENT_PATH`
 - `TASKLIGHT_THREAD_BINDINGS_DIR`
+- `TASKLIGHT_TURN_BINDINGS_DIR`
+- `TASKLIGHT_HOOK_BRIDGE_OFFSETS_PATH`
+- `TASKLIGHT_SIGNAL_SPOOL_DIR`
+- `TASKLIGHT_HOOK_TURN_LEASE_SECONDS`
+- `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`
+- `TASKLIGHT_HOOK_BRIDGE_POLL_SECONDS`
 - `TASKLIGHT_EVENTS_PATH`
 - `TASKLIGHT_PLAYED_EVENTS_PATH`
 - `TASKLIGHT_LOCK_PATH`
@@ -124,12 +132,98 @@ The sidecar is keyed by `CODEX_THREAD_ID` and carries binding metadata such as:
 - `released_at`
 - `status` (`active` or `released`)
 
+The lease watcher is implemented as
+`script/codex_current_task_watcher.py` and is started as a detached process. It
+does not depend on a transient shell stdin payload. It calls
+`script/codex_private_state_probe.py` when Codex local state is readable. The
+probe emits metadata only and does not print prompts, responses, auth data, or
+raw log bodies.
+
 The binding sidecar is not part of `state.json` aggregation. It exists only to let
 the current Codex session resolve the correct managed task id and keep a local
-heartbeat watcher alive. The watcher is bounded by
-`TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `180`). If the binding is
+lease watcher alive. The watcher is bounded by
+`TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `45`). If the binding is
 not updated within that lease, the watcher clears the managed task and marks the
 binding `released`, so an idle Codex session does not remain blue indefinitely.
+Private probe output is routed through signal fusion before any watcher action.
+Only a fusion decision of `refresh_managed_heartbeat` may refresh the managed
+heartbeat. Quiet decisions release the binding after repeated quiet samples, and
+unknown decisions use a short lease fallback.
+
+## Codex Signal Confidence
+
+M3.0 introduces local signal fusion. Signal records may include:
+
+- `source`
+- `event_type`
+- `thread_id`
+- `turn_id`
+- `item_id`
+- `event_time`
+- `confidence`
+- `thread_scoped`
+- `turn_scoped`
+- `source_quality`
+- `decision`
+- `evidence`
+- `conflicts`
+
+Fusion output includes `inferred_status`, `decision`, `confidence`,
+`authoritative`, `task_identity`, `signal_source`, `source_quality`,
+`evidence`, and `conflicts`.
+
+Private probe signals are fallback-only. A private signal may refresh managed
+heartbeat only when it is thread-scoped and has confidence of at least `0.70`.
+Global-only private metadata must not refresh managed heartbeat.
+
+## Hook Signal Bridge
+
+Trusted Codex hooks write local signal JSONL under `signals/*.jsonl`. The signal
+spool itself is input only. `script/hook_signal_bridge.py` is the writer that
+projects hook signals into managed tasklight tasks through the existing CLI.
+
+The bridge enforces:
+
+- `thread_id` is a conversation container, not a task,
+- `turn_id` is the task execution unit,
+- one `turn_id` maps to one tasklight `task_id`,
+- signals without `turn_id` do not create managed tasks,
+- `stop` maps only to `done_unverified`,
+- `done_verified` still requires explicit `verify`.
+
+Turn bindings live in `turn_bindings/<safe_source_key>.json`.
+
+Required binding fields include:
+
+- `schema_version`
+- `source_key`
+- `task_id`
+- `thread_id`
+- `turn_id`
+- `session_id`
+- `title`
+- `cwd`
+- `status` (`active` or `released`)
+- `created_at`
+- `updated_at`
+- `last_signal_at`
+- `last_signal_event`
+- `phase`
+- `signal_count`
+- `released_at`
+
+`hook_bridge_offsets.json` stores file offsets, processed signal ids, and the
+last processing timestamps so repeated bridge runs do not replay old events.
+
+`TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `60`. When an active turn binding
+has no fresh signal beyond the lease, the bridge silently releases active tasks
+with `sound_type=none`; it does not block, complete, or verify the task.
+
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`. If a hook turn's
+last signal is `item_completed` and no `stop` follows, the bridge uses this
+shorter window to release the active projection. When a newer hook turn is
+active, older hook-projected tasks that have already become `stale` can also be
+silently released so stale history does not mask the current running turn.
 
 ## Observation Layer
 

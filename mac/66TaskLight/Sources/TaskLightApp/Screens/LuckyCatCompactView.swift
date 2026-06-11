@@ -3,16 +3,12 @@ import SwiftUI
 struct LuckyCatCompactView: View {
     @ObservedObject var viewModel: TaskLightViewModel
 
-    private var lampStatus: String {
-        viewModel.statusLabel()
-    }
-
     private var status: LuckyCatVisualStatus {
-        LuckyCatStatusStyle.globalStatus(from: lampStatus)
+        viewModel.luckyCatPresentationStatus()
     }
 
     private var displayTitle: String {
-        LuckyCatStatusStyle.displayTitle(from: lampStatus)
+        viewModel.luckyCatPresentationTitle()
     }
 
     var body: some View {
@@ -26,34 +22,34 @@ struct LuckyCatCompactView: View {
             ZStack {
                 HStack(spacing: 10) {
                     CompactPhasePaw(
-                        letter: "P",
+                        label: "阻塞",
+                        status: .blocked,
                         count: viewModel.blockedDisplayCount(),
-                        tint: LuckyCatTokens.Palette.red,
-                        isActive: viewModel.compactActivePaw() == .problem
+                        isPrimary: viewModel.compactActivePaw() == .problem
                     )
                     CompactPhasePaw(
-                        letter: "E",
+                        label: "运行",
+                        status: .running,
                         count: viewModel.runningDisplayCount(),
-                        tint: LuckyCatTokens.Palette.blue,
-                        isActive: viewModel.compactActivePaw() == .executing
+                        isPrimary: viewModel.compactActivePaw() == .executing
                     )
                     CompactPhasePaw(
-                        letter: "C",
+                        label: "完成",
+                        status: .done,
                         count: viewModel.doneDisplayCount(),
-                        tint: LuckyCatTokens.Palette.green,
-                        isActive: viewModel.compactActivePaw() == .complete
+                        isPrimary: viewModel.compactActivePaw() == .complete
                     )
                     CompactPhasePaw(
-                        letter: "T",
+                        label: "待验",
+                        status: .pending,
                         count: viewModel.pendingDisplayCount(),
-                        tint: LuckyCatTokens.Palette.amber,
-                        isActive: viewModel.compactActivePaw() == .toVerify
+                        isPrimary: viewModel.compactActivePaw() == .toVerify
                     )
                     CompactPhasePaw(
-                        letter: "R",
+                        label: "观察",
+                        status: .observed,
                         count: viewModel.observedDisplayCount(),
-                        tint: LuckyCatTokens.Palette.cyan,
-                        isActive: viewModel.compactActivePaw() == .recon
+                        isPrimary: viewModel.compactActivePaw() == .recon
                     )
                 }
                 .frame(width: 296, height: 108)
@@ -283,33 +279,25 @@ private struct BeaconHousingShape: Shape {
 }
 
 private struct CompactPhasePaw: View {
-    let letter: String
+    let label: String
+    let status: LuckyCatVisualStatus
     let count: Int
-    let tint: Color
-    let isActive: Bool
+    let isPrimary: Bool
 
     var body: some View {
+        let hasCount = count > 0
         LuckyCatPawCounterChip(
-            status: pawStatus,
+            status: status,
             count: count,
-            label: letter
+            label: label,
+            isActive: isPrimary
         )
-        .scaleEffect(isActive ? 1.01 : 0.95)
-        .shadow(color: tint.opacity(isActive ? 0.26 : 0.08), radius: isActive ? 12 : 6, x: 0, y: 6)
-    }
-
-    private var pawStatus: LuckyCatVisualStatus {
-        switch letter {
-        case "P":
-            return .blocked
-        case "E":
-            return .running
-        case "C":
-            return .done
-        case "T":
-            return .pending
-        default:
-            return .observed
-        }
+        .scaleEffect(isPrimary ? 1.01 : (hasCount ? 0.98 : 0.94))
+        .shadow(
+            color: status.tint.opacity(isPrimary ? 0.26 : (hasCount ? 0.16 : 0.06)),
+            radius: isPrimary ? 12 : 6,
+            x: 0,
+            y: 6
+        )
     }
 }

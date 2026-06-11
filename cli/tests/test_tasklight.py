@@ -146,6 +146,7 @@ class TaskLightTests(unittest.TestCase):
         self.assertIsNotNone(parser.parse_args(["done", "--task-id", "20260609-000000-demo-abc12345", "--summary", "ok"]))
         self.assertIsNotNone(parser.parse_args(["verify", "--task-id", "20260609-000000-demo-abc12345"]))
         self.assertIsNotNone(parser.parse_args(["clear", "--task-id", "20260609-000000-demo-abc12345"]))
+        self.assertIsNotNone(parser.parse_args(["release", "--task-id", "20260609-000000-demo-abc12345"]))
         self.assertIsNotNone(parser.parse_args(["list"]))
         self.assertIsNotNone(parser.parse_args(["show", "20260609-000000-demo-abc12345"]))
         self.assertIsNotNone(parser.parse_args(["status"]))
@@ -168,6 +169,13 @@ class TaskLightTests(unittest.TestCase):
         self.assertEqual(statuses[0], "blocked")
         self.assertIn("done_verified", statuses)
         self.assertEqual(statuses[-1], "cancelled")
+
+    def test_release_marks_cancelled_without_sound(self) -> None:
+        record, _ = self.store.start_task("Release me")
+        released, _ = self.store.release_task(record.task_id)
+        self.assertEqual(released.status, "cancelled")
+        self.assertEqual(released.phase, "released")
+        self.assertIsNone(self.store.load_state().tasks[0].sound_type)
 
     def test_show_returns_full_record(self) -> None:
         record, _ = self.store.start_task("Show me")

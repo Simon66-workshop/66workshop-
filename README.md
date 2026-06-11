@@ -126,7 +126,7 @@ The default macOS skin is the LuckyCat 66VS dashboard:
   - left label shows the global status title such as `BLOCKED`
   - right label shows the compact `M...` time/count readout
   - status color glow must not bleed horizontally beyond the orb
-- five paw chips: `阻塞 / 运行 / 完成 / 待验 / 观察`
+- five paw chips are live state counters: `阻塞 = blocked + stale`, `运行 = running + queued`, `完成 = done_verified`, `待验 = pending_verify_count / done_unverified`, `观察 = visible observed_active threads`
 - left front paw must read as one continuous limb with the body shell, without visible seam breaks
 
 This skin is read-only. It does not change protocol semantics, CLI writes,
@@ -141,10 +141,12 @@ Status color mapping in the skin:
 - visible observed threads -> cyan/blue display-only
 - `idle` -> gray/gold
 
-Title mapping follows the existing aggregate lamp logic:
+Title mapping is presentation-only and avoids labeling pending verification as
+active execution:
 
 - if any blocked/stale state is active, title is `BLOCKED`
-- else if any running/queued/done_unverified/visible observed thread is active, title is `RUNNING`
+- else if any running/queued/visible observed thread is active, title is `RUNNING`
+- else if only `done_unverified` tasks are active, title is `PENDING`
 - else if the global state is `done_verified`, title is `DONE`
 - else title is `IDLE`
 
@@ -220,14 +222,124 @@ The helper below requires `CODEX_THREAD_ID` and writes a sidecar under
 Behavior:
 
 - `start` creates or reuses the current thread's managed task
-- the helper starts a lightweight background heartbeat watcher so long thinking
-  time does not falsely turn the task stale
-- the watcher is lease-based: if no explicit helper command updates the binding
-  within `TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `180`), it clears
+- the helper starts a lightweight background lease watcher so quiet sessions are
+  cleared instead of being kept alive as false running tasks
+- the watcher runs from `script/codex_current_task_watcher.py` as a detached
+  process, so it can outlive the short shell command that created the binding
+- the watcher is lease-based and does not send heartbeats: if no explicit helper
+  command updates the binding within `TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS`
+  (default `45`), it clears
   the managed task and releases the binding so the panel can return to idle
+- when readable Codex private local state is available, the watcher calls
+  `script/codex_private_state_probe.py`; only `active` probe results can refresh
+  the managed heartbeat, while `quiet` probe results release the binding
 - `done`, `verify`, `block`, and `clear` stop the watcher and mark the thread
   binding as released
 - `done` still only writes `done_unverified`; only `verify` can produce green
+
+Safe private-state probe:
+
+```bash
+./script/codex_private_state_probe.py --thread-id "$CODEX_THREAD_ID"
+```
+
+The probe reports metadata only: recent log age, process liveness, shell snapshot
+age, and `active` / `quiet` / `unknown`. It does not print prompts, responses, or
+auth data.
+
+### Status Signal Confidence
+
+M3.0 fuses multiple local signals instead of letting private metadata directly
+drive the desktop light:
+
+1. explicit tasklight helper / wrapper events
+2. Codex App Server JSON-RPC events
+3. Codex hooks events
+4. Codex cloud stub fixtures, never called by default
+5. private Codex local metadata probe
+6. process observer
+
+Only authoritative signals, or private signals with `thread_scoped=true` and
+`confidence>=0.70`, may refresh a managed heartbeat. Global-only private log
+activity is display-only fallback evidence and cannot keep the panel blue.
+
+Useful local checks:
+
+```bash
+./script/codex_appserver_bridge.py --probe
+./script/codex_appserver_bridge.py --listen --timeout 3 --thread-id "$CODEX_THREAD_ID"
+./script/codex_private_state_probe.py --thread-id "$CODEX_THREAD_ID"
+./script/codex_signal_fusion.py --input signals.json
+```
+
+The expanded LuckyCat dashboard shows a small signal diagnostic line from the
+current thread binding sidecar: signal source, source quality, confidence,
+inferred status, and fusion decision. This is read-only UI metadata and does not
+change task protocol semantics.
+
+To install project-local Codex hook signals:
+
+```bash
+./script/install_codex_hooks_status_bridge.sh
+```
+
+This writes `.codex/hooks.json` and enables `[features].codex_hooks = true` in
+the project `.codex/config.toml`. Restart or reload the Codex project thread for
+hooks to be picked up. Hook `Stop` maps to `done_unverified`; `verify` is still
+required for green.
+
+Check whether the project hook configuration is present and executable:
+
+```bash
+./script/check_codex_hooks_trust.sh
+./script/check_codex_hooks_trust.sh --json
+```
+
+The checker is read-only. It does not modify Codex trust, tasklight state, or
+the Codex UI. It can report whether local config is valid and whether Codex
+app-server currently lists the hooks as trusted or untrusted, but Codex project
+hooks still require a manual trust confirmation in the Codex UI.
+
+Detailed setup notes live in `docs/CODEX_HOOKS_SETUP.md`.
+
+Bridge trusted hook signals into managed task state:
+
+```bash
+python3 script/hook_signal_bridge.py --once
+python3 script/hook_signal_bridge.py --watch
+./script/check_hook_bridge.sh
+```
+
+Optional LaunchAgent mode keeps the bridge alive after terminal commands exit:
+
+```bash
+./script/install_hook_bridge_launch_agent.sh
+./script/check_hook_bridge_launch_agent.sh
+./script/uninstall_hook_bridge_launch_agent.sh
+```
+
+The bridge consumes `~/.66tasklight/signals/*.jsonl` and writes managed tasks via
+the normal `tasklight` CLI. It maps one Codex `turn_id` to one tasklight task.
+`Stop` becomes `done_unverified`; only `tasklight verify` can make the LuckyCat
+lamp green.
+
+Heartbeat noise is coalesced by default: repeated heartbeat-style hook signals
+for the same turn, phase, and progress write at most once per
+`TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS` window, default `2`. `blocked`,
+`done_unverified`, and explicit `verify` are never coalesced.
+
+If the last hook signal is `item_completed` and no `stop` arrives, the bridge
+silently releases the turn after `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`
+seconds, default `20`. This prevents a completed-but-missing-stop turn from
+holding LuckyCat in `RUNNING`.
+
+The bridge stores its local sidecars in:
+
+- `~/.66tasklight/turn_bindings/`
+- `~/.66tasklight/hook_bridge_offsets.json`
+
+Detailed bridge behavior lives in `docs/HOOK_SIGNAL_BRIDGE.md`. LaunchAgent
+operation details live in `docs/HOOK_BRIDGE_LAUNCH_AGENT.md`.
 
 ## Wrapper Integration
 
@@ -292,6 +404,8 @@ will use it:
 ./script/smoke_ttl.sh
 ./script/smoke_observations.sh
 ./script/smoke_current_thread_binding.sh
+./script/smoke_hooks_config.sh
+./script/smoke_hook_signal_bridge.sh
 ./script/check_all.sh
 ```
 
@@ -332,6 +446,9 @@ Tools install does not provide the XCTest / new Testing path used by the repo.
 - `mac/66TaskLight` SwiftPM app bundle
 - `script/build_and_run.sh` kill + build + run entrypoint
 - `script/check_all.sh` one-shot validation
+- `script/check_codex_hooks_trust.sh` read-only Codex hooks readiness check
+- `script/hook_signal_bridge.py` bridge from trusted hook signals to managed tasks
+- `script/check_hook_bridge.sh` hook bridge status check
 - `docs/SMOKE_TESTS.md` smoke test scenarios and expected matrix
 - `script/smoke_observations.sh` live observation regression
 - `docs/REAL_TRIAL.md` low-risk trial plan and what to log

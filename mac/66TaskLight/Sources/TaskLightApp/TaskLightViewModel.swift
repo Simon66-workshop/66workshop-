@@ -197,6 +197,59 @@ final class TaskLightViewModel: ObservableObject {
         "Global \(statusLabel()) · blocked \(blockedDisplayCount()) · running \(runningDisplayCount()) · done \(doneDisplayCount()) · pending \(pendingDisplayCount()) · observed \(observedDisplayCount())"
     }
 
+    func luckyCatPresentationTitle() -> String {
+        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
+            return "BLOCKED"
+        }
+        if blockedDisplayCount() > 0 || hasHighConfidenceObservedAttention() {
+            return "BLOCKED"
+        }
+        if runningDisplayCount() > 0 || observedDisplayCount() > 0 {
+            return "RUNNING"
+        }
+        if pendingDisplayCount() > 0 {
+            return "PENDING"
+        }
+        if dashboard.last_verified_at != nil {
+            return "DONE"
+        }
+        return "IDLE"
+    }
+
+    func luckyCatPresentationStatus() -> LuckyCatVisualStatus {
+        if dashboard.source_health == TaskLightSourceHealth.corrupt_state.rawValue {
+            return .blocked
+        }
+        if blockedDisplayCount() > 0 || hasHighConfidenceObservedAttention() {
+            return .blocked
+        }
+        if runningDisplayCount() > 0 {
+            return .running
+        }
+        if observedDisplayCount() > 0 {
+            return .observed
+        }
+        if pendingDisplayCount() > 0 {
+            return .pending
+        }
+        if dashboard.last_verified_at != nil {
+            return .done
+        }
+        return .idle
+    }
+
+    func signalDiagnosticLabel() -> String {
+        guard let binding = latestThreadBindingDiagnostic() else {
+            return "Signal: no current managed binding"
+        }
+        let source = binding.last_signal_source ?? "binding"
+        let quality = binding.last_source_quality ?? binding.last_fusion_decision ?? "unknown"
+        let confidence = binding.last_signal_confidence.map { String(format: "%.2f", $0) } ?? "--"
+        let state = binding.last_inferred_status ?? binding.private_status ?? binding.status ?? "unknown"
+        let decision = binding.last_fusion_decision ?? "none"
+        return "Signal \(source) · \(quality) · c\(confidence) · \(state) · \(decision)"
+    }
+
     func compactElapsedLabel() -> String {
         guard let task = compactReferenceTask() else {
             return "M0"
@@ -436,4 +489,45 @@ final class TaskLightViewModel: ObservableObject {
         }
         return CGFloat(min(1, max(0, progress)))
     }
+
+    private func latestThreadBindingDiagnostic() -> ThreadBindingDiagnostic? {
+        let directory = config.stateDirectory.appendingPathComponent("thread_bindings")
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        let bindings = urls
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> ThreadBindingDiagnostic? in
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? decoder.decode(ThreadBindingDiagnostic.self, from: data)
+            }
+        return bindings.sorted { lhs, rhs in
+            if (lhs.status == "active") != (rhs.status == "active") {
+                return lhs.status == "active"
+            }
+            let left = TaskLightTaskRecord.parseTimestamp(lhs.updated_at ?? lhs.created_at ?? "") ?? Date.distantPast
+            let right = TaskLightTaskRecord.parseTimestamp(rhs.updated_at ?? rhs.created_at ?? "") ?? Date.distantPast
+            return left > right
+        }.first
+    }
+}
+
+private struct ThreadBindingDiagnostic: Decodable {
+    var thread_id: String?
+    var task_id: String?
+    var status: String?
+    var created_at: String?
+    var updated_at: String?
+    var private_status: String?
+    var last_fusion_decision: String?
+    var last_signal_confidence: Double?
+    var last_signal_source: String?
+    var last_source_quality: String?
+    var last_inferred_status: String?
+    var task_identity: String?
 }

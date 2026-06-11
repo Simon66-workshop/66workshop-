@@ -4,16 +4,12 @@ import TaskLightCore
 struct LuckyCatExpandedDashboardView: View {
     @ObservedObject var viewModel: TaskLightViewModel
 
-    private var lampStatus: String {
-        viewModel.statusLabel()
-    }
-
     private var status: LuckyCatVisualStatus {
-        LuckyCatStatusStyle.globalStatus(from: lampStatus)
+        viewModel.luckyCatPresentationStatus()
     }
 
     private var displayTitle: String {
-        LuckyCatStatusStyle.displayTitle(from: lampStatus)
+        viewModel.luckyCatPresentationTitle()
     }
 
     var body: some View {
@@ -122,6 +118,10 @@ struct LuckyCatExpandedDashboardView: View {
                 Text(viewModel.luckyCatExpandedStatusText())
                     .font(LuckyCatTokens.Typography.taskMeta)
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    .lineLimit(3)
+                Text(viewModel.signalDiagnosticLabel())
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
                     .lineLimit(3)
             }
 

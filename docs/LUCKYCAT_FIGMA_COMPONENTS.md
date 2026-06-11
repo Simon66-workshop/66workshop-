@@ -39,6 +39,12 @@ Build Figma components first, then let Codex implement SwiftUI from fixed names,
 - Padding: `22`
 - Mascot: `118 × 150`
 - Five chips: `56 × 74`, gap `12`
+- Paw chip labels and counts:
+  - `阻塞`: `blocked + stale`
+  - `运行`: `running + queued`
+  - `完成`: `done_verified`
+  - `待验`: `pending_verify_count / done_unverified`
+  - `观察`: visible `observed_active` threads
 - Title: dynamic global display title
   - `IDLE`
   - `RUNNING`

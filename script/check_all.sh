@@ -13,5 +13,12 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_invalid_task_json.sh"
 "$ROOT_DIR/script/smoke_observations.sh"
 "$ROOT_DIR/script/smoke_current_thread_binding.sh"
+"$ROOT_DIR/script/smoke_appserver_bridge.sh"
+"$ROOT_DIR/script/smoke_hooks_config.sh"
+"$ROOT_DIR/script/smoke_hook_signal_bridge.sh"
+"$ROOT_DIR/script/smoke_hook_bridge_launch_agent.sh"
+"$ROOT_DIR/script/smoke_signal_fusion.sh"
+"$ROOT_DIR/script/smoke_private_probe_confidence.sh"
+"$ROOT_DIR/script/smoke_current_thread_turn_identity.sh"
 "$ROOT_DIR/script/smoke_observer_health.sh"
 "$ROOT_DIR/script/build_and_run.sh" --verify
