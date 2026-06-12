@@ -97,16 +97,20 @@ PY
 write_private_state "turn-2" 120
 sleep 4
 
-python3 - "$STATE_DIR/thread_bindings/$THREAD_ID.json" "$STATE_DIR/tasks/$second_task.json" <<'PY'
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+
+python3 - "$STATE_DIR/thread_bindings/$THREAD_ID.json" "$STATE_DIR/ui_state.json" "$second_task" <<'PY'
 import json
 import sys
 from pathlib import Path
 binding = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-task = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+ui_state = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+task_id = sys.argv[3]
 assert binding["status"] == "released", binding
 assert binding["quiet_count"] >= 3, binding
-assert task["status"] == "cancelled", task
-assert task["phase"] == "released", task
+task = next(item for item in ui_state["tasks"] if item["task_id"] == task_id)
+assert task["display_scope"] == "released", task
+assert ui_state["global_status"] != "running", ui_state
 PY
 
 echo "smoke_current_thread_turn_identity: ok"

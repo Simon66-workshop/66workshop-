@@ -1,0 +1,32 @@
+{
+  "version": "M3.3",
+  "base_confidence": {
+    "explicit_tasklight": 1.0,
+    "wrapper_managed_task": 0.98,
+    "codex_hook_turn": 0.95,
+    "codex_appserver_active": 0.95,
+    "private_probe_turn_scoped": 0.8,
+    "private_probe_thread_scoped": 0.7,
+    "private_probe_global_only": 0.3,
+    "process_observer": 0.35,
+    "current_thread_watcher": 0.7
+  },
+  "identity_score": {
+    "turn_id": 1.0,
+    "thread_id": 0.8,
+    "pid_cwd_only": 0.4,
+    "global_only": 0.2
+  },
+  "consistency_score": {
+    "hook_and_appserver_agree": 1.0,
+    "one_strong_source_fresh": 0.9,
+    "appserver_idle_hook_stale": 0.3,
+    "process_only_max": 0.6,
+    "private_global_only_max": 0.3
+  },
+  "scope_thresholds": {
+    "active_execution_min": 0.85,
+    "observed_active_high_confidence_min": 0.55,
+    "observed_only_min": 0.35
+  }
+}

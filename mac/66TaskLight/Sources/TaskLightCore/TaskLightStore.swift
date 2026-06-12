@@ -32,7 +32,7 @@ public final class TaskLightStore {
         config.tasksDirectoryURL.appendingPathComponent("\(taskID).json")
     }
 
-    public func loadDashboard() -> TaskLightAggregateState {
+    public func loadFallbackDashboard() -> TaskLightAggregateState {
         ensureLayout()
         let stateResult = readStateSnapshot()
         let scan = scanTaskFiles()
@@ -64,7 +64,11 @@ public final class TaskLightStore {
         return dashboard
     }
 
-    public func loadUIState() -> TaskLightUIState {
+    public func loadDashboard() -> TaskLightAggregateState {
+        loadFallbackDashboard()
+    }
+
+    public func loadProjectedUIState() -> TaskLightUIState {
         ensureLayout()
         if let projected: TaskLightUIState = try? readJSON(from: config.uiStateURL),
            isUIStateFresh(projected) {
@@ -81,7 +85,11 @@ public final class TaskLightStore {
                 fallbackReason = "projector_stale"
             }
         }
-        return fallbackUIState(from: loadDashboard(), reason: fallbackReason)
+        return fallbackUIState(from: loadFallbackDashboard(), reason: fallbackReason)
+    }
+
+    public func loadUIState() -> TaskLightUIState {
+        loadProjectedUIState()
     }
 
     public func saveUIClientRecord(
@@ -177,6 +185,16 @@ public final class TaskLightStore {
 
     private func isUIStateFresh(_ uiState: TaskLightUIState) -> Bool {
         let maxAge = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_MAX_AGE_SECONDS"].flatMap(Double.init) ?? 5
+        guard uiState.source == "state_projector" else {
+            return false
+        }
+        guard uiState.projector_version == "M3.3" else {
+            return false
+        }
+        if let writerStatus = uiState.diagnostics.writer_status,
+           ["old_writer", "multiple_writers", "stale", "error"].contains(writerStatus) {
+            return false
+        }
         guard let generatedAt = TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) else {
             return false
         }
@@ -195,14 +213,16 @@ public final class TaskLightStore {
             pending_verify_count: dashboard.counts.pending_verify_count,
             done_verified_visible: dashboard.counts.done_verified,
             observed_active: observedActive,
+            appserver_active: 0,
+            process_observed: observedActive,
             managed_active: dashboard.counts.blocked + dashboard.counts.stale + dashboard.counts.running + dashboard.counts.queued + dashboard.counts.done_unverified
         )
         let global: String
         let title: String
-        if counts.blocked + counts.stale > 0 {
+        if counts.blocked > 0 {
             global = TaskLightStatus.blocked.rawValue
             title = "BLOCKED"
-        } else if counts.running + counts.queued > 0 || counts.observed_active > 0 {
+        } else if counts.running + counts.queued > 0 {
             global = TaskLightStatus.running.rawValue
             title = "RUNNING"
         } else if counts.pending_verify_count > 0 {
@@ -245,7 +265,7 @@ public final class TaskLightStore {
                 title: record.title,
                 status: record.status,
                 confidence: record.confidence,
-                display_scope: record.isActive && record.confidence >= 0.70 ? "active_execution" : "history",
+                display_scope: record.isActive && record.confidence >= 0.70 ? "observed_only" : "history",
                 fresh: record.isActive,
                 pid: record.pid,
                 command_short: record.command_short,
@@ -263,10 +283,41 @@ public final class TaskLightStore {
             tasks: tasks,
             observations: observations,
             diagnostics: TaskLightUIDiagnostics(
+                writer_status: "fallback",
                 hook_bridge_status: "unknown",
+                signal_bus_status: "fallback",
+                signal_bus_record_count: nil,
+                signal_bus_source_counts: nil,
                 active_turn_bindings: nil,
+                latest_hook_signal_age_sec: nil,
+                latest_hook_bridge_signal_age_sec: nil,
+                latest_process_observer_signal_age_sec: nil,
+                latest_private_probe_signal_age_sec: nil,
+                latest_private_probe_status: nil,
+                latest_private_probe_quality: nil,
+                latest_private_probe_confidence: nil,
+                current_thread_binding_status: nil,
+                current_thread_binding_fresh: nil,
+                latest_current_thread_binding_age_sec: nil,
+                latest_current_thread_signal_age_sec: nil,
+                current_thread_task_identity: nil,
+                current_thread_signal_source: nil,
+                current_thread_signal_quality: nil,
+                current_thread_signal_confidence: nil,
+                current_thread_signal_status: nil,
+                current_thread_fusion_decision: nil,
+                latest_turn_binding_status: nil,
+                latest_turn_binding_age_sec: nil,
+                latest_turn_binding_turn_id: nil,
+                latest_turn_binding_task_id: nil,
+                latest_turn_signal_event: nil,
+                latest_bridge_decision: nil,
                 state_dir: config.stateDirectory.path,
                 projector_reason: ["fallback"],
+                runtime_candidate_count: 0,
+                top_runtime_candidates: [],
+                appserver_active_count: 0,
+                process_observed_count: observedActive,
                 fallback_reason: reason
             )
         )
@@ -274,8 +325,10 @@ public final class TaskLightStore {
 
     private func fallbackDisplayScope(for status: String) -> String {
         switch status {
-        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+        case TaskLightStatus.blocked.rawValue:
             return "open_blocker"
+        case TaskLightStatus.stale.rawValue:
+            return "stale_blocker"
         case TaskLightStatus.running.rawValue, TaskLightStatus.queued.rawValue:
             return "active_execution"
         case TaskLightStatus.done_unverified.rawValue:

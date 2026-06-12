@@ -1,0 +1,19 @@
+{
+  "version": "M3.3",
+  "ttl_seconds": {
+    "codex_hook_active": 12,
+    "codex_appserver_active": 10,
+    "private_probe_active": 6,
+    "process_observer": 5,
+    "current_thread_watcher": 8
+  },
+  "existing_env_compat": {
+    "TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS": 12,
+    "TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS": 6,
+    "TASKLIGHT_HOOK_TURN_LEASE_SECONDS": 60,
+    "TASKLIGHT_DONE_VISIBLE_HOURS": 24,
+    "TASKLIGHT_OBSERVED_ACTIVE_TTL_SECONDS": 5,
+    "TASKLIGHT_OBSERVED_MIN_CONFIRMATIONS": 2,
+    "TASKLIGHT_OBSERVED_MISSING_RELEASE_COUNT": 3
+  }
+}

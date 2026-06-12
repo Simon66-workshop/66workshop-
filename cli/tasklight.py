@@ -18,6 +18,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+SCRIPT_DIR = Path(__file__).resolve().parents[1] / "script"
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from tasklight_signal_bus import append_signal as append_normalized_signal
+
 
 APP_NAME = "66TaskLight"
 SCHEMA_VERSION = 3
@@ -1223,6 +1229,40 @@ class TaskLightStore:
         write_json_atomic(self.config.observations_state_path, state.to_dict())
         return state
 
+    def _append_normalized_signal(self, payload: dict[str, Any]) -> None:
+        try:
+            append_normalized_signal(payload, self.config.state_dir)
+        except Exception:
+            return
+
+    def _append_observation_signals(self, records: list[TaskLightObservationRecord]) -> None:
+        for record in records:
+            if record.managed_task_id is not None:
+                continue
+            self._append_normalized_signal(
+                {
+                    "source": "process_observer",
+                    "event_type": record.status,
+                    "observation_id": record.observation_id,
+                    "pid": record.pid,
+                    "occurred_at": record.last_seen_at or record.detected_at or iso_now(),
+                    "confidence": record.confidence,
+                    "thread_scoped": False,
+                    "turn_scoped": False,
+                    "source_quality": "observe_local_process_scan",
+                    "reason": None,
+                    "message": None,
+                    "evidence": [
+                        f"observation_id={record.observation_id}",
+                        f"status={record.status}",
+                        f"command={record.command_short}",
+                    ],
+                    "conflicts": [],
+                    "raw_event_ref": "observe-local",
+                    "status_hint": record.status,
+                }
+            )
+
     def rebuild_observations_state(self, *, scan_processes: bool = True) -> TaskLightObservationsState:
         with locked_state(self.config):
             existing_records = {record.observation_id: record for record in self._scan_observation_files()}
@@ -1286,6 +1326,7 @@ class TaskLightStore:
             active_records = [record for record in live_by_id.values() if record.is_active and record.managed_task_id is None]
             state = self._build_observations_state(list(live_by_id.values()), source_health=STATE_HEALTH_HEALTHY)
             self._persist_observations_state(state)
+            self._append_observation_signals(list(live_by_id.values()))
             return state
 
     def observe_local(self, watch: bool = False) -> TaskLightObservationsState:
@@ -1703,6 +1744,47 @@ class TaskLightStore:
         )
         state = self.rebuild_state(extra_invalid=extra_invalid)
         write_json_atomic(self.config.state_path, state.to_dict())
+        signal_map = {
+            "start": ("task_started", 0.98),
+            "heartbeat": ("heartbeat", 0.98),
+            "block": ("blocked", 1.0),
+            "done": ("turn_completed", 0.98),
+            "verify": ("verified", 1.0),
+            "clear": ("release", 0.98),
+            "release": ("release", 0.98),
+        }
+        mapped = signal_map.get(event_name)
+        if mapped:
+            event_type, confidence = mapped
+            evidence = [f"task_event={event_name}", f"previous_status={previous_status}"]
+            if details.get("phase") is not None:
+                evidence.append(f"phase={details['phase']}")
+            if details.get("progress") is not None:
+                evidence.append(f"progress={details['progress']}")
+            if details.get("result") is not None:
+                evidence.append(f"result={details['result']}")
+            if details.get("summary"):
+                evidence.append("summary_present=true")
+            if details.get("evidence"):
+                evidence.append(f"evidence={details['evidence']}")
+            self._append_normalized_signal(
+                {
+                    "source": "explicit",
+                    "event_type": event_type,
+                    "task_id": record.task_id,
+                    "occurred_at": record.updated_at or iso_now(),
+                    "confidence": confidence,
+                    "thread_scoped": False,
+                    "turn_scoped": False,
+                    "source_quality": "tasklight_cli",
+                    "reason": details.get("reason"),
+                    "message": details.get("message"),
+                    "evidence": evidence,
+                    "conflicts": [],
+                    "raw_event_ref": event_name,
+                    "status_hint": record.status,
+                }
+            )
         return record, state
 
     def rebuild_state(self, extra_invalid: Optional[TaskLightTaskSummary] = None) -> TaskLightAggregateState:

@@ -66,7 +66,12 @@ assert payload["status"] == "invalid_json", payload
 assert payload["invalid_json_error"], payload
 ' "$show_json"
 
-"$ROOT_DIR/script/build_and_run.sh" --verify >"$TMP_DIR/verify.out"
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+if ! "$ROOT_DIR/script/build_and_run.sh" --verify >"$TMP_DIR/verify.out" 2>"$TMP_DIR/verify.err"; then
+  cat "$TMP_DIR/verify.out"
+  cat "$TMP_DIR/verify.err" >&2
+  exit 1
+fi
 grep -q "bundle_path=" "$TMP_DIR/verify.out"
 grep -q "app_process_status=" "$TMP_DIR/verify.out"
 grep -q "state_dir=" "$TMP_DIR/verify.out"

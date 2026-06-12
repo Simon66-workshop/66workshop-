@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tasklight_signal_bus import append_signal
+
 
 DEFAULT_CODEX = "/Applications/Codex.app/Contents/Resources/codex"
 
@@ -86,26 +88,38 @@ def event_to_signal(event: dict[str, Any]) -> dict[str, Any]:
     confidence = 0.90
     reason = None
     message = None
+    status_hint = None
+    activity_evidence: list[str] = []
 
     if name in {"turn/started", "thread/started"}:
         event_type = "turn_started"
+        status_hint = "active"
+        activity_evidence = [f"codex_appserver:{name}"]
     elif name == "thread/status/changed":
         state = status_type(params.get("status") or thread.get("status"))
         if state == "active":
             event_type = "turn_started"
+            status_hint = "active"
+            activity_evidence = ["thread/status/changed:status=active"]
         elif state in {"systemError", "errored", "failed"}:
             event_type = "tool_failed"
             reason = "codex_exit_failed"
             message = "Codex app-server thread status changed to an error state"
+            status_hint = "failed"
         elif state in {"idle", "complete", "completed"}:
             event_type = "appserver_quiet"
             confidence = 0.65
+            status_hint = "idle" if state == "idle" else "completed"
         else:
             confidence = 0.0
+            status_hint = state or "unknown"
     elif name == "item/started":
         event_type = "item_started"
+        status_hint = "active"
+        activity_evidence = [f"codex_appserver:{name}"]
     elif name == "item/completed":
         event_type = "item_completed"
+        status_hint = "completed"
     elif name in {"item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval", "item/tool/requestUserInput"}:
         event_type = "approval_pending"
         reason = "needs_human_review"
@@ -128,9 +142,11 @@ def event_to_signal(event: dict[str, Any]) -> dict[str, Any]:
         "thread_scoped": bool(thread_id),
         "turn_scoped": bool(turn_id),
         "source_quality": "codex_appserver_jsonrpc_event" if event_type != "unknown" else "codex_appserver_unknown",
+        "status_hint": status_hint,
         "reason": reason,
         "message": message,
         "evidence": [f"codex_appserver:{name}"] if name else [],
+        "appserver_activity_evidence": activity_evidence,
         "conflicts": [] if event_type != "unknown" else ["unknown_appserver_event"],
         "raw_event_ref": name,
     }
@@ -224,13 +240,13 @@ def probe() -> dict[str, Any]:
 
 
 def write_signal(signal: dict[str, Any], spool_dir: str | None) -> None:
-    if not spool_dir:
-        return
-    target = Path(spool_dir).expanduser()
-    target.mkdir(parents=True, exist_ok=True)
-    path = target / "codex_appserver.jsonl"
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(signal, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+    if spool_dir:
+        target = Path(spool_dir).expanduser()
+        target.mkdir(parents=True, exist_ok=True)
+        path = target / "codex_appserver.jsonl"
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(signal, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n")
+    append_signal(signal)
 
 
 def thread_list_signals(response: dict[str, Any], requested_thread_id: str | None) -> list[dict[str, Any]]:
@@ -248,20 +264,35 @@ def thread_list_signals(response: dict[str, Any], requested_thread_id: str | Non
         confidence = 0.0
         reason = None
         message = None
+        state_label = state or "unknown"
+        source_quality = "codex_appserver_thread_list_ignored"
+        status_hint = "unknown"
+        activity_evidence: list[str] = []
+        conflicts: list[str] = []
         if state == "active":
             event_type = "turn_started"
             confidence = 0.82
+            source_quality = "codex_appserver_thread_list_active"
+            status_hint = "active"
+            activity_evidence = ["thread/list:status=active"]
         elif state in {"idle", "completed", "complete"}:
             event_type = "appserver_quiet"
             confidence = 0.60
+            source_quality = "codex_appserver_thread_list_quiet"
+            status_hint = "idle" if state == "idle" else "completed"
+            conflicts = [f"thread_list_{state_label}"]
         elif state in {"systemError", "errored", "failed"}:
             event_type = "tool_failed"
             confidence = 0.80
             reason = "codex_exit_failed"
             message = "Codex app-server thread list reported an error state"
+            source_quality = "codex_appserver_thread_list_error"
+            status_hint = "failed"
         else:
             event_type = "unknown"
             confidence = 0.0
+            status_hint = state_label
+            conflicts = [f"thread_list_{state_label}"]
         signals.append(
             {
                 "source": "codex_appserver",
@@ -273,15 +304,73 @@ def thread_list_signals(response: dict[str, Any], requested_thread_id: str | Non
                 "confidence": confidence,
                 "thread_scoped": bool(thread_id),
                 "turn_scoped": False,
-                "source_quality": "codex_appserver_thread_list_status",
+                "source_quality": source_quality,
+                "status_hint": status_hint,
                 "reason": reason,
                 "message": message,
-                "evidence": [f"thread/list:status={state or 'unknown'}"],
-                "conflicts": [] if event_type != "unknown" else ["thread_list_not_loaded_or_unknown"],
+                "evidence": [f"thread/list:status={state_label}"],
+                "appserver_activity_evidence": activity_evidence,
+                "conflicts": conflicts,
                 "raw_event_ref": "thread/list",
             }
         )
     return signals
+
+
+def poll_thread_list(timeout: float, requested_thread_id: str | None = None, limit: int = 25) -> tuple[list[dict[str, Any]], list[str]]:
+    binary = codex_bin()
+    proc: subprocess.Popen[str] | None = None
+    signals: list[dict[str, Any]] = []
+    diagnostics: list[str] = []
+    try:
+        proc = subprocess.Popen(
+            [binary, "app-server", "--listen", "stdio://"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        send_jsonrpc(
+            proc,
+            1,
+            "initialize",
+            {
+                "clientInfo": {"name": "66tasklight-appserver-thread-watcher", "version": "0.1"},
+                "capabilities": {"experimentalApi": True},
+            },
+        )
+        send_jsonrpc(proc, 2, "thread/list", {"limit": limit, "sortKey": "updated_at", "sortDirection": "desc"})
+
+        deadline = time.time() + max(0.5, timeout)
+        while time.time() < deadline:
+            if proc.stdout is None or proc.stderr is None:
+                break
+            ready, _, _ = select.select([proc.stdout, proc.stderr], [], [], min(0.25, max(0, deadline - time.time())))
+            for stream in ready:
+                line = stream.readline()
+                if not line:
+                    continue
+                if stream is proc.stderr:
+                    diagnostics.append("appserver_stderr")
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    diagnostics.append("appserver_non_json_line")
+                    continue
+                if not isinstance(message, dict):
+                    continue
+                if message.get("id") == 2:
+                    signals.extend(thread_list_signals(message, requested_thread_id))
+    finally:
+        if proc is not None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    return signals, diagnostics
 
 
 def send_jsonrpc(proc: subprocess.Popen[str], request_id: int, method: str, params: dict[str, Any]) -> None:

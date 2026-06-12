@@ -88,17 +88,23 @@ do {
     let second = first
     check(first.alert_fingerprint == second.alert_fingerprint, "blocked fingerprint stable")
 
-    let a = store.loadDashboard()
+    let a = store.loadFallbackDashboard()
     check(a.global_status == "idle", "empty dashboard idle")
 
     let uiNow = TaskLightTaskRecord.nowString()
-    let projectedUIState = TaskLightUIState(
-        global_status: "running",
-        lamp_status: "running",
+	    let projectedUIState = TaskLightUIState(
+	        projector_version: "M3.3",
+	        projector_pid: Int(ProcessInfo.processInfo.processIdentifier),
+	        projector_executable_path: "/tmp/state_projector.py",
+	        projector_code_hash: "sha256:checks",
+	        projector_launch_label: "com.66tasklight.state-projector",
+	        projector_instance_id: "checks",
+	        global_status: "running",
+	        lamp_status: "running",
         global_display_title: "RUNNING",
         state_confidence: 0.95,
-        counts: TaskLightUICounts(running: 1, managed_active: 1),
-        tasks: [
+	        counts: TaskLightUICounts(running: 1, appserver_active: 1, process_observed: 1, managed_active: 1),
+	        tasks: [
             TaskLightUITask(
                 task_id: "20260609-120000-ui-99999999",
                 short_task_id: "99999999",
@@ -115,29 +121,108 @@ do {
                 updated_at: uiNow,
                 confidence: 0.95
             )
-        ],
-        diagnostics: TaskLightUIDiagnostics(
-            hook_bridge_status: "ok",
+	        ],
+	        runtime_candidates: [
+	            TaskLightRuntimeCandidate(
+	                candidate_id: "turn:turn-1",
+	                kind: "codex_turn",
+	                task_id: "20260609-120000-ui-99999999",
+	                thread_id: "thread-1",
+	                turn_id: "turn-1",
+	                source_set: ["codex_hook", "codex_appserver"],
+	                last_signal_at: uiNow,
+	                last_event_type: "item_started",
+	                base_confidence: 0.95,
+	                freshness_score: 1,
+	                identity_score: 1,
+	                consistency_score: 1,
+	                runtime_score: 0.95,
+	                display_scope: "active_execution",
+	                state_cause: "codex_hook:item_started"
+	            )
+	        ],
+	        diagnostics: TaskLightUIDiagnostics(
+	            writer_status: "ok",
+	            hook_bridge_status: "ok",
+            signal_bus_status: "readable",
+            signal_bus_record_count: 7,
+            signal_bus_source_counts: ["codex_hook": 4, "current_thread_watcher": 2, "hook_bridge": 1],
             active_turn_bindings: 1,
-            state_dir: stateDirectory.path,
-            projector_reason: ["active_execution"]
-        )
-    )
+            latest_signal_age_sec: 1,
+            latest_hook_signal_age_sec: 0.7,
+            latest_hook_bridge_signal_age_sec: 0.9,
+            latest_process_observer_signal_age_sec: 2.4,
+            latest_private_probe_signal_age_sec: 1.6,
+            latest_private_probe_status: "active",
+            latest_private_probe_quality: "thread_private_metadata",
+            latest_private_probe_confidence: 0.78,
+            current_thread_binding_status: "active",
+            current_thread_binding_fresh: true,
+            latest_current_thread_binding_age_sec: 0.8,
+            latest_current_thread_signal_age_sec: 0.4,
+            current_thread_task_identity: "thread-1:turn-1",
+            current_thread_signal_source: "current_thread_watcher",
+            current_thread_signal_quality: "thread_private_metadata",
+            current_thread_signal_confidence: 0.78,
+            current_thread_signal_status: "running",
+            current_thread_fusion_decision: "refresh_managed_heartbeat",
+            latest_turn_binding_status: "active",
+            latest_turn_binding_age_sec: 0.6,
+            latest_turn_binding_turn_id: "turn-1",
+            latest_turn_binding_task_id: "20260609-120000-ui-99999999",
+            latest_turn_binding_canonical_identity: "turn:turn-1",
+            latest_turn_binding_aliases: ["hook:unknown:turn-1", "appserver:thread-1:turn-1"],
+            latest_turn_signal_event: "item_started",
+            latest_bridge_decision: "heartbeat",
+	            state_dir: stateDirectory.path,
+	            projector_reason: ["active_execution"],
+	            binding_identity_count: 3,
+	            runtime_candidate_count: 1,
+	            top_runtime_candidates: [
+	                TaskLightRuntimeCandidate(
+	                    candidate_id: "turn:turn-1",
+	                    source_set: ["codex_hook", "codex_appserver"],
+	                    runtime_score: 0.95,
+	                    display_scope: "active_execution"
+	                )
+	            ],
+	            appserver_active_count: 1,
+	            process_observed_count: 1
+	        )
+	    )
     try JSONEncoder().encode(projectedUIState).write(to: config.uiStateURL)
-    let loadedUIState = store.loadUIState()
-    check(loadedUIState.source == "state_projector", "ui_state preferred when fresh")
-    check(loadedUIState.global_display_title == "RUNNING", "ui_state title decodes")
-    check(loadedUIState.counts.running == 1, "ui_state counts decode")
+    let loadedUIState = store.loadProjectedUIState()
+	    check(loadedUIState.source == "state_projector", "ui_state preferred when fresh")
+	    check(loadedUIState.projector_version == "M3.3", "ui_state projector version decodes")
+	    check(loadedUIState.global_display_title == "RUNNING", "ui_state title decodes")
+	    check(loadedUIState.counts.running == 1, "ui_state counts decode")
+	    check(loadedUIState.counts.appserver_active == 1, "ui_state appserver count decodes")
+	    check(loadedUIState.counts.process_observed == 1, "ui_state process observed count decodes")
+	    check(loadedUIState.runtime_candidates?.first?.display_scope == "active_execution", "ui_state runtime candidates decode")
+	    check(loadedUIState.diagnostics.writer_status == "ok", "ui_state writer status decodes")
+	    check(loadedUIState.diagnostics.signal_bus_status == "readable", "ui_state diagnostics decode signal bus status")
+    check(loadedUIState.diagnostics.signal_bus_record_count == 7, "ui_state diagnostics decode signal bus record count")
+    check(loadedUIState.diagnostics.signal_bus_source_counts?["codex_hook"] == 4, "ui_state diagnostics decode signal bus source counts")
+    check(loadedUIState.diagnostics.latest_private_probe_status == "active", "ui_state diagnostics decode private probe status")
+    check(loadedUIState.diagnostics.latest_private_probe_quality == "thread_private_metadata", "ui_state diagnostics decode private probe quality")
+    check(loadedUIState.diagnostics.current_thread_binding_status == "active", "ui_state diagnostics decode current thread binding status")
+    check(loadedUIState.diagnostics.current_thread_binding_fresh == true, "ui_state diagnostics decode current thread freshness")
+    check(loadedUIState.diagnostics.current_thread_signal_source == "current_thread_watcher", "ui_state diagnostics decode current thread signal source")
+    check(loadedUIState.diagnostics.latest_bridge_decision == "heartbeat", "ui_state diagnostics decode latest bridge decision")
+    check(loadedUIState.diagnostics.latest_turn_binding_canonical_identity == "turn:turn-1", "ui_state diagnostics decode canonical turn identity")
+	    check(loadedUIState.diagnostics.latest_turn_binding_aliases?.contains("appserver:thread-1:turn-1") == true, "ui_state diagnostics decode binding aliases")
+	    check(loadedUIState.diagnostics.binding_identity_count == 3, "ui_state diagnostics decode binding identity count")
+	    check(loadedUIState.diagnostics.runtime_candidate_count == 1, "ui_state diagnostics decode runtime candidate count")
 
     try "{broken".data(using: .utf8)!.write(to: config.uiStateURL)
-    let fallbackUIState = store.loadUIState()
+    let fallbackUIState = store.loadProjectedUIState()
     check(fallbackUIState.source == "swift_fallback", "corrupt ui_state falls back")
     check(fallbackUIState.diagnostics.fallback_reason == "projector_unreadable", "fallback reason records unreadable projector")
 
     var staleProjectedUIState = projectedUIState
     staleProjectedUIState.projector_generated_at = "2020-01-01T00:00:00Z"
     try JSONEncoder().encode(staleProjectedUIState).write(to: config.uiStateURL)
-    let staleFallbackUIState = store.loadUIState()
+    let staleFallbackUIState = store.loadProjectedUIState()
     check(staleFallbackUIState.source == "swift_fallback", "stale ui_state falls back")
     check(staleFallbackUIState.diagnostics.fallback_reason == "projector_stale", "fallback reason records stale projector")
 
@@ -150,7 +235,7 @@ do {
     let uiClientURL = config.uiClientsDirectoryURL.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
     check(FileManager.default.fileExists(atPath: uiClientURL.path), "ui client diagnostic writes")
 
-    let taskOne = store.loadDashboard()
+    let taskOne = store.loadFallbackDashboard()
     check(taskOne.counts.gray >= 1, "gray count present for idle")
 
     let running = store.loadTask(taskID: "20260609-120000-alpha-1234abcd")
@@ -205,7 +290,7 @@ do {
     try JSONEncoder().encode(startB).write(to: store.taskURL(taskID: startB.task_id))
     try JSONEncoder().encode(third).write(to: store.taskURL(taskID: third.task_id))
 
-    let dashboard = store.loadDashboard()
+    let dashboard = store.loadFallbackDashboard()
     check(dashboard.tasks.count == 3, "three tasks loaded")
     check(dashboard.tasks.first?.status == "blocked", "blocked sorts first")
     check(dashboard.tasks.last?.status == "done_unverified", "done_unverified sorts after running/queued")
@@ -226,7 +311,7 @@ do {
         ttl_seconds: 1
     )
     try JSONEncoder().encode(staleTask).write(to: store.taskURL(taskID: staleTask.task_id))
-    let loaded = store.loadDashboard()
+    let loaded = store.loadFallbackDashboard()
     check(loaded.tasks.contains(where: { $0.task_id == staleTask.task_id && $0.status == "stale" }), "stale task detected")
 
     let pendingTask = TaskLightTaskRecord(
@@ -244,13 +329,13 @@ do {
         ttl_seconds: 300
     )
     try JSONEncoder().encode(pendingTask).write(to: store.taskURL(taskID: pendingTask.task_id))
-    let pendingLoaded = store.loadDashboard()
+    let pendingLoaded = store.loadFallbackDashboard()
     check(pendingLoaded.tasks.contains(where: { $0.task_id == pendingTask.task_id && $0.status == "stale" }), "verification timeout becomes stale")
     check(pendingLoaded.counts.pending_verify_count == 1, "expired pending verify no longer counts pending")
 
     let badURL = store.taskURL(taskID: "20260609-120004-bad-55555555")
     try "{\"broken\":".data(using: .utf8)!.write(to: badURL)
-    let corrupted = store.loadDashboard()
+    let corrupted = store.loadFallbackDashboard()
     check(corrupted.invalid_tasks.contains(where: { $0.task_id == "20260609-120004-bad-55555555" }), "invalid JSON isolated")
 
     let observation = TaskLightObservationRecord(
@@ -272,7 +357,7 @@ do {
         observations: [observation]
     )
     try JSONEncoder().encode(observationState).write(to: config.observationsStateURL)
-    let combined = store.loadDashboard()
+    let combined = store.loadFallbackDashboard()
     check(combined.observations_state?.counts.active == 1, "observations state merges into dashboard")
     check(combined.observations_state?.observations.first?.observation_id == observation.observation_id, "observation record decodes")
 

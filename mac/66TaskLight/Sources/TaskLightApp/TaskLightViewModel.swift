@@ -14,11 +14,9 @@ final class TaskLightViewModel: ObservableObject {
         case recon
     }
 
-    @Published var dashboard: TaskLightAggregateState
     @Published var uiState: TaskLightUIState
     @Published var expanded: Bool
     @Published var muted: Bool
-    @Published var hookBridgeHealth: HookBridgeHealthDiagnostic?
 
     let config: TaskLightConfig
     let store: TaskLightStore
@@ -33,9 +31,8 @@ final class TaskLightViewModel: ObservableObject {
         self.config = config
         self.store = store ?? TaskLightStore(config: config)
         self.store.ensureLayout()
-        self.dashboard = self.store.loadDashboard()
-        self.uiState = self.store.loadUIState()
-        self.hookBridgeHealth = Self.loadHookBridgeHealth(from: self.config.hookBridgeHealthURL)
+        let initialUIState = self.store.loadProjectedUIState()
+        self.uiState = initialUIState
         let defaults = UserDefaults.standard
         self.expanded = defaults.object(forKey: TaskLightLedgerKeys.expanded) as? Bool ?? false
         self.ledger = self.store.loadPlayedLedger()
@@ -56,9 +53,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func refresh() {
-        dashboard = store.loadDashboard()
-        uiState = store.loadUIState()
-        hookBridgeHealth = Self.loadHookBridgeHealth(from: config.hookBridgeHealthURL)
+        uiState = store.loadProjectedUIState()
         saveUIClientDiagnostic()
         handleAlertPlayback()
         persistUIState()
@@ -94,20 +89,22 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func copyBlocker() {
-        let target = dashboard.tasks.first(where: { $0.status == TaskLightStatus.blocked.rawValue || $0.status == TaskLightStatus.stale.rawValue }) ?? dashboard.invalid_tasks.first
+        let projectedBlocker = uiState.tasks.first {
+            $0.display_scope == "open_blocker" || $0.display_scope == "stale_blocker" || $0.display_scope == "invalid"
+        }
         let lines: [String]
-        if let target {
+        if let target = projectedBlocker {
             lines = [
                 "Task: \(target.task_id)",
-                "Status: \(target.status)",
-                "Reason: \(target.reason ?? target.last_error ?? target.invalid_json_error ?? "unknown")",
-                "Message: \(target.message ?? target.last_error ?? "unknown")",
-                "Evidence: \(target.evidence ?? "unknown")"
+                "Status: \(target.effective_status)",
+                "Reason: \(target.reason ?? target.state_cause ?? "unknown")",
+                "Message: \(target.message ?? target.summary ?? "unknown")",
+                "Evidence: \(target.state_cause ?? "unknown")"
             ]
         } else {
             lines = [
-                "Global status: \(dashboard.lamp_status)",
-                "State health: \(dashboard.source_health)"
+                "Global status: \(uiState.lamp_status)",
+                "Projector reason: \((uiState.diagnostics.projector_reason ?? ["none"]).joined(separator: ","))"
             ]
         }
         NSPasteboard.general.clearContents()
@@ -170,7 +167,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func managedCount() -> Int {
-        dashboard.counts.total
+        uiState.tasks.count
     }
 
     func sortedManagedTasks() -> [TaskLightTaskSummary] {
@@ -195,7 +192,7 @@ final class TaskLightViewModel: ObservableObject {
 
     func visibleObservedThreads() -> [TaskLightObservationRecord] {
         uiState.observations
-            .filter { $0.display_scope == "active_execution" }
+            .filter { ["active_execution", "observed_active_high_confidence", "observed_only"].contains($0.display_scope) }
             .map { $0.asObservationRecord() }
     }
 
@@ -236,33 +233,56 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func signalDiagnosticLabel() -> String {
-        guard let binding = latestThreadBindingDiagnostic() else {
-            return "Signal: no current managed binding"
-        }
-        let source = binding.last_signal_source ?? "binding"
-        let quality = binding.last_source_quality ?? binding.last_fusion_decision ?? "unknown"
-        let confidence = binding.last_signal_confidence.map { String(format: "%.2f", $0) } ?? "--"
-        let state = binding.last_inferred_status ?? binding.private_status ?? binding.status ?? "unknown"
-        let decision = binding.last_fusion_decision ?? "none"
+        let source = uiState.diagnostics.current_thread_signal_source ?? "none"
+        let quality = uiState.diagnostics.current_thread_signal_quality ?? "unknown"
+        let confidence = uiState.diagnostics.current_thread_signal_confidence.map { String(format: "%.2f", $0) } ?? "--"
+        let state = uiState.diagnostics.current_thread_signal_status ?? "unknown"
+        let decision = uiState.diagnostics.current_thread_fusion_decision ?? uiState.diagnostics.latest_bridge_decision ?? "none"
         return "Signal \(source) · \(quality) · c\(confidence) · \(state) · \(decision)"
     }
 
     func stateSourceDiagnosticLabel() -> String {
         let reason = uiState.diagnostics.projector_reason?.joined(separator: ",") ?? "none"
+        let signalBus = uiState.diagnostics.signal_bus_status ?? "unknown"
+        let signalCount = uiState.diagnostics.signal_bus_record_count ?? 0
+        let sourceCounts = (uiState.diagnostics.signal_bus_source_counts ?? [:])
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
+        let signalAge = secondsLabel(uiState.diagnostics.latest_signal_age_sec)
         let activeAge = secondsLabel(uiState.diagnostics.latest_active_turn_age_sec)
         let observedAge = secondsLabel(uiState.diagnostics.latest_observed_age_sec)
         let uiAge = secondsLabel(uiStateAgeSeconds())
         let fallback = uiState.diagnostics.fallback_reason ?? "none"
+        let writer = uiState.diagnostics.writer_status ?? "unknown"
+        let candidates = uiState.diagnostics.runtime_candidate_count ?? uiState.runtime_candidates?.count ?? 0
+        let appserver = uiState.diagnostics.appserver_active_count ?? uiState.counts.appserver_active
+        let process = uiState.diagnostics.process_observed_count ?? uiState.counts.process_observed
         let mismatch = (uiState.diagnostics.running_mismatch_warning ?? false) ? " mismatch" : ""
-        return "State Source · \(uiState.source) · \(uiState.global_status) · reason \(reason) · activeAge \(activeAge) · observedAge \(observedAge) · uiAge \(uiAge) · fallback \(fallback)\(mismatch)"
+        return "State Source · \(uiState.source) \(uiState.projector_version ?? "legacy") · writer \(writer) · \(uiState.global_status) · signalBus \(signalBus) · \(signalCount) rec · \(sourceCounts.isEmpty ? "none" : sourceCounts) · candidates \(candidates) · appserver \(appserver) · process \(process) · signalAge \(signalAge) · reason \(reason) · activeAge \(activeAge) · observedAge \(observedAge) · uiAge \(uiAge) · fallback \(fallback)\(mismatch)"
     }
 
     func bridgeHealthDiagnosticLabel() -> String {
-        let status = uiState.diagnostics.hook_bridge_status ?? hookBridgeHealth?.status ?? "unknown"
-        let active = uiState.diagnostics.active_turn_bindings ?? hookBridgeHealth?.active_turn_bindings ?? 0
+        let status = uiState.diagnostics.hook_bridge_status ?? "unknown"
+        let active = uiState.diagnostics.active_turn_bindings ?? 0
+        let latestEvent = uiState.diagnostics.latest_turn_signal_event ?? "none"
+        let latestDecision = uiState.diagnostics.latest_bridge_decision ?? "none"
+        let canonical = shortID(uiState.diagnostics.latest_turn_binding_canonical_identity ?? "none")
+        let aliasCount = uiState.diagnostics.latest_turn_binding_aliases?.count ?? 0
         let observedAge = secondsLabel(uiState.diagnostics.latest_observed_age_sec)
-        let bundle = uiState.diagnostics.app_bundle_path ?? "no-client"
-        return "Bridge Health · \(status) · active \(active) · obsAge \(observedAge) · \(bundle)"
+        let privateAge = secondsLabel(uiState.diagnostics.latest_private_probe_signal_age_sec)
+        let privateStatus = uiState.diagnostics.latest_private_probe_status ?? "none"
+        let privateQuality = uiState.diagnostics.latest_private_probe_quality ?? "none"
+        return "Bridge Health · \(status) · active \(active) · event \(latestEvent) · decision \(latestDecision) · id \(canonical) · aliases \(aliasCount) · private \(privateStatus) · \(privateQuality) · privateAge \(privateAge) · obsAge \(observedAge)"
+    }
+
+    func currentThreadDiagnosticLabel() -> String {
+        let bindingStatus = uiState.diagnostics.current_thread_binding_status ?? "none"
+        let bindingFresh = (uiState.diagnostics.current_thread_binding_fresh ?? false) ? "fresh" : "stale"
+        let bindingAge = secondsLabel(uiState.diagnostics.latest_current_thread_binding_age_sec)
+        let signalAge = secondsLabel(uiState.diagnostics.latest_current_thread_signal_age_sec)
+        let identity = shortID(uiState.diagnostics.current_thread_task_identity ?? "none")
+        return "Current Thread · \(bindingStatus) · \(bindingFresh) · bindAge \(bindingAge) · sigAge \(signalAge) · \(identity)"
     }
 
     func compactElapsedLabel() -> String {
@@ -370,21 +390,14 @@ final class TaskLightViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
     }
 
-    private static func loadHookBridgeHealth(from url: URL) -> HookBridgeHealthDiagnostic? {
-        guard let data = try? Data(contentsOf: url) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(HookBridgeHealthDiagnostic.self, from: data)
-    }
-
     func primaryClearTaskID() -> String? {
-        if let current = dashboard.current_task_id {
-            return current
+        let priorityScopes = ["open_blocker", "active_execution", "pending_verify", "recent_done", "stale_blocker", "resolved_blocker", "history", "released", "invalid"]
+        for scope in priorityScopes {
+            if let task = uiState.tasks.first(where: { $0.display_scope == scope }) {
+                return task.task_id
+            }
         }
-        if let active = dashboard.tasks.first(where: { $0.status == TaskLightStatus.blocked.rawValue || $0.status == TaskLightStatus.stale.rawValue || $0.status == TaskLightStatus.running.rawValue || $0.status == TaskLightStatus.queued.rawValue || $0.status == TaskLightStatus.done_unverified.rawValue }) {
-            return active.task_id
-        }
-        return dashboard.tasks.first?.task_id ?? dashboard.invalid_tasks.first?.task_id
+        return nil
     }
 
     private func handleAlertPlayback() {
@@ -443,30 +456,34 @@ final class TaskLightViewModel: ObservableObject {
         case "open_blocker":
             return 0
         case "active_execution":
-            return 2
+            return 1
         case "pending_verify":
-            return 4
+            return 2
         case "recent_done":
+            return 3
+        case "stale_blocker":
+            return 4
+        case "resolved_blocker":
             return 5
-        case "invalid":
-            return 7
         case "history":
-            return 8
+            return 6
         case "released":
-            return 9
+            return 7
+        case "invalid":
+            return 8
         case TaskLightStatus.blocked.rawValue:
             return 0
-        case TaskLightStatus.stale.rawValue:
-            return 1
         case TaskLightStatus.running.rawValue:
-            return 2
-        case TaskLightStatus.queued.rawValue:
-            return 3
+            return 1
         case TaskLightStatus.done_unverified.rawValue:
-            return 4
+            return 2
         case TaskLightStatus.done_verified.rawValue:
-            return 5
+            return 3
+        case TaskLightStatus.stale.rawValue:
+            return 4
         case TaskLightStatus.cancelled.rawValue:
+            return 5
+        case TaskLightStatus.queued.rawValue:
             return 6
         case TaskLightStatus.invalid_json.rawValue:
             return 7
@@ -530,7 +547,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func compactReferenceTask() -> TaskLightTaskSummary? {
-        let priority = ["open_blocker", "active_execution", "pending_verify", "recent_done"]
+        let priority = ["open_blocker", "active_execution", "pending_verify", "recent_done", "stale_blocker", "resolved_blocker"]
         for scope in priority {
             if let task = uiState.tasks.first(where: { $0.display_scope == scope }) {
                 return task.asTaskSummary()
@@ -565,58 +582,6 @@ final class TaskLightViewModel: ObservableObject {
         return CGFloat(min(1, max(0, progress)))
     }
 
-    private func latestThreadBindingDiagnostic() -> ThreadBindingDiagnostic? {
-        let directory = config.stateDirectory.appendingPathComponent("thread_bindings")
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-        let decoder = JSONDecoder()
-        let bindings = urls
-            .filter { $0.pathExtension == "json" }
-            .compactMap { url -> ThreadBindingDiagnostic? in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return try? decoder.decode(ThreadBindingDiagnostic.self, from: data)
-            }
-        return bindings.sorted { lhs, rhs in
-            if (lhs.status == "active") != (rhs.status == "active") {
-                return lhs.status == "active"
-            }
-            let left = TaskLightTaskRecord.parseTimestamp(lhs.updated_at ?? lhs.created_at ?? "") ?? Date.distantPast
-            let right = TaskLightTaskRecord.parseTimestamp(rhs.updated_at ?? rhs.created_at ?? "") ?? Date.distantPast
-            return left > right
-        }.first
-    }
-
-    private func latestTurnBindingDiagnostic() -> TurnBindingDiagnostic? {
-        let directory = config.stateDirectory.appendingPathComponent("turn_bindings")
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-        let decoder = JSONDecoder()
-        let bindings = urls
-            .filter { $0.pathExtension == "json" }
-            .compactMap { url -> TurnBindingDiagnostic? in
-                guard let data = try? Data(contentsOf: url) else { return nil }
-                return try? decoder.decode(TurnBindingDiagnostic.self, from: data)
-            }
-        return bindings.sorted { lhs, rhs in
-            if (lhs.status == "active") != (rhs.status == "active") {
-                return lhs.status == "active"
-            }
-            let left = TaskLightTaskRecord.parseTimestamp(lhs.updated_at ?? lhs.created_at ?? "") ?? Date.distantPast
-            let right = TaskLightTaskRecord.parseTimestamp(rhs.updated_at ?? rhs.created_at ?? "") ?? Date.distantPast
-            return left > right
-        }.first
-    }
-
     private func shortID(_ value: String) -> String {
         if value == "none" || value == "unknown" {
             return value
@@ -634,44 +599,4 @@ final class TaskLightViewModel: ObservableObject {
         }
         return "\(seconds / 60)m"
     }
-}
-
-private struct ThreadBindingDiagnostic: Decodable {
-    var thread_id: String?
-    var task_id: String?
-    var status: String?
-    var created_at: String?
-    var updated_at: String?
-    var private_status: String?
-    var last_fusion_decision: String?
-    var last_signal_confidence: Double?
-    var last_signal_source: String?
-    var last_source_quality: String?
-    var last_inferred_status: String?
-    var task_identity: String?
-}
-
-private struct TurnBindingDiagnostic: Decodable {
-    var task_id: String?
-    var turn_id: String?
-    var status: String?
-    var created_at: String?
-    var updated_at: String?
-    var last_signal_at: String?
-    var last_signal_event: String?
-    var last_bridge_decision: String?
-    var phase: String?
-    var release_reason: String?
-}
-
-struct HookBridgeHealthDiagnostic: Decodable, Equatable {
-    var status: String?
-    var last_run_at: String?
-    var last_seen_at: String?
-    var processed_count: Int?
-    var expired_count: Int?
-    var superseded_count: Int?
-    var active_turn_bindings: Int?
-    var last_error: String?
-    var updated_at: String?
 }

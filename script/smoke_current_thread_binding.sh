@@ -130,16 +130,21 @@ PY
 
 sleep 4
 
-python3 - "$binding_path" "$STATE_DIR/tasks/$idle_task_id.json" <<'PY'
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+
+python3 - "$binding_path" "$STATE_DIR/ui_state.json" "$idle_task_id" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 binding = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-task = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+ui_state = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+task_id = sys.argv[3]
 assert binding["status"] == "released", binding
 assert binding["released_at"], binding
-assert task["status"] == "cancelled", task
+task = next(item for item in ui_state["tasks"] if item["task_id"] == task_id)
+assert task["display_scope"] == "released", task
+assert ui_state["global_status"] != "running", ui_state
 PY
 
 if env -u CODEX_THREAD_ID TASKLIGHT_STATE_DIR="$STATE_DIR" "$SCRIPT_PATH" show >/dev/null 2>&1; then

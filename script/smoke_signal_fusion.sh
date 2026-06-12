@@ -7,6 +7,10 @@ APPSERVER="$ROOT_DIR/script/codex_appserver_bridge.py"
 HOOK="$ROOT_DIR/script/codex_hook_event.py"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-fusion-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+export TASKLIGHT_STATE_DIR="$TMP_DIR/state"
+export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$TASKLIGHT_STATE_DIR/normalized_signals.jsonl"
+export TASKLIGHT_SIGNAL_SPOOL_DIR="$TASKLIGHT_STATE_DIR/signals"
+mkdir -p "$TASKLIGHT_STATE_DIR" "$TASKLIGHT_SIGNAL_SPOOL_DIR"
 
 assert_field() {
   local json="$1"

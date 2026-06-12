@@ -16,6 +16,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tasklight_signal_bus import append_signal
+
 
 def parse_ts(value: object) -> datetime | None:
     if not value:
@@ -47,14 +49,51 @@ def write_payload(path: Path, payload: dict[str, object]) -> None:
         os.close(dir_fd)
 
 
-def release_idle_binding(path: Path, tasklight_bin: str, payload: dict[str, object]) -> None:
+def emit_watcher_signal(
+    payload: dict[str, object],
+    *,
+    event_type: str,
+    status_hint: str,
+    decision: str,
+    confidence: float,
+    reason: str | None = None,
+    message: str | None = None,
+    evidence: list[str] | None = None,
+) -> None:
+    append_signal(
+        {
+            "source": "current_thread_watcher",
+            "event_type": event_type,
+            "task_id": payload.get("task_id"),
+            "thread_id": payload.get("thread_id"),
+            "turn_id": payload.get("turn_id"),
+            "occurred_at": now_string(),
+            "confidence": confidence,
+            "thread_scoped": bool(payload.get("thread_id")),
+            "turn_scoped": bool(payload.get("turn_id")),
+            "source_quality": str(payload.get("last_source_quality") or "signal_fusion"),
+            "status_hint": status_hint,
+            "reason": reason,
+            "message": message,
+            "evidence": (evidence or [])[:8],
+            "conflicts": [],
+            "raw_event_ref": decision,
+        }
+    )
+
+
+def release_idle_binding(path: Path, payload: dict[str, object], reason: str) -> None:
     task_id = payload.get("task_id")
     if task_id:
-        subprocess.run(
-            [tasklight_bin, "release", "--task-id", str(task_id)],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        emit_watcher_signal(
+            payload,
+            event_type="release",
+            status_hint="cancelled",
+            decision="release_binding",
+            confidence=float(payload.get("last_signal_confidence") or 0.0),
+            reason=reason,
+            message="current thread watcher released stale binding",
+            evidence=[f"release_reason={reason}"],
         )
     now = now_string()
     payload["status"] = "released"
@@ -195,7 +234,7 @@ def update_quiet_count(signals: list[dict[str, object]], previous: int) -> int:
     return previous
 
 
-def heartbeat_task(tasklight_bin: str, payload: dict[str, object], probe: dict[str, object]) -> None:
+def record_watcher_heartbeat(payload: dict[str, object], probe: dict[str, object]) -> None:
     task_id = payload.get("task_id")
     if not task_id:
         return
@@ -203,17 +242,20 @@ def heartbeat_task(tasklight_bin: str, payload: dict[str, object], probe: dict[s
     progress = payload.get("progress")
     if progress is None:
         progress = 0.12
-    subprocess.run(
-        [tasklight_bin, "heartbeat", "--task-id", str(task_id), "--phase", str(phase), "--progress", str(progress)],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
     now = now_string()
     payload["updated_at"] = now
     payload["private_status"] = probe.get("inferred_status")
     payload["private_checked_at"] = now
     payload["private_evidence"] = probe.get("evidence", [])[:6] if isinstance(probe.get("evidence"), list) else []
+    emit_watcher_signal(
+        payload,
+        event_type="heartbeat",
+        status_hint="running",
+        decision="refresh_managed_heartbeat",
+        confidence=float(probe.get("confidence") or payload.get("last_signal_confidence") or 0.75),
+        message=f"phase={phase} progress={progress}",
+        evidence=[f"phase={phase}", f"progress={progress}"] + payload["private_evidence"][:4],
+    )
 
 
 def fuse_signals(fusion_script: str, signals: list[dict[str, object]], quiet_count: int) -> dict[str, object]:
@@ -260,7 +302,7 @@ def main() -> int:
         if payload.get("status") != "active":
             return 0
         if not payload.get("task_id"):
-            release_idle_binding(path, tasklight_bin, payload)
+            release_idle_binding(path, payload, "missing_task_id")
             return 0
 
         probe = probe_private_state(probe_script, thread_id)
@@ -281,13 +323,13 @@ def main() -> int:
         payload["task_identity"] = decision.get("task_identity") or payload.get("task_identity")
 
         if decision.get("decision") == "refresh_managed_heartbeat":
-            heartbeat_task(tasklight_bin, payload, decision)
+            record_watcher_heartbeat(payload, decision)
             write_payload(path, payload)
             continue
         if decision.get("decision") == "release_binding":
             payload["private_status"] = probe.get("inferred_status")
             payload["private_evidence"] = decision.get("evidence", [])[:6] if isinstance(decision.get("evidence"), list) else []
-            release_idle_binding(path, tasklight_bin, payload)
+            release_idle_binding(path, payload, "quiet_release")
             return 0
         if decision.get("decision") in {"short_lease", "observed_only"}:
             payload["private_status"] = probe.get("inferred_status")
@@ -296,11 +338,11 @@ def main() -> int:
 
         updated_at = parse_ts(payload.get("updated_at"))
         if updated_at is None:
-            release_idle_binding(path, tasklight_bin, payload)
+            release_idle_binding(path, payload, "missing_updated_at")
             return 0
         idle_seconds = datetime.now(timezone.utc).timestamp() - updated_at.timestamp()
         if idle_seconds > active_lease_seconds:
-            release_idle_binding(path, tasklight_bin, payload)
+            release_idle_binding(path, payload, "active_lease_timeout")
             return 0
 
 

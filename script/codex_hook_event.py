@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tasklight_signal_bus import append_signal
+
 
 EVENT_NAME_KEYS = (
     "hook",
@@ -180,6 +182,7 @@ def main() -> int:
     if args.spool_dir:
         path = append_spool(Path(args.spool_dir).expanduser(), signal)
         signal["spool_path"] = str(path)
+    signal = append_signal(signal)
     print(json.dumps(signal, ensure_ascii=True, sort_keys=True, indent=2))
     return 0
 

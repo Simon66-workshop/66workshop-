@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LABEL="${TASKLIGHT_STATE_PROJECTOR_LABEL:-com.66tasklight.state-projector}"
-PLIST_DIR="${TASKLIGHT_STATE_PROJECTOR_PLIST_DIR:-$HOME/Library/LaunchAgents}"
+LABEL="${TASKLIGHT_APPSERVER_THREAD_WATCHER_LABEL:-com.66tasklight.appserver-thread-watch}"
+PLIST_DIR="${TASKLIGHT_APPSERVER_THREAD_WATCHER_PLIST_DIR:-$HOME/Library/LaunchAgents}"
 PLIST_PATH="$PLIST_DIR/$LABEL.plist"
 
 launchctl bootout "gui/$(id -u)" "$PLIST_PATH" >/dev/null 2>&1 || true

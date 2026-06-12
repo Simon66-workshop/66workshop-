@@ -1,0 +1,47 @@
+{
+  "version": "M3.3",
+  "rules": [
+    {
+      "scope": "active_execution",
+      "condition": "runtime_score >= 0.85",
+      "affects_global": true,
+      "global_status": "running"
+    },
+    {
+      "scope": "observed_active_high_confidence",
+      "condition": "0.55 <= runtime_score < 0.85",
+      "affects_global": "only if source includes codex_appserver",
+      "global_status": "running"
+    },
+    {
+      "scope": "observed_only",
+      "condition": "0.35 <= runtime_score < 0.55",
+      "affects_global": false,
+      "global_status": null
+    },
+    {
+      "scope": "ignored",
+      "condition": "runtime_score < 0.35",
+      "affects_global": false,
+      "global_status": null
+    },
+    {
+      "scope": "pending_verify",
+      "condition": "task status done_unverified",
+      "affects_global": true,
+      "global_status": "pending"
+    },
+    {
+      "scope": "recent_done",
+      "condition": "done_verified within TASKLIGHT_DONE_VISIBLE_HOURS",
+      "affects_global": true,
+      "global_status": "done_verified"
+    }
+  ],
+  "hard_guards": {
+    "process_observer_alone_global_running": false,
+    "private_probe_global_only_global_running": false,
+    "stop_direct_done_verified": false,
+    "verify_only_green": true
+  }
+}

@@ -18,6 +18,15 @@ The bridge maps one `turn_id` to one `task_id`.
 `thread_id` and `turn_id`, the bridge records an alias, but the turn binding
 remains keyed by `turn_id`.
 
+Each binding now keeps:
+
+- `canonical_identity = "turn:<turn_id>"` as the primary projector identity
+- `source_key = "hook:<session_id_or_unknown>:<turn_id>"` as the hook-side file key
+- `aliases[]` for stronger follow-up joins such as `appserver:<thread_id>:<turn_id>`
+
+This preserves one-turn-one-task semantics even when multiple turns share the
+same thread.
+
 ## Commands
 
 Consume once:
@@ -80,6 +89,10 @@ If `thread_id` exists, an alias may be recorded:
 ```text
 appserver:<thread_id>:<turn_id>
 ```
+
+The original hook signal that created the binding is also preserved as
+`origin_signal_id`, so duplicate/late signals can be audited without reusing
+thread-level identity.
 
 ## Event Mapping
 
@@ -184,7 +197,9 @@ M3.2a keeps the bridge as the managed task writer, but moves final LuckyCat
 display decisions into `script/state_projector.py`.
 
 The bridge still consumes hook signals and writes managed task state plus
-`turn_bindings`. The projector reads those task files and turn bindings to
+`turn_bindings`, and it also emits normalized bridge decision signals into the
+append-only signal bus. The projector reads `normalized_signals.jsonl` first,
+then uses task files and turn bindings as enrichment/compatibility input to
 produce `~/.66tasklight/ui_state.json`.
 
 This split matters because a backend task can remain `running` while the UI

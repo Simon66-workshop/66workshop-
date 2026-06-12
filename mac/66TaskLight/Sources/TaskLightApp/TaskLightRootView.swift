@@ -31,7 +31,7 @@ private struct LegacyTaskLightRootView: View {
     @ObservedObject var viewModel: TaskLightViewModel
 
     var body: some View {
-        let dashboard = viewModel.dashboard
+        let managedTasks = viewModel.sortedManagedTasks()
         VStack(alignment: .leading, spacing: 10) {
             Text("Legacy TaskLight")
                 .font(.headline)
@@ -39,7 +39,7 @@ private struct LegacyTaskLightRootView: View {
                 .font(.caption)
             Text(viewModel.compactCountsLabel())
                 .font(.caption2.monospacedDigit())
-            if let first = dashboard.tasks.first {
+            if let first = managedTasks.first {
                 Text(first.title)
                     .font(.caption)
             }

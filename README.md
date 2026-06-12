@@ -110,9 +110,63 @@ Check projector and app diagnostics:
 ```
 
 The projector is read-only with respect to task state. It writes only
-`ui_state.json`, `state_projector_health.json`, and bounded sanitized diagnostics
-in `normalized_signals.jsonl`. It does not read prompts, responses, auth files,
-or raw hook logs.
+`ui_state.json` and `state_projector_health.json`. The append-only signal bus
+in `normalized_signals.jsonl` is written by hook / observer / probe producers
+and then consumed by the projector as the single UI truth input. The projector
+does not read prompts, responses, auth files, or raw hook logs.
+
+Once the signal bus is readable and non-empty, orphan `tasks/*.json` and
+orphan `observations_state.json` records no longer drive the main lamp by
+themselves. They stay available as compatibility/history diagnostics, while
+fresh normalized signals remain the only source that can keep LuckyCat
+`RUNNING` or `BLOCKED`. If the signal bus is missing or empty, the projector
+still degrades back to those local files instead of dropping the UI to blank.
+Open blockers are projected separately from stale and resolved blockers:
+`open_blocker` is the only blocker scope that can force the global red lamp,
+while `stale_blocker` and `resolved_blocker` stay visible for diagnosis without
+holding the whole panel red forever.
+
+M3.3 adds a Turn Runtime Arbiter inside the projector. All possible runtime
+inputs become scored candidates before they can affect LuckyCat:
+
+```text
+runtime_score = base_confidence * freshness_score * identity_score * consistency_score
+```
+
+Only these candidates can drive the global blue lamp:
+
+- fresh managed hook/wrapper/appserver turn projected as `active_execution`
+- fresh appserver thread candidate projected as `observed_active_high_confidence`
+
+These remain diagnostic/observation-only and must not independently drive
+`RUNNING`:
+
+- `process_observer` only
+- global-only private probe metadata
+- standalone current-thread watcher evidence
+
+`ui_state.json` also carries writer identity metadata:
+`projector_version`, `projector_pid`, `projector_code_hash`,
+`projector_launch_label`, `projector_instance_id`, and
+`diagnostics.writer_status`. Use `./script/check_state_projector.sh` to detect
+old writers, stale output, or multiple projector processes.
+
+For live display, Swift now treats `ui_state.json` as the only status truth.
+It still keeps a degraded fallback path when the projector is missing or stale,
+but it no longer re-opens hook bridge or thread-binding sidecars just to decide
+the current lamp/title.
+That degraded path is still packaged as a full `TaskLightUIState(source=swift_fallback)`,
+so `TaskLightViewModel` keeps rendering from one read model instead of mixing
+`ui_state.json` with old dashboard objects.
+
+Signal bus retention is local and bounded:
+
+- `TASKLIGHT_SIGNAL_BUS_MAX_RECORDS`
+- `TASKLIGHT_SIGNAL_BUS_RETENTION_SECONDS`
+- `TASKLIGHT_SIGNAL_BUS_MAX_BYTES`
+
+When the bus file crosses the byte threshold, the writer compacts it under the
+same lock, keeping only recent valid signals.
 
 ## Observer
 
@@ -187,17 +241,22 @@ Status color mapping in the skin:
 - `running` / `queued` -> blue
 - `done_unverified` -> amber label and blue global lamp contribution
 - `done_verified` -> green
-- visible observed threads -> cyan/blue display-only
+- observed/process/appserver diagnostics -> cyan/blue display-only
 - `idle` -> gray/gold
 
 Title mapping is presentation-only and avoids labeling pending verification as
 active execution:
 
 - if any blocked/stale state is active, title is `BLOCKED`
-- else if any running/queued/visible observed thread is active, title is `RUNNING`
+- else if any running/queued managed task is active, title is `RUNNING`
+- else if a fresh high-confidence appserver runtime candidate is active, title is `RUNNING`
 - else if only `done_unverified` tasks are active, title is `PENDING`
 - else if the global state is `done_verified`, title is `DONE`
 - else title is `IDLE`
+
+Raw `process_observer` records and weak/global-only private probe observations
+can increase observation diagnostics or the cyan paw count, but they do not
+drive the main `RUNNING` title or blue lamp by themselves.
 
 ## Figma Backup
 
@@ -275,16 +334,32 @@ Behavior:
   cleared instead of being kept alive as false running tasks
 - the watcher runs from `script/codex_current_task_watcher.py` as a detached
   process, so it can outlive the short shell command that created the binding
-- the watcher is lease-based and does not send heartbeats: if no explicit helper
-  command updates the binding within `TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS`
-  (default `45`), it clears
-  the managed task and releases the binding so the panel can return to idle
+- the watcher is now signal-only: it appends fresh `heartbeat` / `release`
+  signals into `normalized_signals.jsonl` and updates `thread_bindings`, while
+  the State Projector decides whether LuckyCat should still show `RUNNING`
+- if no fresh current-thread signal survives
+  `TASKLIGHT_CURRENT_TASK_ACTIVE_LEASE_SECONDS` (default `45`), the watcher
+  marks the binding released so the projector can drop the task from active UI
+  scope without forcing a fake backend cancellation
 - when readable Codex private local state is available, the watcher calls
   `script/codex_private_state_probe.py`; only `active` probe results can refresh
-  the managed heartbeat, while `quiet` probe results release the binding
+  the current-thread active signal, while `quiet` probe results release the binding
 - `done`, `verify`, `block`, and `clear` stop the watcher and mark the thread
   binding as released
 - `done` still only writes `done_unverified`; only `verify` can produce green
+
+Expanded diagnostics now expose current-thread freshness directly from
+`ui_state.json`:
+
+- current-thread binding status
+- current-thread binding freshness
+- latest current-thread binding age
+- latest current-thread watcher signal age
+- signal bus record count and per-source counts
+- current-thread signal source / confidence / fusion decision
+- latest turn binding event and latest bridge decision
+- latest private-probe signal age / status / quality
+- latest observer signal age from the normalized signal bus
 
 Safe private-state probe:
 
@@ -369,6 +444,9 @@ Optional LaunchAgent mode keeps the bridge alive after terminal commands exit:
 
 The bridge consumes `~/.66tasklight/signals/*.jsonl` and writes managed tasks via
 the normal `tasklight` CLI. It maps one Codex `turn_id` to one tasklight task.
+Each turn binding keeps `canonical_identity=turn:<turn_id>` and can later add
+aliases such as `appserver:<thread_id>:<turn_id>` without changing the original
+task meaning.
 `Stop` becomes `done_unverified`; only `tasklight verify` can make the LuckyCat
 lamp green.
 

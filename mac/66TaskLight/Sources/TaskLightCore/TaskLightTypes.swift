@@ -725,6 +725,8 @@ public struct TaskLightUICounts: Codable, Equatable {
     public var pending_verify_count: Int
     public var done_verified_visible: Int
     public var observed_active: Int
+    public var appserver_active: Int
+    public var process_observed: Int
     public var managed_active: Int
 
     public init(
@@ -735,6 +737,8 @@ public struct TaskLightUICounts: Codable, Equatable {
         pending_verify_count: Int = 0,
         done_verified_visible: Int = 0,
         observed_active: Int = 0,
+        appserver_active: Int = 0,
+        process_observed: Int = 0,
         managed_active: Int = 0
     ) {
         self.blocked = blocked
@@ -744,7 +748,99 @@ public struct TaskLightUICounts: Codable, Equatable {
         self.pending_verify_count = pending_verify_count
         self.done_verified_visible = done_verified_visible
         self.observed_active = observed_active
+        self.appserver_active = appserver_active
+        self.process_observed = process_observed
         self.managed_active = managed_active
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case blocked
+        case stale
+        case running
+        case queued
+        case pending_verify_count
+        case done_verified_visible
+        case observed_active
+        case appserver_active
+        case process_observed
+        case managed_active
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.blocked = try container.decodeIfPresent(Int.self, forKey: .blocked) ?? 0
+        self.stale = try container.decodeIfPresent(Int.self, forKey: .stale) ?? 0
+        self.running = try container.decodeIfPresent(Int.self, forKey: .running) ?? 0
+        self.queued = try container.decodeIfPresent(Int.self, forKey: .queued) ?? 0
+        self.pending_verify_count = try container.decodeIfPresent(Int.self, forKey: .pending_verify_count) ?? 0
+        self.done_verified_visible = try container.decodeIfPresent(Int.self, forKey: .done_verified_visible) ?? 0
+        self.observed_active = try container.decodeIfPresent(Int.self, forKey: .observed_active) ?? 0
+        self.appserver_active = try container.decodeIfPresent(Int.self, forKey: .appserver_active) ?? 0
+        self.process_observed = try container.decodeIfPresent(Int.self, forKey: .process_observed) ?? 0
+        self.managed_active = try container.decodeIfPresent(Int.self, forKey: .managed_active) ?? 0
+    }
+}
+
+public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
+    public var candidate_id: String
+    public var kind: String?
+    public var task_id: String?
+    public var thread_id: String?
+    public var turn_id: String?
+    public var pid: Int?
+    public var source_set: [String]
+    public var last_signal_at: String?
+    public var last_event_type: String?
+    public var base_confidence: Double?
+    public var freshness_score: Double?
+    public var identity_score: Double?
+    public var consistency_score: Double?
+    public var runtime_score: Double?
+    public var display_scope: String
+    public var state_cause: String?
+    public var reason: String?
+    public var message: String?
+
+    public var id: String { candidate_id }
+
+    public init(
+        candidate_id: String,
+        kind: String? = nil,
+        task_id: String? = nil,
+        thread_id: String? = nil,
+        turn_id: String? = nil,
+        pid: Int? = nil,
+        source_set: [String] = [],
+        last_signal_at: String? = nil,
+        last_event_type: String? = nil,
+        base_confidence: Double? = nil,
+        freshness_score: Double? = nil,
+        identity_score: Double? = nil,
+        consistency_score: Double? = nil,
+        runtime_score: Double? = nil,
+        display_scope: String = "ignored",
+        state_cause: String? = nil,
+        reason: String? = nil,
+        message: String? = nil
+    ) {
+        self.candidate_id = candidate_id
+        self.kind = kind
+        self.task_id = task_id
+        self.thread_id = thread_id
+        self.turn_id = turn_id
+        self.pid = pid
+        self.source_set = source_set
+        self.last_signal_at = last_signal_at
+        self.last_event_type = last_event_type
+        self.base_confidence = base_confidence
+        self.freshness_score = freshness_score
+        self.identity_score = identity_score
+        self.consistency_score = consistency_score
+        self.runtime_score = runtime_score
+        self.display_scope = display_scope
+        self.state_cause = state_cause
+        self.reason = reason
+        self.message = message
     }
 }
 
@@ -753,6 +849,8 @@ public struct TaskLightUITask: Codable, Equatable, Identifiable {
     public var short_task_id: String?
     public var title: String
     public var turn_id: String?
+    public var canonical_identity: String?
+    public var binding_aliases: [String]?
     public var source: String?
     public var raw_status: String
     public var effective_status: String
@@ -779,6 +877,8 @@ public struct TaskLightUITask: Codable, Equatable, Identifiable {
         short_task_id: String? = nil,
         title: String,
         turn_id: String? = nil,
+        canonical_identity: String? = nil,
+        binding_aliases: [String]? = nil,
         source: String? = nil,
         raw_status: String = "idle",
         effective_status: String = "idle",
@@ -802,6 +902,8 @@ public struct TaskLightUITask: Codable, Equatable, Identifiable {
         self.short_task_id = short_task_id
         self.title = title
         self.turn_id = turn_id
+        self.canonical_identity = canonical_identity
+        self.binding_aliases = binding_aliases
         self.source = source
         self.raw_status = raw_status
         self.effective_status = effective_status
@@ -908,41 +1010,146 @@ public struct TaskLightUIObservation: Codable, Equatable, Identifiable {
 }
 
 public struct TaskLightUIDiagnostics: Codable, Equatable {
+    public var writer_status: String?
     public var hook_bridge_status: String?
+    public var signal_bus_status: String?
+    public var signal_bus_record_count: Int?
+    public var signal_bus_source_counts: [String: Int]?
     public var active_turn_bindings: Int?
+    public var latest_signal_age_sec: Double?
+    public var latest_hook_signal_age_sec: Double?
+    public var latest_hook_bridge_signal_age_sec: Double?
+    public var latest_process_observer_signal_age_sec: Double?
+    public var latest_private_probe_signal_age_sec: Double?
     public var latest_active_turn_age_sec: Double?
     public var latest_observed_age_sec: Double?
+    public var latest_private_probe_status: String?
+    public var latest_private_probe_quality: String?
+    public var latest_private_probe_confidence: Double?
+    public var current_thread_binding_status: String?
+    public var current_thread_binding_fresh: Bool?
+    public var latest_current_thread_binding_age_sec: Double?
+    public var latest_current_thread_signal_age_sec: Double?
+    public var current_thread_task_identity: String?
+    public var current_thread_signal_source: String?
+    public var current_thread_signal_quality: String?
+    public var current_thread_signal_confidence: Double?
+    public var current_thread_signal_status: String?
+    public var current_thread_fusion_decision: String?
+    public var latest_turn_binding_status: String?
+    public var latest_turn_binding_age_sec: Double?
+    public var latest_turn_binding_turn_id: String?
+    public var latest_turn_binding_task_id: String?
+    public var latest_turn_binding_canonical_identity: String?
+    public var latest_turn_binding_aliases: [String]?
+    public var latest_turn_signal_event: String?
+    public var latest_bridge_decision: String?
     public var running_mismatch_warning: Bool?
     public var state_dir: String?
     public var app_bundle_path: String?
     public var build_id: String?
     public var projector_reason: [String]?
     public var observed_false_positive_count: Int?
+    public var binding_identity_count: Int?
+    public var runtime_candidate_count: Int?
+    public var top_runtime_candidates: [TaskLightRuntimeCandidate]?
+    public var appserver_active_count: Int?
+    public var process_observed_count: Int?
     public var fallback_reason: String?
 
     public init(
+        writer_status: String? = nil,
         hook_bridge_status: String? = nil,
+        signal_bus_status: String? = nil,
+        signal_bus_record_count: Int? = nil,
+        signal_bus_source_counts: [String: Int]? = nil,
         active_turn_bindings: Int? = nil,
+        latest_signal_age_sec: Double? = nil,
+        latest_hook_signal_age_sec: Double? = nil,
+        latest_hook_bridge_signal_age_sec: Double? = nil,
+        latest_process_observer_signal_age_sec: Double? = nil,
+        latest_private_probe_signal_age_sec: Double? = nil,
         latest_active_turn_age_sec: Double? = nil,
         latest_observed_age_sec: Double? = nil,
+        latest_private_probe_status: String? = nil,
+        latest_private_probe_quality: String? = nil,
+        latest_private_probe_confidence: Double? = nil,
+        current_thread_binding_status: String? = nil,
+        current_thread_binding_fresh: Bool? = nil,
+        latest_current_thread_binding_age_sec: Double? = nil,
+        latest_current_thread_signal_age_sec: Double? = nil,
+        current_thread_task_identity: String? = nil,
+        current_thread_signal_source: String? = nil,
+        current_thread_signal_quality: String? = nil,
+        current_thread_signal_confidence: Double? = nil,
+        current_thread_signal_status: String? = nil,
+        current_thread_fusion_decision: String? = nil,
+        latest_turn_binding_status: String? = nil,
+        latest_turn_binding_age_sec: Double? = nil,
+        latest_turn_binding_turn_id: String? = nil,
+        latest_turn_binding_task_id: String? = nil,
+        latest_turn_binding_canonical_identity: String? = nil,
+        latest_turn_binding_aliases: [String]? = nil,
+        latest_turn_signal_event: String? = nil,
+        latest_bridge_decision: String? = nil,
         running_mismatch_warning: Bool? = nil,
         state_dir: String? = nil,
         app_bundle_path: String? = nil,
         build_id: String? = nil,
         projector_reason: [String]? = nil,
         observed_false_positive_count: Int? = nil,
+        binding_identity_count: Int? = nil,
+        runtime_candidate_count: Int? = nil,
+        top_runtime_candidates: [TaskLightRuntimeCandidate]? = nil,
+        appserver_active_count: Int? = nil,
+        process_observed_count: Int? = nil,
         fallback_reason: String? = nil
     ) {
+        self.writer_status = writer_status
         self.hook_bridge_status = hook_bridge_status
+        self.signal_bus_status = signal_bus_status
+        self.signal_bus_record_count = signal_bus_record_count
+        self.signal_bus_source_counts = signal_bus_source_counts
         self.active_turn_bindings = active_turn_bindings
+        self.latest_signal_age_sec = latest_signal_age_sec
+        self.latest_hook_signal_age_sec = latest_hook_signal_age_sec
+        self.latest_hook_bridge_signal_age_sec = latest_hook_bridge_signal_age_sec
+        self.latest_process_observer_signal_age_sec = latest_process_observer_signal_age_sec
+        self.latest_private_probe_signal_age_sec = latest_private_probe_signal_age_sec
         self.latest_active_turn_age_sec = latest_active_turn_age_sec
         self.latest_observed_age_sec = latest_observed_age_sec
+        self.latest_private_probe_status = latest_private_probe_status
+        self.latest_private_probe_quality = latest_private_probe_quality
+        self.latest_private_probe_confidence = latest_private_probe_confidence
+        self.current_thread_binding_status = current_thread_binding_status
+        self.current_thread_binding_fresh = current_thread_binding_fresh
+        self.latest_current_thread_binding_age_sec = latest_current_thread_binding_age_sec
+        self.latest_current_thread_signal_age_sec = latest_current_thread_signal_age_sec
+        self.current_thread_task_identity = current_thread_task_identity
+        self.current_thread_signal_source = current_thread_signal_source
+        self.current_thread_signal_quality = current_thread_signal_quality
+        self.current_thread_signal_confidence = current_thread_signal_confidence
+        self.current_thread_signal_status = current_thread_signal_status
+        self.current_thread_fusion_decision = current_thread_fusion_decision
+        self.latest_turn_binding_status = latest_turn_binding_status
+        self.latest_turn_binding_age_sec = latest_turn_binding_age_sec
+        self.latest_turn_binding_turn_id = latest_turn_binding_turn_id
+        self.latest_turn_binding_task_id = latest_turn_binding_task_id
+        self.latest_turn_binding_canonical_identity = latest_turn_binding_canonical_identity
+        self.latest_turn_binding_aliases = latest_turn_binding_aliases
+        self.latest_turn_signal_event = latest_turn_signal_event
+        self.latest_bridge_decision = latest_bridge_decision
         self.running_mismatch_warning = running_mismatch_warning
         self.state_dir = state_dir
         self.app_bundle_path = app_bundle_path
         self.build_id = build_id
         self.projector_reason = projector_reason
         self.observed_false_positive_count = observed_false_positive_count
+        self.binding_identity_count = binding_identity_count
+        self.runtime_candidate_count = runtime_candidate_count
+        self.top_runtime_candidates = top_runtime_candidates
+        self.appserver_active_count = appserver_active_count
+        self.process_observed_count = process_observed_count
         self.fallback_reason = fallback_reason
     }
 }
@@ -950,6 +1157,12 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
 public struct TaskLightUIState: Codable, Equatable {
     public var schema_version: String
     public var source: String
+    public var projector_version: String?
+    public var projector_pid: Int?
+    public var projector_executable_path: String?
+    public var projector_code_hash: String?
+    public var projector_launch_label: String?
+    public var projector_instance_id: String?
     public var projector_generated_at: String
     public var global_status: String
     public var lamp_status: String
@@ -958,11 +1171,18 @@ public struct TaskLightUIState: Codable, Equatable {
     public var counts: TaskLightUICounts
     public var tasks: [TaskLightUITask]
     public var observations: [TaskLightUIObservation]
+    public var runtime_candidates: [TaskLightRuntimeCandidate]?
     public var diagnostics: TaskLightUIDiagnostics
 
     public init(
         schema_version: String = "0.1",
         source: String = "state_projector",
+        projector_version: String? = nil,
+        projector_pid: Int? = nil,
+        projector_executable_path: String? = nil,
+        projector_code_hash: String? = nil,
+        projector_launch_label: String? = nil,
+        projector_instance_id: String? = nil,
         projector_generated_at: String = TaskLightTaskRecord.nowString(),
         global_status: String = "idle",
         lamp_status: String = "idle",
@@ -971,10 +1191,17 @@ public struct TaskLightUIState: Codable, Equatable {
         counts: TaskLightUICounts = TaskLightUICounts(),
         tasks: [TaskLightUITask] = [],
         observations: [TaskLightUIObservation] = [],
+        runtime_candidates: [TaskLightRuntimeCandidate]? = nil,
         diagnostics: TaskLightUIDiagnostics = TaskLightUIDiagnostics()
     ) {
         self.schema_version = schema_version
         self.source = source
+        self.projector_version = projector_version
+        self.projector_pid = projector_pid
+        self.projector_executable_path = projector_executable_path
+        self.projector_code_hash = projector_code_hash
+        self.projector_launch_label = projector_launch_label
+        self.projector_instance_id = projector_instance_id
         self.projector_generated_at = projector_generated_at
         self.global_status = global_status
         self.lamp_status = lamp_status
@@ -983,6 +1210,7 @@ public struct TaskLightUIState: Codable, Equatable {
         self.counts = counts
         self.tasks = tasks
         self.observations = observations
+        self.runtime_candidates = runtime_candidates
         self.diagnostics = diagnostics
     }
 }

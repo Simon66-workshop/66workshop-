@@ -6,6 +6,9 @@ PROBE="$ROOT_DIR/script/codex_private_state_probe.py"
 FUSION="$ROOT_DIR/script/codex_signal_fusion.py"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-private-probe-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+export TASKLIGHT_STATE_DIR="$TMP_DIR/state"
+export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$TASKLIGHT_STATE_DIR/normalized_signals.jsonl"
+mkdir -p "$TASKLIGHT_STATE_DIR"
 
 make_db() {
   local codex_home="$1"

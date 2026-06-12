@@ -114,6 +114,28 @@ raise SystemExit(1)
 PY
 }
 
+assert_binding_identity() {
+  local turn_id="$1"
+  local expected_alias="${2:-}"
+  python3 - "$TASKLIGHT_TURN_BINDINGS_DIR" "$turn_id" "$expected_alias" <<'PY'
+import json
+import sys
+from pathlib import Path
+base = Path(sys.argv[1])
+turn_id = sys.argv[2]
+expected_alias = sys.argv[3]
+for path in base.glob("*.json"):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("turn_id") == turn_id:
+        assert payload.get("canonical_identity") == f"turn:{turn_id}", payload
+        assert payload.get("origin_signal_id"), payload
+        if expected_alias:
+            assert expected_alias in payload.get("aliases", []), payload
+        raise SystemExit
+raise SystemExit(1)
+PY
+}
+
 append_signal "item_started" ""
 run_bridge
 [[ "$(count_value total)" == "0" ]]
@@ -153,6 +175,7 @@ run_bridge
 assert_health_ok
 task_a="$(task_for_turn turn-a)"
 [[ "$(task_status "$task_a")" == "running" ]]
+assert_binding_identity "turn-a"
 
 binding_count_before="$(find "$TASKLIGHT_TURN_BINDINGS_DIR" -type f -name '*.json' | wc -l | tr -d ' ')"
 run_bridge
@@ -183,9 +206,11 @@ run_bridge
 append_signal "turn_started" "turn-b" "thread-1"
 run_bridge
 task_b="$(task_for_turn turn-b)"
+assert_binding_identity "turn-b" "appserver:thread-1:turn-b"
 append_signal "turn_started" "turn-c" "thread-1"
 run_bridge
 task_c="$(task_for_turn turn-c)"
+assert_binding_identity "turn-c" "appserver:thread-1:turn-c"
 [[ "$task_b" != "$task_c" ]]
 [[ "$(task_status "$task_b")" == "running" ]]
 [[ "$(task_status "$task_c")" == "running" ]]

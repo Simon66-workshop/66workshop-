@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tasklight_signal_bus import append_signal
+
 
 def pid_alive(pid: object) -> bool:
     if not isinstance(pid, int) or pid <= 0:
@@ -254,6 +256,36 @@ def infer_status(
     return "unknown", 0.0, False, False, "unavailable", "unknown_short_lease", evidence, conflicts
 
 
+def payload_to_signal(payload: dict[str, Any]) -> dict[str, Any]:
+    inferred_status = str(payload.get("inferred_status") or "unknown")
+    if inferred_status in {"active", "running"}:
+        event_type = "private_active"
+    elif inferred_status == "observed_active":
+        event_type = "observed_active"
+    elif inferred_status == "quiet":
+        event_type = "private_quiet"
+    else:
+        event_type = "unknown"
+    return {
+        "source": "codex_private_probe",
+        "event_type": event_type,
+        "thread_id": payload.get("thread_id"),
+        "turn_id": payload.get("turn_id"),
+        "item_id": payload.get("item_id"),
+        "occurred_at": payload.get("checked_at"),
+        "confidence": payload.get("confidence", 0.0),
+        "thread_scoped": payload.get("thread_scoped"),
+        "turn_scoped": payload.get("turn_scoped"),
+        "source_quality": payload.get("source_quality"),
+        "reason": payload.get("reason"),
+        "message": None,
+        "evidence": payload.get("evidence") or [],
+        "conflicts": payload.get("conflicts") or [],
+        "raw_event_ref": "private_probe",
+        "status_hint": inferred_status,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read-only Codex local-state probe")
     parser.add_argument("--thread-id", default=os.environ.get("CODEX_THREAD_ID", ""))
@@ -320,6 +352,7 @@ def main() -> int:
             "shell_snapshots": snapshots,
         },
     }
+    append_signal(payload_to_signal(payload))
     print(json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2))
     return 0
 

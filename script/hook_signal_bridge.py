@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 from contextlib import contextmanager
 
+from tasklight_signal_bus import append_signal
+
 
 SCHEMA_VERSION = "0.1"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -237,11 +239,13 @@ def new_binding(signal: dict[str, Any], bindings_dir: Path) -> tuple[Path, dict[
     binding = {
         "schema_version": SCHEMA_VERSION,
         "source_key": source_key,
+        "canonical_identity": f"turn:{signal['turn_id']}",
         "aliases": aliases,
         "task_id": task_id,
         "thread_id": thread_id,
         "turn_id": signal.get("turn_id"),
         "session_id": signal_session_id(signal),
+        "origin_signal_id": signal.get("_bridge_signal_id"),
         "title": title,
         "cwd": str(PROJECT_ROOT),
         "status": "active",
@@ -319,6 +323,38 @@ def progress_for(event_type: str) -> float:
     if event_type == "item_completed":
         return 0.70
     return 0.20
+
+
+def emit_bridge_signal(
+    *,
+    binding: dict[str, Any],
+    event_type: str,
+    status_hint: str,
+    confidence: float,
+    reason: str | None = None,
+    message: str | None = None,
+    evidence: list[str] | None = None,
+) -> None:
+    append_signal(
+        {
+            "source": "hook_bridge",
+            "event_type": event_type,
+            "task_id": binding.get("task_id"),
+            "thread_id": binding.get("thread_id"),
+            "turn_id": binding.get("turn_id"),
+            "occurred_at": now_iso(),
+            "confidence": confidence,
+            "thread_scoped": bool(binding.get("thread_id")),
+            "turn_scoped": bool(binding.get("turn_id")),
+            "source_quality": "hook_bridge_decision",
+            "reason": reason,
+            "message": message,
+            "evidence": evidence or [f"bridge:{event_type}", f"task_id={binding.get('task_id')}"],
+            "conflicts": [],
+            "raw_event_ref": event_type,
+            "status_hint": status_hint,
+        }
+    )
 
 
 def coalesce_key(turn_id: str, phase: str) -> str:
@@ -540,6 +576,35 @@ def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, 
             binding["released_by"] = "stop"
             binding["allow_late_stop"] = False
     atomic_write_json(path, binding)
+    bridge_event_type = None
+    bridge_status = current_status or ""
+    bridge_reason = None
+    if decision in {"heartbeat", "heartbeat_coalesced", "reactivated_released_turn"}:
+        bridge_event_type = "bridge_running"
+        bridge_status = "running"
+    elif decision in {"blocked_needs_human_review", "blocked_codex_exit_failed"}:
+        bridge_event_type = "bridge_blocked"
+        bridge_status = "blocked"
+        bridge_reason = "needs_human_review" if decision == "blocked_needs_human_review" else "codex_exit_failed"
+    elif decision in {"stop_to_done_unverified", "stop_idempotent_done_unverified"}:
+        bridge_event_type = "bridge_done_unverified"
+        bridge_status = "done_unverified"
+    elif decision == "stop_ignored_already_verified":
+        bridge_event_type = "bridge_done_unverified"
+        bridge_status = "done_verified"
+    elif decision == "stop_after_blocked_diagnostic":
+        bridge_event_type = "bridge_stop_after_blocked"
+        bridge_status = "blocked"
+        bridge_reason = "stop_after_blocked"
+    if bridge_event_type:
+        emit_bridge_signal(
+            binding=binding,
+            event_type=bridge_event_type,
+            status_hint=bridge_status,
+            confidence=0.95,
+            reason=bridge_reason,
+            evidence=[f"bridge_decision={decision}", f"hook_event={event_type}"],
+        )
     return {"decision": decision, "task_id": task_id, "binding": str(path)}
 
 
@@ -663,6 +728,14 @@ def expire_bindings(bindings_dir: Path, lease_seconds: float, completed_idle_sec
         binding["updated_at"] = timestamp
         update_release_diagnostics(offsets, release_reason)
         atomic_write_json(path, binding)
+        emit_bridge_signal(
+            binding=binding,
+            event_type="bridge_soft_released",
+            status_hint="cancelled",
+            confidence=0.85,
+            reason=release_reason,
+            evidence=[f"release_reason={release_reason}", f"last_signal_event={binding.get('last_signal_event')}"],
+        )
     return expired
 
 
