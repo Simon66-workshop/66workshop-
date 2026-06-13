@@ -1,4 +1,7 @@
+import AppKit
+import QuartzCore
 import SwiftUI
+import TaskLightCore
 
 struct LuckyCatCompactShell<Content: View>: View {
     let status: LuckyCatVisualStatus
@@ -6,6 +9,7 @@ struct LuckyCatCompactShell<Content: View>: View {
     let highlightsBell: Bool
     let statusTitle: String
     let elapsedLabel: String
+    let onNoseTripleTap: (() -> Void)?
     let content: Content
 
     @State private var bellSwing = false
@@ -16,6 +20,7 @@ struct LuckyCatCompactShell<Content: View>: View {
         highlightsBell: Bool = false,
         statusTitle: String,
         elapsedLabel: String,
+        onNoseTripleTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.status = status
@@ -23,6 +28,7 @@ struct LuckyCatCompactShell<Content: View>: View {
         self.highlightsBell = highlightsBell
         self.statusTitle = statusTitle
         self.elapsedLabel = elapsedLabel
+        self.onNoseTripleTap = onNoseTripleTap
         self.content = content()
     }
 
@@ -45,8 +51,24 @@ struct LuckyCatCompactShell<Content: View>: View {
             .mask(panelMask)
 
             floatingSideBell
+            noseTripleTapTarget
         }
         .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
+    }
+
+    private var noseTripleTapTarget: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Color.clear)
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .frame(width: 54, height: 42)
+            .position(x: 183, y: 75)
+            .highPriorityGesture(
+                TapGesture(count: 3)
+                    .onEnded {
+                        onNoseTripleTap?()
+                    }
+            )
+            .accessibilityLabel("Run workspace coverage report")
     }
 
     private var panelBackdrop: some View {
@@ -669,80 +691,174 @@ struct LuckyCatCompactShell<Content: View>: View {
     private var floatingSideBell: some View {
         LuckyCatFloatingBellAssembly(
             status: status,
-            highlightsBell: highlightsBell,
-            bellSwing: bellSwing
+            highlightsBell: highlightsBell
         )
         .zIndex(100)
         .allowsHitTesting(false)
-        .onAppear {
-            bellSwing = true
-        }
     }
 }
 
 private struct LuckyCatFloatingBellAssembly: View {
     let status: LuckyCatVisualStatus
     let highlightsBell: Bool
-    let bellSwing: Bool
 
     var body: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(LuckyCatTokens.Palette.collarRed)
-                .frame(width: 8, height: 20)
-                .position(x: 328, y: 71)
+        LuckyCatFloatingBellLayerView(highlightsBell: highlightsBell)
+            .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
+    }
+}
 
-            ZStack {
-                Capsule(style: .continuous)
-                    .fill(LuckyCatTokens.Palette.collarRed)
-                    .frame(width: 7, height: 76)
-                    .position(x: 18, y: 38)
+private struct LuckyCatFloatingBellLayerView: NSViewRepresentable {
+    let highlightsBell: Bool
 
-                Circle()
-                    .stroke(LuckyCatTokens.Palette.goldDeep.opacity(0.92), lineWidth: 2.4)
-                    .frame(width: 12, height: 12)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.92))
-                            .frame(width: 8, height: 8)
-                    )
-                    .position(x: 18, y: 76)
-
-                bellBody
-                    .position(x: 18, y: 95)
-            }
-            .frame(width: 54, height: 122)
-            .rotationEffect(.degrees(bellSwing ? 5 : -5), anchor: .top)
-            .offset(x: bellSwing ? 1.5 : -1.5)
-            .animation(.easeInOut(duration: 1.35).repeatForever(autoreverses: true), value: bellSwing)
-            .position(x: 328, y: 84)
-        }
+    func makeNSView(context: Context) -> LuckyCatFloatingBellNSView {
+        let view = LuckyCatFloatingBellNSView()
+        view.update(highlightsBell: highlightsBell)
+        return view
     }
 
-    private var bellBody: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            LuckyCatTokens.Palette.gold.opacity(0.98),
-                            LuckyCatTokens.Palette.gold,
-                            LuckyCatTokens.Palette.goldDeep
-                        ],
-                        center: .topLeading,
-                        startRadius: 2,
-                        endRadius: 24
-                    )
-                )
-                .shadow(color: highlightsBell ? status.glow.opacity(0.22) : Color.clear, radius: 8, x: 0, y: 0)
-                .frame(width: 36, height: 36)
-                .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 1))
+    func updateNSView(_ nsView: LuckyCatFloatingBellNSView, context: Context) {
+        nsView.update(highlightsBell: highlightsBell)
+    }
+}
 
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(LuckyCatTokens.Palette.goldDeep.opacity(0.9))
-                .frame(width: 4, height: 10)
-                .offset(y: 4)
+private final class LuckyCatFloatingBellNSView: NSView {
+    private let staticLayer = CALayer()
+    private let swingLayer = CALayer()
+    private let ropeLayer = CAShapeLayer()
+    private let ringLayer = CAShapeLayer()
+    private let bellGradientLayer = CAGradientLayer()
+    private let bellGradientMaskLayer = CAShapeLayer()
+    private let bellShadeLayer = CAShapeLayer()
+    private let bellLayer = CAShapeLayer()
+    private let bellHighlightLayer = CAShapeLayer()
+    private let slotLayer = CAShapeLayer()
+    private var isConfigured = false
+
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer = CALayer()
+        layer?.masksToBounds = false
+        setupLayers()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layer = CALayer()
+        layer?.masksToBounds = false
+        setupLayers()
+    }
+
+    func update(highlightsBell: Bool) {
+        bellLayer.opacity = highlightsBell ? 1 : 0.96
+        ringLayer.opacity = highlightsBell ? 1 : 0.96
+        ensureSwingAnimation()
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.frame = bounds
+        layoutLayers()
+        ensureSwingAnimation()
+    }
+
+    private func setupLayers() {
+        guard !isConfigured else { return }
+        isConfigured = true
+        layer?.addSublayer(staticLayer)
+        layer?.addSublayer(swingLayer)
+        swingLayer.addSublayer(ropeLayer)
+        swingLayer.addSublayer(ringLayer)
+        swingLayer.addSublayer(bellGradientLayer)
+        swingLayer.addSublayer(bellShadeLayer)
+        swingLayer.addSublayer(bellLayer)
+        swingLayer.addSublayer(bellHighlightLayer)
+        swingLayer.addSublayer(slotLayer)
+        layer?.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        [staticLayer, swingLayer, ropeLayer, ringLayer, bellGradientLayer, bellGradientMaskLayer, bellShadeLayer, bellLayer, bellHighlightLayer, slotLayer].forEach {
+            $0.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            $0.allowsEdgeAntialiasing = true
         }
+        layoutLayers()
+    }
+
+    private func layoutLayers() {
+        staticLayer.frame = bounds
+        staticLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
+
+        let connector = CAShapeLayer()
+        connector.path = CGPath(roundedRect: CGRect(x: 324, y: 61, width: 8, height: 20), cornerWidth: 4, cornerHeight: 4, transform: nil)
+        connector.fillColor = NSColor(red: 0.91, green: 0.33, blue: 0.25, alpha: 1).cgColor
+        staticLayer.addSublayer(connector)
+
+        swingLayer.bounds = CGRect(x: 0, y: 0, width: 54, height: 122)
+        swingLayer.position = CGPoint(x: 328, y: 84)
+        swingLayer.anchorPoint = CGPoint(x: 0.5, y: 0)
+        swingLayer.masksToBounds = false
+
+        ropeLayer.path = CGPath(roundedRect: CGRect(x: 23.5, y: 0, width: 7, height: 76), cornerWidth: 3.5, cornerHeight: 3.5, transform: nil)
+        ropeLayer.fillColor = NSColor(red: 0.91, green: 0.33, blue: 0.25, alpha: 1).cgColor
+
+        let ringRect = CGRect(x: 21, y: 70, width: 12, height: 12)
+        ringLayer.path = CGPath(ellipseIn: ringRect, transform: nil)
+        ringLayer.fillColor = NSColor.white.withAlphaComponent(0.92).cgColor
+        ringLayer.strokeColor = NSColor(red: 0.66, green: 0.46, blue: 0.09, alpha: 0.92).cgColor
+        ringLayer.lineWidth = 2.4
+
+        let bellRect = CGRect(x: 9, y: 77, width: 36, height: 36)
+        bellGradientLayer.frame = bellRect
+        bellGradientLayer.startPoint = CGPoint(x: 0.18, y: 0.05)
+        bellGradientLayer.endPoint = CGPoint(x: 0.85, y: 1)
+        bellGradientLayer.colors = [
+            NSColor(red: 1.0, green: 0.93, blue: 0.56, alpha: 1).cgColor,
+            NSColor(red: 0.94, green: 0.72, blue: 0.24, alpha: 1).cgColor,
+            NSColor(red: 0.72, green: 0.48, blue: 0.12, alpha: 1).cgColor
+        ]
+        bellGradientLayer.locations = [0, 0.52, 1]
+        bellGradientMaskLayer.path = CGPath(ellipseIn: CGRect(x: 0, y: 0, width: 36, height: 36), transform: nil)
+        bellGradientLayer.mask = bellGradientMaskLayer
+
+        bellShadeLayer.path = CGPath(ellipseIn: CGRect(x: 13, y: 95, width: 28, height: 13), transform: nil)
+        bellShadeLayer.fillColor = NSColor(red: 0.52, green: 0.32, blue: 0.07, alpha: 0.18).cgColor
+
+        bellLayer.path = CGPath(ellipseIn: CGRect(x: 9, y: 77, width: 36, height: 36), transform: nil)
+        bellLayer.fillColor = NSColor.clear.cgColor
+        bellLayer.strokeColor = NSColor(red: 1, green: 0.9, blue: 0.5, alpha: 0.72).cgColor
+        bellLayer.lineWidth = 1.2
+        bellLayer.shadowOpacity = 0
+        bellLayer.shadowRadius = 0
+        bellLayer.shadowOffset = .zero
+
+        let highlightPath = CGMutablePath()
+        highlightPath.move(to: CGPoint(x: 18, y: 84))
+        highlightPath.addCurve(to: CGPoint(x: 34, y: 82), control1: CGPoint(x: 22, y: 80), control2: CGPoint(x: 29, y: 80))
+        bellHighlightLayer.path = highlightPath
+        bellHighlightLayer.fillColor = NSColor.clear.cgColor
+        bellHighlightLayer.strokeColor = NSColor.white.withAlphaComponent(0.42).cgColor
+        bellHighlightLayer.lineWidth = 2.4
+        bellHighlightLayer.lineCap = .round
+
+        slotLayer.path = CGPath(roundedRect: CGRect(x: 25, y: 95, width: 4, height: 10), cornerWidth: 2, cornerHeight: 2, transform: nil)
+        slotLayer.fillColor = NSColor(red: 0.66, green: 0.46, blue: 0.09, alpha: 0.9).cgColor
+    }
+
+    private func ensureSwingAnimation() {
+        guard swingLayer.animation(forKey: "luckycat.bell.swing") == nil else { return }
+        let animation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+        animation.values = [-0.085, 0.085, -0.085]
+        animation.keyTimes = [0, 0.5, 1]
+        animation.duration = TaskLightUIPerformanceBudget.compactBellSwingDurationSeconds
+        animation.timingFunctions = [
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeInEaseOut)
+        ]
+        animation.repeatCount = .infinity
+        animation.isRemovedOnCompletion = false
+        swingLayer.add(animation, forKey: "luckycat.bell.swing")
     }
 }
 

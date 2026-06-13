@@ -16,7 +16,10 @@ final class TaskLightViewModel: ObservableObject {
 
     @Published var uiState: TaskLightUIState
     @Published var expanded: Bool
+    @Published var contentExpanded: Bool
     @Published var muted: Bool
+    @Published var workspaceCoveragePresentation: TaskLightWorkspaceCoveragePresentation?
+    @Published private var recentEventSnapshot: [TaskLightEventRecord]
 
     let config: TaskLightConfig
     let store: TaskLightStore
@@ -26,6 +29,9 @@ final class TaskLightViewModel: ObservableObject {
     private var stateDirectoryFileDescriptor: CInt?
     private var stateDirectorySource: DispatchSourceFileSystemObject?
     private var pendingStateFileRefresh: DispatchWorkItem?
+    private var pendingWorkspaceCoverageRefreshes: [DispatchWorkItem] = []
+    private var pendingWorkspaceCoverageHide: DispatchWorkItem?
+    private var recentEventsModifiedAt: Date?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
@@ -34,9 +40,12 @@ final class TaskLightViewModel: ObservableObject {
         let initialUIState = self.store.loadProjectedUIState()
         self.uiState = initialUIState
         let defaults = UserDefaults.standard
-        self.expanded = defaults.object(forKey: TaskLightLedgerKeys.expanded) as? Bool ?? false
+        let restoredExpanded = defaults.object(forKey: TaskLightLedgerKeys.expanded) as? Bool ?? false
+        self.expanded = restoredExpanded
+        self.contentExpanded = restoredExpanded
         self.ledger = self.store.loadPlayedLedger()
         self.muted = self.ledger.muted
+        self.recentEventSnapshot = []
     }
 
     func start() {
@@ -54,6 +63,7 @@ final class TaskLightViewModel: ObservableObject {
 
     func refresh() {
         uiState = store.loadProjectedUIState()
+        refreshRecentEventsIfNeeded()
         saveUIClientDiagnostic()
         handleAlertPlayback()
         persistUIState()
@@ -62,12 +72,25 @@ final class TaskLightViewModel: ObservableObject {
     deinit {
         timer?.invalidate()
         pendingStateFileRefresh?.cancel()
+        pendingWorkspaceCoverageHide?.cancel()
+        pendingWorkspaceCoverageRefreshes.forEach { $0.cancel() }
         stateDirectorySource?.cancel()
     }
 
     func toggleExpanded() {
         expanded.toggle()
         persistUIState()
+    }
+
+    func collapseExpanded() {
+        guard expanded else { return }
+        expanded = false
+        persistUIState()
+    }
+
+    func setContentExpanded(_ value: Bool) {
+        guard contentExpanded != value else { return }
+        contentExpanded = value
     }
 
     func toggleMute() {
@@ -86,6 +109,20 @@ final class TaskLightViewModel: ObservableObject {
 
     func openLog() {
         NSWorkspace.shared.open(store.config.eventsURL)
+    }
+
+    func runWorkspaceCoverageReport() {
+        workspaceCoveragePresentation = TaskLightWorkspaceCoveragePresentation(
+            message: "正在检查 Codex 项目...",
+            status: "running",
+            reportURL: config.workspaceCoverageLatestMarkdownURL
+        )
+        store.runWorkspaceCoverageReport(openReport: true)
+        scheduleWorkspaceCoverageRefreshes()
+    }
+
+    func openWorkspaceCoverageReport() {
+        NSWorkspace.shared.open(config.workspaceCoverageLatestMarkdownURL)
     }
 
     func copyBlocker() {
@@ -194,6 +231,27 @@ final class TaskLightViewModel: ObservableObject {
         uiState.observations
             .filter { ["active_execution", "observed_active_high_confidence", "observed_only"].contains($0.display_scope) }
             .map { $0.asObservationRecord() }
+    }
+
+    func recentEvents(limit: Int = 40) -> [TaskLightEventRecord] {
+        Array(recentEventSnapshot.prefix(limit))
+    }
+
+    private func refreshRecentEventsIfNeeded() {
+        let eventURL = store.config.eventsURL
+        let modifiedAt = (try? FileManager.default.attributesOfItem(atPath: eventURL.path)[.modificationDate]) as? Date
+        guard modifiedAt != recentEventsModifiedAt || recentEventSnapshot.isEmpty else { return }
+        recentEventsModifiedAt = modifiedAt
+        recentEventSnapshot = Array(
+            store.loadEvents()
+                .sorted { lhs, rhs in
+                    if lhs.created_at != rhs.created_at {
+                        return lhs.created_at > rhs.created_at
+                    }
+                    return lhs.event_id > rhs.event_id
+                }
+                .prefix(TaskLightUIPerformanceBudget.expandedRecentEventLimit)
+        )
     }
 
     func luckyCatCompactStatusText() -> String {
@@ -388,6 +446,23 @@ final class TaskLightViewModel: ObservableObject {
         }
         pendingStateFileRefresh = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+    }
+
+    private func scheduleWorkspaceCoverageRefreshes() {
+        pendingWorkspaceCoverageRefreshes.forEach { $0.cancel() }
+        pendingWorkspaceCoverageRefreshes = [1.0, 2.5, 4.0].map { delay in
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.workspaceCoveragePresentation = self?.store.loadWorkspaceCoveragePresentation()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return workItem
+        }
+        pendingWorkspaceCoverageHide?.cancel()
+        let hide = DispatchWorkItem { [weak self] in
+            self?.workspaceCoveragePresentation = nil
+        }
+        pendingWorkspaceCoverageHide = hide
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: hide)
     }
 
     func primaryClearTaskID() -> String? {
