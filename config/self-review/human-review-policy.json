@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1",
+  "default_triggers": [
+    {
+      "trigger_id": "visual_ui_change",
+      "decision": "NEEDS_HUMAN_REVIEW",
+      "description": "Any LuckyCat visual or Swift UI presentation change requires human review."
+    },
+    {
+      "trigger_id": "launch_trust_security_change",
+      "decision": "NEEDS_HUMAN_REVIEW",
+      "description": "LaunchAgent, trust, or security surface changes require human review."
+    }
+  ]
+}

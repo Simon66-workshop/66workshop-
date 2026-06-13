@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1",
+  "phase": "phase_1_review_gate",
+  "auto_fix": false,
+  "auto_candidate_iteration": false,
+  "auto_commit": false,
+  "auto_push": false,
+  "notes": [
+    "Phase 1 is review-only.",
+    "The engine may recommend next bounded actions, but must not apply them."
+  ]
+}

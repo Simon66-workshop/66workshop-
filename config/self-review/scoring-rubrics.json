@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1",
+  "weights": {
+    "state_accuracy": 35,
+    "signal_arbitration": 20,
+    "regression_safety": 15,
+    "ui_consistency": 10,
+    "launch_health": 10,
+    "diagnostic_quality": 5,
+    "maintainability": 5
+  },
+  "decision_thresholds": {
+    "pass": 90,
+    "conditional_pass": 70
+  }
+}

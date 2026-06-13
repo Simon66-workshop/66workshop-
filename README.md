@@ -168,6 +168,65 @@ Signal bus retention is local and bounded:
 When the bus file crosses the byte threshold, the writer compacts it under the
 same lock, keeping only recent valid signals.
 
+## Self-Review Arbiter
+
+Phase `M3.4` adds a local Self-Review Arbiter for structured post-task review.
+It is review-only:
+
+- no external API
+- no auth-file reads
+- no auto commit or push
+- no automatic code repair
+
+Run a full review:
+
+```bash
+python3 script/self-review/run_self_review.py --task-id M3.4 --task-type state_projector --task-type hook_bridge --evidence-profile full --mode final
+```
+
+Run a scoped review when the working tree already contains unrelated dirty
+files:
+
+```bash
+python3 script/self-review/run_self_review.py \
+  --task-id M3.4a \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --scope-file /path/to/self-review-scope.json \
+  --evidence-profile full \
+  --mode final
+```
+
+The scope file can include only the current task paths while excluding build
+artifacts:
+
+```json
+{
+  "task_id": "M3.4a",
+  "include": [
+    "script/self-review/",
+    "config/self-review/",
+    "docs/self-review/",
+    "script/smoke_self_review.sh"
+  ],
+  "exclude": [
+    "dist/",
+    "mac/66TaskLight/.build/",
+    "__pycache__/"
+  ],
+  "reason": "Limit review to Self-Review Arbiter Phase 1 files."
+}
+```
+
+Profile choices:
+
+- `fast` for lighter scoped reviews.
+- `full` for the current default review depth.
+- `release` for full review plus release-readiness audit.
+
+Outputs land in `docs/reports/self-review/<task-id>/`.
+Each report also writes `scope-summary.json` alongside `final-review.md`.
+
 ## Observer
 
 `observe-local` is a separate local discovery loop for live Codex child
@@ -474,6 +533,41 @@ The bridge stores its local sidecars in:
 Detailed bridge behavior lives in `docs/HOOK_SIGNAL_BRIDGE.md`. LaunchAgent
 operation details live in `docs/HOOK_BRIDGE_LAUNCH_AGENT.md`.
 
+## Multi-Workspace Coverage
+
+Each Codex workspace needs its own project hooks. A trusted hook setup in this
+66TaskLight repo does not automatically cover other Codex projects.
+
+Run a read-only batch report:
+
+```bash
+./script/check_codex_workspaces_coverage.sh
+```
+
+Install hooks for every discovered workspace:
+
+```bash
+./script/install_hooks_for_workspaces.sh --all-discovered
+```
+
+Install only workspaces reported as missing or invalid:
+
+```bash
+./script/install_hooks_for_workspaces.sh --from-report
+```
+
+After installing hooks, open each affected Codex workspace and approve hooks in
+the Codex UI. 66TaskLight does not bypass that trust prompt.
+
+LuckyCat compact panel shortcut:
+
+- triple-click the cat nose to run the read-only batch report,
+- the small bubble near the cat feet shows the report summary,
+- clicking the bubble opens `~/.66tasklight/workspace_coverage/latest.md`,
+- the shortcut never installs hooks and never writes task state.
+
+More detail: `docs/CODEX_WORKSPACE_ONBOARDING.md`.
+
 ## Wrapper Integration
 
 Use `examples/codex_task_wrapper.sh` as the shell wrapper for Codex/Hermes runs.
@@ -539,6 +633,7 @@ will use it:
 ./script/smoke_current_thread_binding.sh
 ./script/smoke_hooks_config.sh
 ./script/smoke_hook_signal_bridge.sh
+./script/smoke_workspace_coverage.sh
 ./script/check_all.sh
 ```
 
@@ -580,6 +675,8 @@ Tools install does not provide the XCTest / new Testing path used by the repo.
 - `script/build_and_run.sh` kill + build + run entrypoint
 - `script/check_all.sh` one-shot validation
 - `script/check_codex_hooks_trust.sh` read-only Codex hooks readiness check
+- `script/check_codex_workspaces_coverage.sh` read-only multi-workspace coverage report
+- `script/install_hooks_for_workspaces.sh` batch hook installer for discovered workspaces
 - `script/hook_signal_bridge.py` bridge from trusted hook signals to managed tasks
 - `script/check_hook_bridge.sh` hook bridge status check
 - `docs/SMOKE_TESTS.md` smoke test scenarios and expected matrix

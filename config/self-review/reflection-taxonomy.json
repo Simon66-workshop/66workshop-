@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "failures": {
+    "false_blue_running": {
+      "severity": "high",
+      "default_decision": "REJECT",
+      "summary": "RUNNING was promoted by evidence that should remain diagnostic-only."
+    },
+    "false_green_done": {
+      "severity": "critical",
+      "default_decision": "REJECT",
+      "summary": "DONE appeared without a valid verify path."
+    },
+    "false_red_blocked": {
+      "severity": "high",
+      "default_decision": "REJECT",
+      "summary": "BLOCKED remained active without a valid current blocker."
+    },
+    "weak_signal_promoted": {
+      "severity": "high",
+      "default_decision": "REJECT",
+      "summary": "Weak runtime evidence was promoted into a stronger UI state."
+    },
+    "stale_writer": {
+      "severity": "high",
+      "default_decision": "REJECT",
+      "summary": "An old or conflicting projector writer was detected."
+    },
+    "fallback_leak": {
+      "severity": "medium",
+      "default_decision": "CONDITIONAL_PASS",
+      "summary": "Fallback behavior escaped its intended diagnostic-only boundary."
+    },
+    "missing_evidence": {
+      "severity": "high",
+      "default_decision": "REJECT",
+      "summary": "Required evidence was not collected."
+    },
+    "launch_agent_unhealthy": {
+      "severity": "medium",
+      "default_decision": "NEEDS_HUMAN_REVIEW",
+      "summary": "LaunchAgent or trust surface is not healthy enough for clean acceptance."
+    },
+    "signal_bus_pollution": {
+      "severity": "medium",
+      "default_decision": "CONDITIONAL_PASS",
+      "summary": "Signal bus contains noisy or conflicting records that reduce confidence."
+    },
+    "privacy_boundary_violation": {
+      "severity": "critical",
+      "default_decision": "REJECT",
+      "summary": "Sensitive-output or auth boundary was violated."
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": "0.1",
+  "phase": "phase_1_review_gate",
+  "rules": [
+    {
+      "rule_id": "no_external_api",
+      "level": "hard_gate",
+      "description": "Do not call external APIs from Self-Review Arbiter flows."
+    },
+    {
+      "rule_id": "no_codex_auth_read",
+      "level": "hard_gate",
+      "description": "Do not read ~/.codex/auth.json."
+    },
+    {
+      "rule_id": "no_sensitive_output",
+      "level": "hard_gate",
+      "description": "Do not emit prompt, response, auth, or raw log body."
+    },
+    {
+      "rule_id": "no_auto_commit_push",
+      "level": "hard_gate",
+      "description": "Do not auto commit or push."
+    },
+    {
+      "rule_id": "verify_only_done_green",
+      "level": "hard_gate",
+      "description": "done_verified remains verify-only."
+    },
+    {
+      "rule_id": "stop_never_done_verified",
+      "level": "hard_gate",
+      "description": "Stop must not map to done_verified."
+    },
+    {
+      "rule_id": "stop_preserves_done_unverified",
+      "level": "hard_gate",
+      "description": "Stop -> done_unverified must remain intact."
+    },
+    {
+      "rule_id": "process_observer_only_not_running",
+      "level": "hard_gate",
+      "description": "process_observer only cannot drive RUNNING."
+    },
+    {
+      "rule_id": "global_private_probe_not_running",
+      "level": "hard_gate",
+      "description": "global-only private probe cannot drive RUNNING."
+    },
+    {
+      "rule_id": "swift_ui_reads_ui_state_first",
+      "level": "hard_gate",
+      "description": "Swift UI must read ui_state first."
+    },
+    {
+      "rule_id": "no_build_artifacts_staged",
+      "level": "hard_gate",
+      "description": "No build artifacts may be staged."
+    }
+  ]
+}

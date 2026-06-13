@@ -1,0 +1,114 @@
+{
+  "schema_version": "0.1",
+  "task_types": {
+    "state_projector": {
+      "auditors": [
+        "git_diff_auditor",
+        "state_projector_auditor",
+        "signal_bus_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_state_projector",
+        "check_hook_bridge_launch_agent",
+        "check_ui_client"
+      ]
+    },
+    "hook_bridge": {
+      "auditors": [
+        "git_diff_auditor",
+        "hook_bridge_auditor",
+        "launch_agent_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_hook_bridge_launch_agent",
+        "check_state_projector"
+      ]
+    },
+    "appserver_watcher": {
+      "auditors": [
+        "git_diff_auditor",
+        "state_projector_auditor",
+        "signal_bus_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_state_projector"
+      ]
+    },
+    "observer": {
+      "auditors": [
+        "git_diff_auditor",
+        "signal_bus_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_state_projector"
+      ]
+    },
+    "swift_ui": {
+      "auditors": [
+        "git_diff_auditor",
+        "swift_ui_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_ui_client"
+      ]
+    },
+    "launch_agent": {
+      "auditors": [
+        "git_diff_auditor",
+        "launch_agent_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_hook_bridge_launch_agent"
+      ]
+    },
+    "signal_bus": {
+      "auditors": [
+        "git_diff_auditor",
+        "signal_bus_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_state_projector"
+      ]
+    },
+    "release_audit": {
+      "auditors": [
+        "git_diff_auditor",
+        "state_projector_auditor",
+        "hook_bridge_auditor",
+        "swift_ui_auditor",
+        "launch_agent_auditor",
+        "signal_bus_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all",
+        "check_state_projector",
+        "check_hook_bridge_launch_agent",
+        "check_ui_client"
+      ]
+    },
+    "docs": {
+      "auditors": [
+        "git_diff_auditor",
+        "docs_consistency_auditor"
+      ],
+      "required_evidence": [
+        "check_all"
+      ]
+    }
+  }
+}

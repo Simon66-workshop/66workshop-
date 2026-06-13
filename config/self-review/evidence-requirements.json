@@ -1,0 +1,120 @@
+{
+  "schema_version": "0.1",
+  "required_commands": [
+    {
+      "command_id": "check_all",
+      "path": "./script/check_all.sh",
+      "required": true
+    },
+    {
+      "command_id": "check_state_projector",
+      "path": "./script/check_state_projector.sh",
+      "required": true
+    },
+    {
+      "command_id": "check_hook_bridge_launch_agent",
+      "path": "./script/check_hook_bridge_launch_agent.sh",
+      "required": true
+    },
+    {
+      "command_id": "check_ui_client",
+      "path": "./script/check_ui_client.sh",
+      "required": true
+    }
+  ],
+  "optional_commands": [
+    {
+      "command_id": "smoke_turn_runtime_arbiter",
+      "path": "./script/smoke_turn_runtime_arbiter.sh"
+    },
+    {
+      "command_id": "smoke_state_projector",
+      "path": "./script/smoke_state_projector.sh"
+    },
+    {
+      "command_id": "smoke_hook_signal_bridge",
+      "path": "./script/smoke_hook_signal_bridge.sh"
+    },
+    {
+      "command_id": "smoke_appserver_thread_watcher",
+      "path": "./script/smoke_appserver_thread_watcher.sh"
+    }
+  ],
+  "state_accuracy_matrix": [
+    {
+      "matrix_id": "hook_running_is_running",
+      "label": "hook running -> RUNNING",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter",
+        "smoke_state_projector"
+      ]
+    },
+    {
+      "matrix_id": "process_only_not_running",
+      "label": "process only -> not RUNNING",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "private_global_only_not_running",
+      "label": "private global-only -> not RUNNING",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "appserver_unknown_not_running",
+      "label": "appserver unknown/notLoaded -> not RUNNING",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "appserver_active_like_running",
+      "label": "appserver active-like -> RUNNING allowed",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "permission_request_blocked",
+      "label": "PermissionRequest -> BLOCKED",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "stop_is_pending",
+      "label": "stop -> PENDING",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter",
+        "smoke_state_projector"
+      ]
+    },
+    {
+      "matrix_id": "verify_is_done",
+      "label": "verify -> DONE",
+      "source_command_ids": [
+        "smoke_turn_runtime_arbiter",
+        "smoke_state_projector"
+      ]
+    },
+    {
+      "matrix_id": "old_projector_writer_detected",
+      "label": "old projector writer detected",
+      "source_command_ids": [
+        "check_state_projector",
+        "smoke_turn_runtime_arbiter"
+      ]
+    },
+    {
+      "matrix_id": "multiple_projector_detected",
+      "label": "multiple projector detected",
+      "source_command_ids": [
+        "check_state_projector",
+        "smoke_turn_runtime_arbiter"
+      ]
+    }
+  ]
+}
