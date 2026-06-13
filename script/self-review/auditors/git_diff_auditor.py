@@ -11,7 +11,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _shared import build_artifacts_in_paths, classify_dirty_paths_with_unknown, load_json, now_iso  # noqa: E402
+from _shared import build_artifacts_in_paths, classify_dirty_paths_with_unknown, load_json, now_iso, path_has_launch_trust_risk  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,11 +31,7 @@ def main() -> None:
     out_of_scope_dirty_files = [str(item) for item in (git.get("out_of_scope_dirty_files") or [])]
     out_of_scope = classify_dirty_paths_with_unknown(out_of_scope_dirty_files)
     visual_ui_changed = any(path.endswith(".swift") and "TaskLightApp" in path for path in changed_files)
-    launch_or_trust_changed = any(
-        token in path
-        for path in changed_files
-        for token in ("launch_agent", "LaunchAgent", "hooks_trust", "check_codex_hooks_trust", ".plist")
-    )
+    launch_or_trust_changed = any(path_has_launch_trust_risk(path) for path in changed_files)
     build_artifacts = build_artifacts_in_paths(staged_files)
     findings = []
     if build_artifacts:

@@ -218,6 +218,29 @@ artifacts:
 }
 ```
 
+Recommended flow when the working tree already contains unrelated dirty files:
+
+```bash
+python3 script/self-review/generate_scope.py \
+  --task-id M3.4c \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --write-scope-file
+
+cat docs/reports/self-review/M3.4c/scope-candidate.md
+
+python3 script/self-review/run_self_review.py \
+  --task-id M3.4c \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --scope-file docs/reports/self-review/M3.4c/self-review-scope.json \
+  --evidence-profile full \
+  --mode final
+```
+
+The generator only recommends a scope candidate. It does not auto-apply the
+scope, auto commit, or auto push.
+
 Profile choices:
 
 - `fast` for lighter scoped reviews.

@@ -17,6 +17,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
 BUILD_ARTIFACT_PATTERNS = (
+    "dist/",
     ".build/",
     "DerivedData/",
     ".app/",
@@ -25,8 +26,14 @@ BUILD_ARTIFACT_PATTERNS = (
 )
 SUSPICIOUS_BUILD_SUFFIXES = (".app", ".dSYM", ".o", ".swiftmodule", ".swiftdoc")
 LAUNCH_TRUST_PATH_HINTS = (
+    ".codex/",
+    "install_codex_hooks_status_bridge",
+    "install_hooks_for_workspace",
+    "install_hooks_for_workspaces",
     "launch_agent",
     "launchagents",
+    "workspace_coverage",
+    "workspace-onboarding",
     "hooks_trust",
     "hook_trust",
     "check_codex_hooks_trust",
@@ -40,6 +47,10 @@ AUTH_SECRET_PATH_HINTS = (
     ".env",
     "secret",
     "credential",
+    "token",
+    "keychain",
+    "private_key",
+    "private-key",
     "auth_token",
     "api_key",
 )

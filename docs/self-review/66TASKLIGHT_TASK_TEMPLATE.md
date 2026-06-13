@@ -6,6 +6,26 @@ Use this command after a task finishes:
 python3 script/self-review/run_self_review.py --task-id M3.4 --task-type state_projector --task-type hook_bridge --evidence-profile full --mode final
 ```
 
+Recommended flow when the working tree is already noisy:
+
+```bash
+python3 script/self-review/generate_scope.py \
+  --task-id M3.4c \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --write-scope-file
+
+cat docs/reports/self-review/M3.4c/scope-candidate.md
+
+python3 script/self-review/run_self_review.py \
+  --task-id M3.4c \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --scope-file docs/reports/self-review/M3.4c/self-review-scope.json \
+  --evidence-profile full \
+  --mode final
+```
+
 Scoped review:
 
 ```bash
@@ -27,11 +47,12 @@ Optional wrapper:
 ## Checklist
 
 1. Pick the matching `--task-type` values.
-2. Prefer a scope file when the working tree already contains unrelated dirty files.
-3. Use `--evidence-profile fast|full|release` to match the task cost and evidence depth.
-4. Keep the working tree local; do not auto commit or auto push.
-5. Let the review collect required checks and optional smoke evidence.
-6. Read `final-review.md` before treating the task as accepted.
+2. Prefer `generate_scope.py` first when the working tree already contains unrelated dirty files.
+3. Inspect `scope-candidate.md` before converting it into `self-review-scope.json`.
+4. Use `--evidence-profile fast|full|release` to match the task cost and evidence depth.
+5. Keep the working tree local; do not auto commit or auto push.
+6. Let the review collect required checks and optional smoke evidence.
+7. Read `final-review.md` before treating the task as accepted.
 
 Recommended scope file:
 

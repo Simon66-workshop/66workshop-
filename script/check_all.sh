@@ -32,6 +32,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_observer_health.sh"
 "$ROOT_DIR/script/smoke_self_review.sh"
 "$ROOT_DIR/script/smoke_self_review_scope.sh"
+"$ROOT_DIR/script/smoke_self_review_generate_scope.sh"
 python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
 "$ROOT_DIR/script/check_state_projector.sh" >/dev/null
 "$ROOT_DIR/script/build_and_run.sh" --verify

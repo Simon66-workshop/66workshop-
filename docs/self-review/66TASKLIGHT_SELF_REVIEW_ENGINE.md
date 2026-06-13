@@ -35,12 +35,12 @@ Each task type maps to a fixed auditor set plus evidence requirements from
    the normalized signal bus.
 2. Optionally narrow the review to a scoped file set by `--scope-file`,
    `--review-path`, and `--exclude-path`.
-2. Run required health and smoke commands.
-3. Enforce hard safety boundaries.
-4. Run domain auditors.
-5. Score the candidate across state accuracy, arbitration safety, UI
+3. Run required health and smoke commands.
+4. Enforce hard safety boundaries.
+5. Run domain auditors.
+6. Score the candidate across state accuracy, arbitration safety, UI
    consistency, launch health, diagnostics, and maintainability.
-6. Write a final review packet under `docs/reports/self-review/<task-id>/`.
+7. Write a final review packet under `docs/reports/self-review/<task-id>/`.
 
 ## Hard Boundaries
 
@@ -111,6 +111,41 @@ Decision rules:
   `CONDITIONAL_PASS`
 - out-of-scope launch/trust/security files become `NEEDS_HUMAN_REVIEW`
 - out-of-scope auth/secret exposure still `REJECT`
+
+## Auto Scope Manifest Generator
+
+Phase `M3.4c` adds a scope candidate generator that recommends what this task
+should review before the final gate runs. It does not auto-apply the scope.
+
+CLI:
+
+```bash
+python3 script/self-review/generate_scope.py \
+  --task-id M3.4c \
+  --task-type state_projector \
+  --task-type hook_bridge \
+  --write-scope-file
+```
+
+The generator writes:
+
+- `scope-candidate.json`
+- `scope-candidate.md`
+- `self-review-scope.json` when `--write-scope-file` is set
+
+Path rules:
+
+- self-review paths are always treated as in-scope candidates
+- task-type seeds expand the in-scope candidate set
+- build and cache artifacts are excluded from the recommended include set
+- launch/trust and auth/secret paths are never hidden by the generator
+
+Risk rules:
+
+- auth/secret paths force `REJECT`
+- launch/trust paths force `NEEDS_HUMAN_REVIEW`
+- ordinary out-of-scope dirty files keep the review in `CONDITIONAL_PASS`
+- the generator candidate itself is never the final approval
 
 ## Evidence Profiles
 
