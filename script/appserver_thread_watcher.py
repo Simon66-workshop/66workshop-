@@ -141,6 +141,44 @@ def normalize_for_state(signal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def is_active_like_signal(signal: dict[str, Any]) -> bool:
+    status_hint = str(signal.get("status_hint") or "").lower()
+    source_quality = str(signal.get("source_quality") or "").lower()
+    evidence = " ".join(str(item) for item in signal.get("appserver_activity_evidence") or [])
+    return (
+        str(signal.get("event_type") or "") in {"turn_started", "item_started"}
+        and status_hint in {"active", "running"}
+        and "active" in source_quality
+        and bool(evidence)
+    )
+
+
+def promote_recent_activity(signal: dict[str, Any], previous: dict[str, Any] | None, *, now_ts: float) -> dict[str, Any]:
+    if previous is None:
+        return signal
+    status_hint = str(signal.get("status_hint") or "").lower()
+    source_quality = str(signal.get("source_quality") or "").lower()
+    if status_hint not in {"notloaded", "not_loaded", "unknown"}:
+        return signal
+    if "thread_list" not in source_quality:
+        return signal
+    prev_ts = parse_ts(previous.get("occurred_at"))
+    curr_ts = parse_ts(signal.get("event_time") or signal.get("occurred_at"))
+    if prev_ts is None or curr_ts is None:
+        return signal
+    if curr_ts <= prev_ts or now_ts - curr_ts > active_ttl_seconds():
+        return signal
+    promoted = dict(signal)
+    promoted["event_type"] = "turn_started"
+    promoted["confidence"] = max(float(promoted.get("confidence") or 0.0), 0.78)
+    promoted["source_quality"] = "codex_appserver_thread_list_recent_activity"
+    promoted["status_hint"] = "active"
+    promoted["appserver_activity_evidence"] = ["thread/list:updatedAt advanced"]
+    promoted["evidence"] = list(promoted.get("evidence") or []) + ["thread/list:updatedAt advanced"]
+    promoted["conflicts"] = []
+    return promoted
+
+
 def write_health(path: Path, *, status: str, emitted_count: int, live_threads: int, diagnostics: list[str], error: str | None) -> None:
     atomic_write_json(
         path,
@@ -182,6 +220,7 @@ def run_once(root: Path, timeout: float, limit: int) -> dict[str, Any]:
         if not thread_id:
             continue
         previous = previous_threads.get(thread_id) if isinstance(previous_threads.get(thread_id), dict) else None
+        signal = promote_recent_activity(signal, previous, now_ts=now_ts)
         if should_emit(signal, previous, now_ts=now_ts):
             append_signal(signal)
             emitted_count += 1
@@ -189,7 +228,7 @@ def run_once(root: Path, timeout: float, limit: int) -> dict[str, Any]:
         if current and thread_id == current:
             continue
         signal_ts = parse_ts(signal.get("event_time") or signal.get("occurred_at"))
-        if signal_ts is not None and now_ts - signal_ts <= active_ttl_seconds():
+        if is_active_like_signal(signal) and signal_ts is not None and now_ts - signal_ts <= active_ttl_seconds():
             live_threads += 1
 
     payload = {

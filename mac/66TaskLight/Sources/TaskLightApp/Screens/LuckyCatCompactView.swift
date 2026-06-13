@@ -1,4 +1,5 @@
 import SwiftUI
+import TaskLightCore
 
 struct LuckyCatCompactView: View {
     @ObservedObject var viewModel: TaskLightViewModel
@@ -12,53 +13,134 @@ struct LuckyCatCompactView: View {
     }
 
     var body: some View {
-        LuckyCatCompactShell(
-            status: status,
-            progress: viewModel.compactProgressValue(),
-            highlightsBell: viewModel.compactShowsAlertBell(),
-            statusTitle: displayTitle,
-            elapsedLabel: viewModel.compactDataLabel()
-        ) {
-            ZStack {
-                HStack(spacing: 10) {
-                    CompactPhasePaw(
-                        label: "阻塞",
-                        status: .blocked,
-                        count: viewModel.blockedDisplayCount(),
-                        isPrimary: viewModel.compactActivePaw() == .problem
-                    )
-                    CompactPhasePaw(
-                        label: "运行",
-                        status: .running,
-                        count: viewModel.runningDisplayCount(),
-                        isPrimary: viewModel.compactActivePaw() == .executing
-                    )
-                    CompactPhasePaw(
-                        label: "完成",
-                        status: .done,
-                        count: viewModel.visibleDoneDisplayCount(),
-                        isPrimary: viewModel.compactActivePaw() == .complete
-                    )
-                    CompactPhasePaw(
-                        label: "待验",
-                        status: .pending,
-                        count: viewModel.pendingDisplayCount(),
-                        isPrimary: viewModel.compactActivePaw() == .toVerify
-                    )
-                    CompactPhasePaw(
-                        label: "观察",
-                        status: .observed,
-                        count: viewModel.observedDisplayCount(),
-                        isPrimary: viewModel.compactActivePaw() == .recon
-                    )
+        ZStack {
+            LuckyCatCompactShell(
+                status: status,
+                progress: viewModel.compactProgressValue(),
+                highlightsBell: viewModel.compactShowsAlertBell(),
+                statusTitle: displayTitle,
+                elapsedLabel: viewModel.compactDataLabel(),
+                onNoseTripleTap: {
+                    viewModel.runWorkspaceCoverageReport()
                 }
-                .frame(width: 296, height: 108)
-                .position(x: 182, y: 176)
+            ) {
+                ZStack {
+                    HStack(spacing: 10) {
+                        CompactPhasePaw(
+                            label: "阻塞",
+                            status: .blocked,
+                            count: viewModel.blockedDisplayCount(),
+                            isPrimary: viewModel.compactActivePaw() == .problem
+                        )
+                        CompactPhasePaw(
+                            label: "运行",
+                            status: .running,
+                            count: viewModel.runningDisplayCount(),
+                            isPrimary: viewModel.compactActivePaw() == .executing
+                        )
+                        CompactPhasePaw(
+                            label: "完成",
+                            status: .done,
+                            count: viewModel.visibleDoneDisplayCount(),
+                            isPrimary: viewModel.compactActivePaw() == .complete
+                        )
+                        CompactPhasePaw(
+                            label: "待验",
+                            status: .pending,
+                            count: viewModel.pendingDisplayCount(),
+                            isPrimary: viewModel.compactActivePaw() == .toVerify
+                        )
+                        CompactPhasePaw(
+                            label: "观察",
+                            status: .observed,
+                            count: viewModel.observedDisplayCount(),
+                            isPrimary: viewModel.compactActivePaw() == .recon
+                        )
+                    }
+                    .frame(width: 296, height: 108)
+                    .position(x: 182, y: 176)
+                }
+            }
+            .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
+            .scaleEffect(LuckyCatLayout.compactScale, anchor: .center)
+            .frame(width: LuckyCatLayout.compactWidth, height: LuckyCatLayout.compactHeight)
+
+            if let coverage = viewModel.workspaceCoveragePresentation {
+                LuckyCatReportBubbleView(presentation: coverage) {
+                    viewModel.openWorkspaceCoverageReport()
+                }
+                .transition(AnyTransition.scale(scale: 0.92).combined(with: AnyTransition.opacity))
+                .position(x: LuckyCatLayout.compactWidth / 2, y: LuckyCatLayout.compactHeight - 18)
+                .zIndex(20)
             }
         }
-        .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
-        .scaleEffect(LuckyCatLayout.compactScale, anchor: .center)
         .frame(width: LuckyCatLayout.compactWidth, height: LuckyCatLayout.compactHeight)
+        .animation(.easeInOut(duration: 0.18), value: viewModel.workspaceCoveragePresentation?.message)
+    }
+}
+
+private struct LuckyCatReportBubbleView: View {
+    let presentation: TaskLightWorkspaceCoveragePresentation
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(presentation.isError ? LuckyCatTokens.Palette.red : LuckyCatTokens.Palette.gold)
+                .frame(width: 7, height: 7)
+
+            Text(presentation.message)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text("报告")
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .foregroundStyle(LuckyCatTokens.Palette.goldDeep)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 238)
+        .background(
+            BubbleShape()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.96),
+                            LuckyCatTokens.Palette.cream.opacity(0.93),
+                            LuckyCatTokens.Palette.creamDeep.opacity(0.78)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.22), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            BubbleShape()
+                .stroke(Color.white.opacity(0.66), lineWidth: 1)
+        )
+        .contentShape(BubbleShape())
+        .highPriorityGesture(
+            TapGesture()
+                .onEnded {
+                    onTap()
+                }
+        )
+    }
+}
+
+private struct BubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let bubbleRect = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - 5)
+        path.addRoundedRect(in: bubbleRect, cornerSize: CGSize(width: 13, height: 13))
+        path.move(to: CGPoint(x: rect.midX - 8, y: bubbleRect.maxY - 1))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX + 8, y: bubbleRect.maxY - 1))
+        path.closeSubpath()
+        return path
     }
 }
 

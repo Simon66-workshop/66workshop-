@@ -251,6 +251,7 @@ def normalize_signal(signal: dict[str, Any]) -> dict[str, Any]:
         "reason": signal.get("reason"),
         "message": signal.get("message"),
         "evidence": signal.get("evidence") or [],
+        "appserver_activity_evidence": signal.get("appserver_activity_evidence") or [],
         "conflicts": signal.get("conflicts") or [],
         "raw_event_ref": signal.get("raw_event_ref"),
     }
@@ -476,7 +477,7 @@ def is_appserver_active_like_signal(signal: dict[str, Any], *, age: float | None
         "status=complete",
         "status=completed",
     )
-    if any(marker in evidence_text for marker in ignored_evidence_markers):
+    if not evidence and any(marker in evidence_text for marker in ignored_evidence_markers):
         return False, None, "thread_list_idle_or_unknown", evidence
     if event_type in {"turn_started", "item_started"}:
         return True, f"event_type={event_type}", None, evidence or [f"event_type={event_type}"]
@@ -1269,7 +1270,7 @@ def base_confidence_for_signal(signal: dict[str, Any], config: dict[str, Any]) -
             event_type in {"unknown", "appserver_quiet"}
             or status_hint in {"unknown", "notloaded", "not_loaded", "idle", "quiet", "complete", "completed"}
             or any(marker in source_quality for marker in ("unknown", "ignored", "quiet"))
-            or any(marker in evidence_text for marker in ("status=notloaded", "status=unknown", "status=idle", "status=complete", "status=completed"))
+            or (not signal.get("appserver_activity_evidence") and any(marker in evidence_text for marker in ("status=notloaded", "status=unknown", "status=idle", "status=complete", "status=completed")))
         ):
             return min(float(signal.get("confidence") or 0.0), 0.3)
         return float(base.get("codex_appserver_active", 0.95))

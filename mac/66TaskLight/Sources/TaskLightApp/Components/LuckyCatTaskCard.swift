@@ -3,6 +3,7 @@ import TaskLightCore
 
 struct LuckyCatTaskCard: View {
     let task: TaskLightTaskSummary
+    var scrollOptimized: Bool = false
 
     private var visualStatus: LuckyCatVisualStatus {
         LuckyCatStatusStyle.taskStatus(from: task)
@@ -45,7 +46,12 @@ struct LuckyCatTaskCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
-                LuckyCatStatusOrb(status: visualStatus, size: 16, pulsing: visualStatus == .running)
+                LuckyCatStatusOrb(
+                    status: visualStatus,
+                    size: 16,
+                    pulsing: !scrollOptimized && visualStatus == .running,
+                    showsGlow: !scrollOptimized
+                )
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .center) {
@@ -103,12 +109,19 @@ struct LuckyCatTaskCard: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: LuckyCatLayout.taskCardCornerRadius, style: .continuous)
-            .fill(.thinMaterial)
-            .overlay(
+        Group {
+            if scrollOptimized {
                 RoundedRectangle(cornerRadius: LuckyCatLayout.taskCardCornerRadius, style: .continuous)
-                    .fill(visualStatus.tint.opacity(0.06))
-            )
+                    .fill(LuckyCatTokens.Palette.glass.opacity(0.72))
+            } else {
+                RoundedRectangle(cornerRadius: LuckyCatLayout.taskCardCornerRadius, style: .continuous)
+                    .fill(.thinMaterial)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: LuckyCatLayout.taskCardCornerRadius, style: .continuous)
+                .fill(visualStatus.tint.opacity(scrollOptimized ? 0.04 : 0.06))
+        )
     }
 
     private func progressBar(value: Double) -> some View {

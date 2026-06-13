@@ -45,6 +45,7 @@ Expected healthy-but-not-yet-trusted shape:
 ```text
 HOOK_CONFIG: ok
 HOOK_HANDLER: ok
+HOOK_VISIBILITY: hidden_not_loaded|visible_untrusted|visible_trusted
 PROJECT_TRUST: unknown_manual_required
 STATUS: trusted_possible
 ```
@@ -55,6 +56,13 @@ If Codex app-server reports the project hooks as `untrusted`, the status becomes
 STATUS: untrusted_or_not_loaded
 NEXT_ACTION: open Codex UI and trust project hooks
 ```
+
+If the checker reports `HOOK_VISIBILITY: hidden_not_loaded`, the hooks file is
+present but Codex Desktop has not loaded that workspace yet. Reopen the
+workspace in Codex first, then check the hook page again.
+
+If the checker reports `HOOK_VISIBILITY: visible_untrusted`, the workspace is
+loaded but still needs a manual Trust click in Codex UI.
 
 The checker can prove only that hooks are configured, executable, and visible to
 Codex app-server. It cannot force Codex Desktop to trust them.

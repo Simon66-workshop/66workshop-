@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import select
+import shlex
 import subprocess
 import sys
 import time
@@ -42,6 +43,46 @@ def contains_hook_handler_reference(payload: Any) -> bool:
     if isinstance(payload, list):
         return any(contains_hook_handler_reference(value) for value in payload)
     return False
+
+
+def command_strings(payload: Any) -> list[str]:
+    if isinstance(payload, str):
+        return [payload]
+    if isinstance(payload, dict):
+        values: list[str] = []
+        for key, value in payload.items():
+            if key == "command" and isinstance(value, str):
+                values.append(value)
+            else:
+                values.extend(command_strings(value))
+        return values
+    if isinstance(payload, list):
+        values: list[str] = []
+        for item in payload:
+            values.extend(command_strings(item))
+        return values
+    return []
+
+
+def resolve_hook_handler_path(hook_payload: Any, project_root: Path) -> Path:
+    for command in command_strings(hook_payload):
+        if "codex_hook_event.py" not in command:
+            continue
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            parts = command.split()
+        for part in parts:
+            if not part.endswith("codex_hook_event.py"):
+                continue
+            candidate = Path(part)
+            if candidate.is_absolute():
+                return candidate
+            resolved = project_root / candidate
+            if resolved.exists():
+                return resolved
+            return resolved
+    return project_root / HOOK_HANDLER_REL
 
 
 def run_command(args: list[str], cwd: Path, timeout: float = 5.0) -> tuple[int, str, str]:
@@ -212,9 +253,29 @@ def summarize(payload: dict[str, Any]) -> tuple[str, str, str]:
     return "unknown_manual_required", "trusted_possible", "open Codex UI and trust project hooks if prompted"
 
 
+def classify_visibility(payload: dict[str, Any]) -> tuple[str, str]:
+    if payload["project_root"] != "ok" or payload["codex_dir"] != "ok" or payload["hook_config"] != "ok" or payload["hook_reference"] != "ok" or payload["hook_handler"] != "ok" or payload["hook_health"] != "ok":
+        return "hidden_misconfigured", "hooks 配置不完整，所以 Codex UI 不会稳定显示"
+
+    appserver = payload.get("codex_appserver", "skipped")
+    if appserver == "trusted":
+        return "visible_trusted", "Codex UI 已加载这个 workspace 的 hooks，而且它们已可信"
+    if appserver == "untrusted":
+        return "visible_untrusted", "Codex UI 已加载这个 workspace 的 hooks，但还没有 Trust"
+    if appserver == "not_loaded":
+        return "hidden_not_loaded", "hooks 文件已存在，但 Codex UI 还没把这个 workspace 加载进来"
+    if appserver == "loaded_unknown":
+        return "visible_unknown", "Codex UI 已加载这个 workspace，但 hooks 信任状态不明确"
+    return "unknown", "当前只能确认 hooks 文件存在，无法确认 Codex UI 是否已加载"
+
+
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     project_root = Path(args.project_root).expanduser().resolve()
-    expected_root = Path(args.expected_root).expanduser().resolve()
+    expected_root = (
+        Path(args.expected_root).expanduser().resolve()
+        if args.expected_root
+        else project_root
+    )
     codex_dir = project_root / ".codex"
     hooks_path = project_root / HOOK_CONFIG_REL
     config_path = project_root / PROJECT_CONFIG_REL
@@ -235,6 +296,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     if hook_config == "ok" and hook_reference != "ok":
         notes.append("hooks.json does not reference script/codex_hook_event.py")
 
+    handler_path = resolve_hook_handler_path(hook_payload, project_root) if hook_payload is not None else handler_path
     hook_handler, hook_health, handler_notes = check_handler(project_root, handler_path)
     notes.extend(handler_notes)
 
@@ -255,6 +317,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "hook_config": hook_config,
         "hook_reference": hook_reference,
         "hook_handler": hook_handler,
+        "hook_handler_path": str(handler_path),
         "hook_health": hook_health,
         "config_toml": config_toml,
         "codex_appserver": appserver_status,
@@ -265,6 +328,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     payload["project_trust"] = project_trust
     payload["status"] = status
     payload["next_action"] = next_action
+    visibility, visibility_reason = classify_visibility(payload)
+    payload["hook_visibility"] = visibility
+    payload["hook_visibility_reason"] = visibility_reason
     return payload
 
 
@@ -285,6 +351,8 @@ def print_human(payload: dict[str, Any]) -> None:
         summary = ", ".join(f"{key}={value}" for key, value in sorted(trust_counts.items()))
         print(f"CODEX_APPSERVER_HOOKS: {summary}")
     print(f"PROJECT_TRUST: {payload['project_trust']}")
+    print(f"HOOK_VISIBILITY: {payload['hook_visibility']}")
+    print(f"HOOK_VISIBILITY_REASON: {payload['hook_visibility_reason']}")
     print(f"STATUS: {payload['status']}")
     print(f"NEXT_ACTION: {payload['next_action']}")
     for note in payload["notes"]:
@@ -294,7 +362,7 @@ def print_human(payload: dict[str, Any]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check local Codex hooks readiness for 66TaskLight")
     parser.add_argument("--project-root", default=str(DEFAULT_PROJECT_ROOT))
-    parser.add_argument("--expected-root", default=str(DEFAULT_PROJECT_ROOT))
+    parser.add_argument("--expected-root")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--skip-appserver", action="store_true")
     parser.add_argument("--appserver-timeout", type=float, default=4.0)

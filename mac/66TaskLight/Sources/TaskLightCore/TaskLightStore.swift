@@ -18,6 +18,7 @@ public final class TaskLightStore {
         try? FileManager.default.createDirectory(at: config.tasksDirectoryURL, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.observationsDirectoryURL, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.uiClientsDirectoryURL, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config.workspaceCoverageDirectoryURL, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: config.playedEventsURL.path) {
             let ledger = TaskLightPlayedEventsLedger()
             try? writeJSONAtomic(ledger, to: config.playedEventsURL)
@@ -173,6 +174,123 @@ public final class TaskLightStore {
         runCLI(arguments: ["clear", "--task-id", taskID])
     }
 
+    public func runWorkspaceCoverageReport(openReport: Bool = true) {
+        ensureLayout()
+        let scriptURL = projectRootURL().appendingPathComponent("script/check_codex_workspaces_coverage.sh")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [scriptURL.path] + (openReport ? ["--open-report"] : [])
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "TASKLIGHT_STATE_DIR": config.stateDirectory.path,
+            "TASKLIGHT_WORKSPACE_COVERAGE_DIR": config.workspaceCoverageDirectoryURL.path
+        ]) { current, _ in current }
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            let status = TaskLightWorkspaceCoverageRunStatus(
+                status: "error",
+                message: "巡检启动失败: \(error.localizedDescription)",
+                updated_at: TaskLightTaskRecord.nowString(),
+                latest_json_path: config.workspaceCoverageLatestJSONURL.path,
+                report_path: config.workspaceCoverageLatestMarkdownURL.path
+            )
+            try? writeJSONAtomic(status, to: config.workspaceCoverageRunStatusURL)
+        }
+    }
+
+    public func loadWorkspaceCoveragePresentation() -> TaskLightWorkspaceCoveragePresentation? {
+        let status: TaskLightWorkspaceCoverageRunStatus? = try? readJSON(from: config.workspaceCoverageRunStatusURL)
+        let report: TaskLightWorkspaceCoverageReport? = try? readJSON(from: config.workspaceCoverageLatestJSONURL)
+        guard status != nil || report != nil else {
+            return nil
+        }
+        let reportURL = config.workspaceCoverageLatestMarkdownURL
+        if let status, status.status == "running" {
+            return TaskLightWorkspaceCoveragePresentation(
+                message: status.message ?? "正在检查 Codex 项目...",
+                status: status.status,
+                reportURL: reportURL
+            )
+        }
+        if let status, status.status == "error" {
+            return TaskLightWorkspaceCoveragePresentation(
+                message: status.message ?? "巡检失败",
+                status: status.status,
+                isError: true,
+                reportURL: reportURL
+            )
+        }
+        if let summary = report?.summary {
+            if (summary.preferred_installed_needs_trust ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "常用项目 \(summary.preferred_installed_needs_trust ?? 0) 个需要 Trust",
+                    status: report?.status ?? "needs_trust",
+                    reportURL: reportURL
+                )
+            }
+            if (summary.preferred_missing_hooks ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "常用项目 \(summary.preferred_missing_hooks ?? 0) 个缺 hooks",
+                    status: report?.status ?? "needs_hooks",
+                    reportURL: reportURL
+                )
+            }
+            if (summary.preferred_invalid_hooks ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "常用项目 \(summary.preferred_invalid_hooks ?? 0) 个 hooks 异常",
+                    status: report?.status ?? "needs_hooks",
+                    isError: true,
+                    reportURL: reportURL
+                )
+            }
+            if (summary.installed_needs_trust ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "发现 \(summary.installed_needs_trust ?? 0) 个项目需要 Trust",
+                    status: report?.status ?? "needs_trust",
+                    reportURL: reportURL
+                )
+            }
+            if (summary.missing_hooks ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "有 \(summary.missing_hooks ?? 0) 个项目缺 hooks",
+                    status: report?.status ?? "needs_hooks",
+                    reportURL: reportURL
+                )
+            }
+            if (summary.invalid_hooks ?? 0) > 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "有 \(summary.invalid_hooks ?? 0) 个 hooks 配置异常",
+                    status: report?.status ?? "needs_hooks",
+                    isError: true,
+                    reportURL: reportURL
+                )
+            }
+            if (summary.workspace_count ?? 0) == 0 {
+                return TaskLightWorkspaceCoveragePresentation(
+                    message: "没有发现 Codex 项目",
+                    status: report?.status ?? "empty",
+                    reportURL: reportURL
+                )
+            }
+            return TaskLightWorkspaceCoveragePresentation(
+                message: "状态入口正常",
+                status: report?.status ?? "ok",
+                reportURL: reportURL
+            )
+        }
+        if let status {
+            return TaskLightWorkspaceCoveragePresentation(
+                message: status.message ?? "点报告查看详情",
+                status: status.status,
+                isError: status.status == "error",
+                reportURL: reportURL
+            )
+        }
+        return nil
+    }
+
     private struct ScanResult {
         var valid: [TaskLightTaskSummary]
         var invalid: [TaskLightTaskSummary]
@@ -199,6 +317,23 @@ public final class TaskLightStore {
             return false
         }
         return Date().timeIntervalSince(generatedAt) <= maxAge
+    }
+
+    private func projectRootURL() -> URL {
+        if let raw = ProcessInfo.processInfo.environment["TASKLIGHT_PROJECT_ROOT"], !raw.isEmpty {
+            return URL(fileURLWithPath: raw)
+        }
+        let knownProjectRoot = URL(fileURLWithPath: "/Users/macmini-simon66/Documents/Codex状态桌面栏提醒")
+        if FileManager.default.fileExists(atPath: knownProjectRoot.appendingPathComponent("script/check_codex_workspaces_coverage.sh").path) {
+            return knownProjectRoot
+        }
+        let bundleURL = Bundle.main.bundleURL
+        if bundleURL.pathExtension == "app" {
+            return bundleURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+        }
+        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     }
 
     private func fallbackUIState(from dashboard: TaskLightAggregateState, reason: String) -> TaskLightUIState {

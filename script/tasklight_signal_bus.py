@@ -78,6 +78,7 @@ def _stable_signal_id(payload: dict[str, Any]) -> str:
         "message": payload.get("message"),
         "raw_event_ref": payload.get("raw_event_ref"),
         "evidence": payload.get("evidence") or [],
+        "appserver_activity_evidence": payload.get("appserver_activity_evidence") or [],
         "conflicts": payload.get("conflicts") or [],
     }
     encoded = json.dumps(stable, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
@@ -133,6 +134,7 @@ def canonical_signal(payload: dict[str, Any]) -> dict[str, Any]:
         "reason": payload.get("reason"),
         "message": payload.get("message"),
         "evidence": [str(item) for item in (payload.get("evidence") or [])][:12],
+        "appserver_activity_evidence": [str(item) for item in (payload.get("appserver_activity_evidence") or [])][:12],
         "conflicts": [str(item) for item in (payload.get("conflicts") or [])][:12],
         "raw_event_ref": payload.get("raw_event_ref"),
         "recorded_at": now_iso(),

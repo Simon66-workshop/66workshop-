@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPSERVER="$ROOT_DIR/script/codex_appserver_bridge.py"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-appserver-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+STATE_DIR="$TMP_DIR/state"
+mkdir -p "$STATE_DIR"
+
+export TASKLIGHT_STATE_DIR="$STATE_DIR"
+export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$STATE_DIR/normalized_signals.jsonl"
 
 probe_json="$("$APPSERVER" --probe)"
 python3 - "$probe_json" <<'PY'

@@ -1,0 +1,27 @@
+{
+  "include_roots": [
+    "/Users/macmini-simon66/Documents",
+    "/Volumes/2T扩展盘/66_PROJECTS",
+    "/Volumes/2T扩展盘/66VI system",
+    "/Volumes/2T扩展盘/AI机器人"
+  ],
+  "exclude_patterns": [
+    "**/.Trash/**",
+    "**/node_modules/**",
+    "**/.build/**",
+    "**/dist/**",
+    "**/__pycache__/**",
+    "**/backup/**",
+    "**/备份/**",
+    "**/_archives/**",
+    "**/archive/**"
+  ],
+  "preferred_workspaces": [
+    "/Users/macmini-simon66/Documents/Codex状态桌面栏提醒",
+    "/Users/macmini-simon66/Documents/66workshop网站设计",
+    "/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site",
+    "/Volumes/2T扩展盘/66VI system",
+    "/Users/macmini-simon66/Documents/AI机器人/k230-jarvis-bridge",
+    "/Users/macmini-simon66/Documents/淘宝电商分析"
+  ]
+}

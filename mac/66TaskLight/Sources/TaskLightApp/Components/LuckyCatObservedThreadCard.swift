@@ -3,6 +3,7 @@ import TaskLightCore
 
 struct LuckyCatObservedThreadCard: View {
     let thread: TaskLightObservationRecord
+    var scrollOptimized: Bool = false
 
     private var visualStatus: LuckyCatVisualStatus {
         LuckyCatStatusStyle.observationStatus(from: thread)
@@ -35,7 +36,12 @@ struct LuckyCatObservedThreadCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                LuckyCatStatusOrb(status: visualStatus, size: 16, pulsing: visualStatus == .observed)
+                LuckyCatStatusOrb(
+                    status: visualStatus,
+                    size: 16,
+                    pulsing: !scrollOptimized && visualStatus == .observed,
+                    showsGlow: !scrollOptimized
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .center) {
                         Text(thread.title)
@@ -73,18 +79,27 @@ struct LuckyCatObservedThreadCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
-                        .fill(visualStatus.tint.opacity(0.05))
-                )
-        )
+        .background(cardBackground)
         .overlay(
             RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.52), lineWidth: 1)
         )
         .opacity(0.9)
+    }
+
+    private var cardBackground: some View {
+        Group {
+            if scrollOptimized {
+                RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
+                    .fill(LuckyCatTokens.Palette.glass.opacity(0.66))
+            } else {
+                RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
+                    .fill(.thinMaterial)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: LuckyCatLayout.observedCardCornerRadius, style: .continuous)
+                .fill(visualStatus.tint.opacity(scrollOptimized ? 0.035 : 0.05))
+        )
     }
 }

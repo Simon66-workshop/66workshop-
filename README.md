@@ -505,6 +505,10 @@ The checker is read-only. It does not modify Codex trust, tasklight state, or
 the Codex UI. It can report whether local config is valid and whether Codex
 app-server currently lists the hooks as trusted or untrusted, but Codex project
 hooks still require a manual trust confirmation in the Codex UI.
+If the checker reports `HOOK_VISIBILITY: hidden_not_loaded`, the hooks file is
+present but that workspace has not been loaded in Codex Desktop yet. If it
+reports `HOOK_VISIBILITY: visible_untrusted`, the workspace is loaded but still
+needs the manual Trust click.
 
 Detailed setup notes live in `docs/CODEX_HOOKS_SETUP.md`.
 
@@ -560,6 +564,8 @@ operation details live in `docs/HOOK_BRIDGE_LAUNCH_AGENT.md`.
 
 Each Codex workspace needs its own project hooks. A trusted hook setup in this
 66TaskLight repo does not automatically cover other Codex projects.
+The batch report is a coverage map, not proof that every discovered workspace is
+already reliably connected.
 
 Run a read-only batch report:
 
@@ -567,16 +573,22 @@ Run a read-only batch report:
 ./script/check_codex_workspaces_coverage.sh
 ```
 
-Install hooks for every discovered workspace:
+Install hooks for preferred/common workspaces first:
 
 ```bash
-./script/install_hooks_for_workspaces.sh --all-discovered
+./script/install_hooks_for_workspaces.sh --preferred
 ```
 
-Install only workspaces reported as missing or invalid:
+Install only preferred workspaces reported as missing or invalid:
 
 ```bash
 ./script/install_hooks_for_workspaces.sh --from-report
+```
+
+Install every discovered candidate only after reviewing the report:
+
+```bash
+./script/install_hooks_for_workspaces.sh --all-discovered
 ```
 
 After installing hooks, open each affected Codex workspace and approve hooks in

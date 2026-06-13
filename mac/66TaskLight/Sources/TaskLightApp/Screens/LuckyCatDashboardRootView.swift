@@ -5,11 +5,15 @@ struct LuckyCatDashboardRootView: View {
 
     var body: some View {
         Group {
-            if viewModel.expanded {
+            if viewModel.contentExpanded {
                 LuckyCatExpandedDashboardView(viewModel: viewModel)
             } else {
                 LuckyCatCompactView(viewModel: viewModel)
             }
+        }
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
         }
     }
 }

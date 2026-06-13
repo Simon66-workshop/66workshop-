@@ -29,6 +29,10 @@ public struct TaskLightConfig {
     public var hookBridgeHealthURL: URL
     public var uiStateURL: URL
     public var uiClientsDirectoryURL: URL
+    public var workspaceCoverageDirectoryURL: URL
+    public var workspaceCoverageRunStatusURL: URL
+    public var workspaceCoverageLatestJSONURL: URL
+    public var workspaceCoverageLatestMarkdownURL: URL
     public var eventsURL: URL
     public var playedEventsURL: URL
     public var lockURL: URL
@@ -51,7 +55,8 @@ public struct TaskLightConfig {
         observationsStateURL: URL? = nil,
         hookBridgeHealthURL: URL? = nil,
         uiStateURL: URL? = nil,
-        uiClientsDirectoryURL: URL? = nil
+        uiClientsDirectoryURL: URL? = nil,
+        workspaceCoverageDirectoryURL: URL? = nil
     ) {
         self.stateDirectory = stateDirectory
         self.stateURL = stateDirectory.appendingPathComponent("state.json")
@@ -62,6 +67,10 @@ public struct TaskLightConfig {
         self.hookBridgeHealthURL = hookBridgeHealthURL ?? stateDirectory.appendingPathComponent("hook_bridge_health.json")
         self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
+        self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
+        self.workspaceCoverageRunStatusURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("run_status.json")
+        self.workspaceCoverageLatestJSONURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("latest.json")
+        self.workspaceCoverageLatestMarkdownURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("latest.md")
         self.eventsURL = stateDirectory.appendingPathComponent("events.jsonl")
         self.playedEventsURL = stateDirectory.appendingPathComponent("played_events.json")
         self.lockURL = stateDirectory.appendingPathComponent(".lock")
@@ -87,6 +96,7 @@ public struct TaskLightConfig {
         let hookBridgeHealthURL = ProcessInfo.processInfo.environment["TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH"].map { URL(fileURLWithPath: $0) }
         let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
+        let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
             stateDirectory: stateDirectory,
             ttlSeconds: ttlSeconds,
@@ -99,7 +109,8 @@ public struct TaskLightConfig {
             observationsStateURL: observationsStateURL,
             hookBridgeHealthURL: hookBridgeHealthURL,
             uiStateURL: uiStateURL,
-            uiClientsDirectoryURL: uiClientsDirectoryURL
+            uiClientsDirectoryURL: uiClientsDirectoryURL,
+            workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL
         )
     }
 }
@@ -1249,6 +1260,68 @@ public struct TaskLightUIClientRecord: Codable, Equatable {
     }
 }
 
+public struct TaskLightWorkspaceCoverageRunStatus: Codable, Equatable {
+    public var schema_version: String?
+    public var status: String
+    public var message: String?
+    public var updated_at: String?
+    public var latest_json_path: String?
+    public var report_path: String?
+
+    public init(
+        schema_version: String? = "0.1",
+        status: String,
+        message: String? = nil,
+        updated_at: String? = nil,
+        latest_json_path: String? = nil,
+        report_path: String? = nil
+    ) {
+        self.schema_version = schema_version
+        self.status = status
+        self.message = message
+        self.updated_at = updated_at
+        self.latest_json_path = latest_json_path
+        self.report_path = report_path
+    }
+}
+
+public struct TaskLightWorkspaceCoverageReport: Codable, Equatable {
+    public struct Summary: Codable, Equatable {
+        public var workspace_count: Int?
+        public var trusted: Int?
+        public var installed_needs_trust: Int?
+        public var missing_hooks: Int?
+        public var invalid_hooks: Int?
+        public var not_loaded: Int?
+        public var diagnostic_only: Int?
+        public var unknown: Int?
+        public var preferred_workspace_count: Int?
+        public var preferred_trusted: Int?
+        public var preferred_installed_needs_trust: Int?
+        public var preferred_missing_hooks: Int?
+        public var preferred_invalid_hooks: Int?
+    }
+
+    public var schema_version: String?
+    public var generated_at: String?
+    public var status: String?
+    public var summary: Summary?
+}
+
+public struct TaskLightWorkspaceCoveragePresentation: Equatable {
+    public var message: String
+    public var status: String
+    public var isError: Bool
+    public var reportURL: URL?
+
+    public init(message: String, status: String, isError: Bool = false, reportURL: URL? = nil) {
+        self.message = message
+        self.status = status
+        self.isError = isError
+        self.reportURL = reportURL
+    }
+}
+
 public struct TaskLightEventRecord: Codable, Equatable {
     public var schema_version: Int
     public var event_id: String
@@ -1334,6 +1407,7 @@ public enum TaskLightLedgerKeys {
     public static let lastAlertStatus = "TaskLightLastAlertStatus"
     public static let lastAlertFingerprint = "TaskLightLastAlertFingerprint"
     public static let windowFrame = "TaskLightWindowFrame"
+    public static let compactWindowFrame = "TaskLightCompactWindowFrame"
     public static let muted = "TaskLightMuted"
     public static let expanded = "TaskLightExpanded"
 }

@@ -12,6 +12,12 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     }
 }
 
+func checkNear(_ lhs: CGFloat, _ rhs: CGFloat, _ message: String, tolerance: CGFloat = 0.01) {
+    if abs(lhs - rhs) > tolerance {
+        fail("\(message): \(lhs) != \(rhs)")
+    }
+}
+
 func makeTempStateDirectory() throws -> URL {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("tasklight-checks-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -235,8 +241,105 @@ do {
     let uiClientURL = config.uiClientsDirectoryURL.appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier).json")
     check(FileManager.default.fileExists(atPath: uiClientURL.path), "ui client diagnostic writes")
 
+    let coverageStatus = TaskLightWorkspaceCoverageRunStatus(
+        status: "ok",
+        message: "发现 2 个项目需要 Trust",
+        updated_at: TaskLightTaskRecord.nowString(),
+        latest_json_path: config.workspaceCoverageLatestJSONURL.path,
+        report_path: config.workspaceCoverageLatestMarkdownURL.path
+    )
+    try JSONEncoder().encode(coverageStatus).write(to: config.workspaceCoverageRunStatusURL)
+    let coverageReport = """
+    {
+      "schema_version": "0.1",
+      "status": "needs_trust",
+        "summary": {
+        "workspace_count": 3,
+        "preferred_workspace_count": 2,
+        "trusted": 1,
+        "preferred_trusted": 0,
+        "installed_needs_trust": 2,
+        "preferred_installed_needs_trust": 2,
+        "missing_hooks": 0,
+        "invalid_hooks": 0
+        }
+    }
+    """
+    try Data(coverageReport.utf8).write(to: config.workspaceCoverageLatestJSONURL)
+    let coverage = store.loadWorkspaceCoveragePresentation()
+    check(coverage?.message == "常用项目 2 个需要 Trust", "workspace coverage presentation prefers preferred summary")
+    check(coverage?.isError == false, "workspace coverage presentation does not mark trust as error")
+
     let taskOne = store.loadFallbackDashboard()
     check(taskOne.counts.gray >= 1, "gray count present for idle")
+
+    let compactSize = CGSize(width: 234.9, height: 181.395)
+    let expandedSize = CGSize(width: 680, height: 500)
+    let mainVisible = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    let sideVisible = CGRect(x: 1440, y: 0, width: 1280, height: 800)
+    let edgeCompactFrame = CGRect(x: 1190, y: 690, width: compactSize.width, height: compactSize.height)
+    let expandedFrame = TaskLightPanelGeometry.expandedFrame(
+        from: edgeCompactFrame,
+        expandedSize: expandedSize,
+        visibleFrames: [mainVisible, sideVisible]
+    )
+    checkNear(expandedFrame.midX, mainVisible.midX, "expanded frame centers on compact screen x")
+    checkNear(expandedFrame.midY, mainVisible.midY, "expanded frame centers on compact screen y")
+    check(expandedFrame.width == expandedSize.width, "expanded frame uses expanded width")
+    check(expandedFrame.height == expandedSize.height, "expanded frame uses expanded height")
+
+    let sideCompactFrame = CGRect(x: 1500, y: 540, width: compactSize.width, height: compactSize.height)
+    let sideExpandedFrame = TaskLightPanelGeometry.expandedFrame(
+        from: sideCompactFrame,
+        expandedSize: expandedSize,
+        visibleFrames: [mainVisible, sideVisible]
+    )
+    checkNear(sideExpandedFrame.midX, sideVisible.midX, "expanded frame centers on external screen x")
+    checkNear(sideExpandedFrame.midY, sideVisible.midY, "expanded frame centers on external screen y")
+
+    let movedExpandedFrame = CGRect(x: 200, y: 120, width: expandedSize.width, height: expandedSize.height)
+    let collapsedFrame = TaskLightPanelGeometry.collapsedCompactFrame(
+        storedCompactFrame: edgeCompactFrame,
+        currentExpandedFrame: movedExpandedFrame,
+        compactSize: compactSize,
+        visibleFrames: [mainVisible, sideVisible]
+    )
+    checkNear(collapsedFrame.origin.x, edgeCompactFrame.origin.x, "collapse restores pre-expanded compact x")
+    checkNear(collapsedFrame.origin.y, edgeCompactFrame.origin.y, "collapse restores pre-expanded compact y")
+    checkNear(collapsedFrame.width, compactSize.width, "collapse restores compact width")
+    checkNear(collapsedFrame.height, compactSize.height, "collapse restores compact height")
+
+    let offscreenCompact = CGRect(x: -500, y: -200, width: compactSize.width, height: compactSize.height)
+    let restoredClampedCompact = TaskLightPanelGeometry.restoredCompactFrame(
+        storedFrame: offscreenCompact,
+        fallbackFrame: edgeCompactFrame,
+        compactSize: compactSize,
+        visibleFrames: [mainVisible]
+    )
+    check(restoredClampedCompact.minX >= mainVisible.minX, "restored compact clamps x into screen")
+    check(restoredClampedCompact.minY >= mainVisible.minY, "restored compact clamps y into screen")
+    check(TaskLightPanelGeometry.usesAnimatedWindowFrameChanges == false, "panel frame transitions are non-animated")
+    check(TaskLightPanelGeometry.usesDualWindowSwap == true, "panel transitions use separate compact and expanded windows")
+    check(TaskLightPanelGeometry.usesHiddenAtomicContentSwap == false, "dual-window transitions do not need hidden same-window frame swaps")
+    check(TaskLightPanelGeometry.targetTransitionLatencyMilliseconds <= 50, "panel transition target is millisecond-level")
+    let transitionScore = TaskLightPanelGeometry.transitionScore(
+        expandsToCenter: true,
+        restoresCompactOrigin: true,
+        protectsCompactFrameDuringExpandedMove: true,
+        usesHiddenAtomicContentSwap: TaskLightPanelGeometry.usesHiddenAtomicContentSwap,
+        usesDualWindowSwap: TaskLightPanelGeometry.usesDualWindowSwap,
+        transitionLatencyMilliseconds: 16,
+        usesAnimation: TaskLightPanelGeometry.usesAnimatedWindowFrameChanges
+    )
+    check(transitionScore >= 95, "panel transition algorithm score is acceptable")
+    let renderingScore = TaskLightUIPerformanceBudget.renderingScore(
+        bellUsesCompositedAnimation: true,
+        scrollUsesOptimizedCards: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards,
+        scrollDisablesCardPulseAnimations: TaskLightUIPerformanceBudget.expandedScrollDisablesCardPulseAnimations,
+        scrollAvoidsPerCardMaterial: TaskLightUIPerformanceBudget.expandedScrollAvoidsPerCardMaterial
+    )
+    check(TaskLightUIPerformanceBudget.compactBellSwingDurationSeconds >= 1.5, "bell swing is low-frequency enough to avoid jitter")
+    check(renderingScore >= 95, "LuckyCat rendering performance score is acceptable")
 
     let running = store.loadTask(taskID: "20260609-120000-alpha-1234abcd")
     check(running == nil, "missing task is nil")

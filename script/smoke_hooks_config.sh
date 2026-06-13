@@ -6,6 +6,11 @@ CHECKER="$ROOT_DIR/script/check_codex_hooks_trust.py"
 HANDLER="$ROOT_DIR/script/codex_hook_event.py"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-hooks-config-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+STATE_DIR="$TMP_DIR/state"
+mkdir -p "$STATE_DIR"
+
+export TASKLIGHT_STATE_DIR="$STATE_DIR"
+export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$STATE_DIR/normalized_signals.jsonl"
 
 status_for() {
   local project_root="$1"

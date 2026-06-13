@@ -790,18 +790,29 @@ private final class LuckyCatFloatingBellNSView: NSView {
         staticLayer.frame = bounds
         staticLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
 
+        let ropeRed = NSColor(red: 0.91, green: 0.33, blue: 0.25, alpha: 1).cgColor
+        let pawClamp = CAShapeLayer()
+        pawClamp.path = CGPath(roundedRect: CGRect(x: 319, y: 37, width: 18, height: 11), cornerWidth: 5.5, cornerHeight: 5.5, transform: nil)
+        pawClamp.fillColor = ropeRed
+        staticLayer.addSublayer(pawClamp)
+
         let connector = CAShapeLayer()
-        connector.path = CGPath(roundedRect: CGRect(x: 324, y: 61, width: 8, height: 20), cornerWidth: 4, cornerHeight: 4, transform: nil)
-        connector.fillColor = NSColor(red: 0.91, green: 0.33, blue: 0.25, alpha: 1).cgColor
+        connector.path = CGPath(roundedRect: CGRect(x: 324, y: 42, width: 8, height: 48), cornerWidth: 4, cornerHeight: 4, transform: nil)
+        connector.fillColor = ropeRed
         staticLayer.addSublayer(connector)
+
+        let connectorHighlight = CAShapeLayer()
+        connectorHighlight.path = CGPath(roundedRect: CGRect(x: 326, y: 45, width: 2, height: 40), cornerWidth: 1, cornerHeight: 1, transform: nil)
+        connectorHighlight.fillColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        staticLayer.addSublayer(connectorHighlight)
 
         swingLayer.bounds = CGRect(x: 0, y: 0, width: 54, height: 122)
         swingLayer.position = CGPoint(x: 328, y: 84)
         swingLayer.anchorPoint = CGPoint(x: 0.5, y: 0)
         swingLayer.masksToBounds = false
 
-        ropeLayer.path = CGPath(roundedRect: CGRect(x: 23.5, y: 0, width: 7, height: 76), cornerWidth: 3.5, cornerHeight: 3.5, transform: nil)
-        ropeLayer.fillColor = NSColor(red: 0.91, green: 0.33, blue: 0.25, alpha: 1).cgColor
+        ropeLayer.path = CGPath(roundedRect: CGRect(x: 23.5, y: -6, width: 7, height: 82), cornerWidth: 3.5, cornerHeight: 3.5, transform: nil)
+        ropeLayer.fillColor = ropeRed
 
         let ringRect = CGRect(x: 21, y: 70, width: 12, height: 12)
         ringLayer.path = CGPath(ellipseIn: ringRect, transform: nil)

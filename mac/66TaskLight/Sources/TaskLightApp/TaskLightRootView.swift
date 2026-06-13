@@ -1,29 +1,73 @@
+import AppKit
 import SwiftUI
 import TaskLightCore
 
+enum TaskLightPanelDisplayMode {
+    case compact
+    case expanded
+}
+
 struct TaskLightRootView: View {
     @ObservedObject var viewModel: TaskLightViewModel
+    let displayMode: TaskLightPanelDisplayMode
 
     var body: some View {
-        LuckyCatDashboardRootView(viewModel: viewModel)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.toggleExpanded()
-            }
-            .contextMenu {
-                Button(viewModel.muted ? "Unmute" : "Mute") {
-                    viewModel.toggleMute()
+        switch displayMode {
+        case .compact:
+            LuckyCatCompactView(viewModel: viewModel)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    viewModel.toggleExpanded()
                 }
-                Button("Open Log") {
-                    viewModel.openLog()
+                .contextMenu {
+                    Button(viewModel.muted ? "Unmute" : "Mute") {
+                        viewModel.toggleMute()
+                    }
+                    Button("Open Log") {
+                        viewModel.openLog()
+                    }
+                    Button("Copy Blocker") {
+                        viewModel.copyBlocker()
+                    }
+                    Button("Clear") {
+                        viewModel.clearTask()
+                    }
                 }
-                Button("Copy Blocker") {
-                    viewModel.copyBlocker()
+        case .expanded:
+            LuckyCatExpandedDashboardView(viewModel: viewModel)
+                .contentShape(Rectangle())
+                .overlay {
+                    RightClickCollapseLayer {
+                        viewModel.collapseExpanded()
+                    }
                 }
-                Button("Clear") {
-                    viewModel.clearTask()
-                }
-            }
+        }
+    }
+}
+
+private struct RightClickCollapseLayer: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = RightClickCollapseNSView()
+        view.onRightClick = onRightClick
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? RightClickCollapseNSView)?.onRightClick = onRightClick
+    }
+}
+
+private final class RightClickCollapseNSView: NSView {
+    var onRightClick: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        NSApp.currentEvent?.type == .rightMouseDown ? self : nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?()
     }
 }
 

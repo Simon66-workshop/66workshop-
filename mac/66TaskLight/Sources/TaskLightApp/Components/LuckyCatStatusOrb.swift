@@ -68,8 +68,9 @@ struct LuckyCatStatusOrb: View {
                 .frame(width: size * (style == .embedded ? 0.18 : 0.22), height: size * (style == .embedded ? 0.18 : 0.22))
                 .offset(x: -size * 0.14, y: -size * 0.14)
         }
-        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: animated)
+        .animation(pulsing ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : nil, value: animated)
         .onAppear {
+            guard pulsing else { return }
             animated = true
         }
     }
