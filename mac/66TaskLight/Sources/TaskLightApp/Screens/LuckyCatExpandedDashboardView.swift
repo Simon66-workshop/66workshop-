@@ -20,6 +20,7 @@ struct LuckyCatExpandedDashboardView: View {
 
     @ObservedObject var viewModel: TaskLightViewModel
     @State private var renderedSection: Section = .overview
+    @State private var navigationSection: Section = .overview
     @State private var cacheKey = ""
     @State private var cachedManagedTasks: [TaskLightTaskSummary] = []
     @State private var cachedInvalidTasks: [TaskLightTaskSummary] = []
@@ -30,6 +31,7 @@ struct LuckyCatExpandedDashboardView: View {
     @State private var eventVisibleLimit = TaskLightUIPerformanceBudget.expandedRecentEventInitialRenderLimit
     @State private var lastSectionChangeAt = Date.distantPast
     @State private var cacheRefreshGeneration = 0
+    @State private var sectionSwitchGeneration = 0
 
     private enum TaskRowStyle {
         case card
@@ -58,7 +60,14 @@ struct LuckyCatExpandedDashboardView: View {
                         .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
                         .clipped()
 
-                    prewarmedContentDeck
+                    VStack(alignment: .leading, spacing: 14) {
+                        summaryStrip
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                        prewarmedContentDeck
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .frame(height: LuckyCatLayout.expandedContentScrollHeight, alignment: .topLeading)
+                    }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .topLeading)
                 }
@@ -130,7 +139,7 @@ struct LuckyCatExpandedDashboardView: View {
             VStack(alignment: .leading, spacing: LuckyCatLayout.expandedSidebarTabSpacing) {
                 LuckyCatExpandedSidebarNavigation(
                     sections: Section.allCases,
-                    initialSelection: renderedSection,
+                    initialSelection: navigationSection,
                     onSelect: selectSection
                 )
             }
@@ -139,13 +148,25 @@ struct LuckyCatExpandedDashboardView: View {
     }
 
     private func selectSection(_ section: Section) {
-        guard renderedSection != section else { return }
+        guard navigationSection != section || renderedSection != section else { return }
         lastSectionChangeAt = Date()
         var renderTransaction = Transaction()
         renderTransaction.disablesAnimations = true
         renderTransaction.animation = nil
         withTransaction(renderTransaction) {
-            renderedSection = section
+            navigationSection = section
+        }
+
+        sectionSwitchGeneration += 1
+        let generation = sectionSwitchGeneration
+        DispatchQueue.main.async {
+            guard sectionSwitchGeneration == generation else { return }
+            var contentTransaction = Transaction()
+            contentTransaction.disablesAnimations = true
+            contentTransaction.animation = nil
+            withTransaction(contentTransaction) {
+                renderedSection = section
+            }
         }
     }
 
@@ -171,7 +192,6 @@ struct LuckyCatExpandedDashboardView: View {
     ) -> some View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(alignment: .leading, spacing: 14) {
-                summaryStrip
                 dashboardContent(section: section)
             }
             .padding(.trailing, 8)
@@ -179,7 +199,7 @@ struct LuckyCatExpandedDashboardView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
+        .frame(height: LuckyCatLayout.expandedContentScrollHeight, alignment: .top)
         .clipped()
         .contentShape(Rectangle())
         .transaction { transaction in

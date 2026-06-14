@@ -44,14 +44,13 @@ struct LuckyCatCompactShell<Content: View>: View {
                 panelBackdrop
                 shellSurface
 
-                content
-
                 leftPawRepair
                 outerPaws
                 leftPawShellWrap
                 pawSeamBlend
-                bottomCollar
                 sidePawSupport
+                content
+                bottomCollar
             }
             .compositingGroup()
             .mask(panelMask)
@@ -86,9 +85,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.92),
-                                    LuckyCatTokens.Palette.cream.opacity(0.88),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.68)
+                                    Color.white.opacity(0.78),
+                                    LuckyCatTokens.Palette.cream.opacity(0.70),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.48)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -103,9 +102,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.96),
-                                    LuckyCatTokens.Palette.cream.opacity(0.92),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.74)
+                                    Color.white.opacity(0.82),
+                                    LuckyCatTokens.Palette.cream.opacity(0.74),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -118,9 +117,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.96),
-                                    LuckyCatTokens.Palette.cream.opacity(0.92),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.74)
+                                    Color.white.opacity(0.82),
+                                    LuckyCatTokens.Palette.cream.opacity(0.74),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -139,9 +138,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.96),
-                                    LuckyCatTokens.Palette.cream.opacity(0.92),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.74)
+                                    Color.white.opacity(0.82),
+                                    LuckyCatTokens.Palette.cream.opacity(0.74),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -150,11 +149,11 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .frame(width: 46, height: 36)
                         .offset(x: 1, y: 11)
                     Capsule(style: .continuous)
-                        .fill(LuckyCatTokens.Palette.cream.opacity(0.9))
+                        .fill(LuckyCatTokens.Palette.cream.opacity(0.72))
                         .frame(width: 10, height: 76)
                         .offset(x: 14, y: 6)
                     Circle()
-                        .fill(LuckyCatTokens.Palette.cream.opacity(0.94))
+                        .fill(LuckyCatTokens.Palette.cream.opacity(0.76))
                         .frame(width: 34, height: 34)
                         .offset(x: 13, y: 0)
                     Spacer()
@@ -162,7 +161,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                 .padding(.trailing, 4)
             }
         }
-        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.2), radius: 10, x: 0, y: 6)
+        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.15), radius: 10, x: 0, y: 6)
     }
 
     private var panelMask: some View {
@@ -217,9 +216,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.92),
-                                    LuckyCatTokens.Palette.cream.opacity(0.90),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.72)
+                                    Color.white.opacity(0.80),
+                                    LuckyCatTokens.Palette.cream.opacity(0.74),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.54)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -228,16 +227,16 @@ struct LuckyCatCompactShell<Content: View>: View {
                 )
                 .overlay(
                     LuckyCatShellShape()
-                        .stroke(Color.white.opacity(0.76), lineWidth: 1.1)
+                        .stroke(Color.white.opacity(0.62), lineWidth: 1.1)
                 )
                 .overlay(
                     LuckyCatShellShape()
                         .stroke(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.58),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.34),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.18)
+                                    Color.white.opacity(0.44),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.26),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.14)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -255,7 +254,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .blur(radius: 1.6)
                 )
                 .overlay(shellSheen)
-                .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.4), radius: 14, x: 0, y: 8)
+                .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.30), radius: 14, x: 0, y: 8)
                 .clipShape(LuckyCatShellShape())
                 .shadow(color: status.glow.opacity(0.17), radius: 11, x: 0, y: 0)
 
@@ -429,8 +428,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                LuckyCatTokens.Palette.shadow.opacity(0.24),
-                                LuckyCatTokens.Palette.shadow.opacity(0.08),
+                                LuckyCatTokens.Palette.goldDeep.opacity(0.14),
+                                LuckyCatTokens.Palette.gold.opacity(0.05),
                                 Color.clear
                             ],
                             center: .center,
@@ -440,7 +439,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                     )
                     .frame(width: LuckyCatLayout.compactBottomRingShadowSize, height: LuckyCatLayout.compactBottomRingShadowSize)
                     .offset(y: 4)
-                    .blur(radius: 4)
+                    .blur(radius: 3)
 
                 Circle()
                     .fill(
@@ -465,14 +464,18 @@ struct LuckyCatCompactShell<Content: View>: View {
                     )
                     .overlay(
                         Circle()
-                            .stroke(LuckyCatTokens.Palette.shadow.opacity(0.18), lineWidth: 8)
+                            .stroke(LuckyCatTokens.Palette.goldDeep.opacity(0.10), lineWidth: 6)
                             .padding(-2)
-                            .blur(radius: 3)
+                            .blur(radius: 1.8)
                             .mask(
                                 Circle()
                                     .fill(
                                         LinearGradient(
-                                            colors: [Color.black.opacity(0.95), Color.black.opacity(0.25), Color.clear],
+                                            colors: [
+                                                LuckyCatTokens.Palette.goldDeep.opacity(0.42),
+                                                LuckyCatTokens.Palette.gold.opacity(0.16),
+                                                Color.clear
+                                            ],
                                             startPoint: .bottom,
                                             endPoint: .top
                                         )
@@ -586,8 +589,9 @@ struct LuckyCatCompactShell<Content: View>: View {
                         .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
                         .tracking(0)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.38)
+                        .minimumScaleFactor(0.54)
                         .frame(width: LuckyCatLayout.compactBottomBandLeftTextWidth, alignment: .leading)
+                        .offset(x: LuckyCatLayout.compactBottomBandStatusTextOffsetX)
                         .shadow(color: Color.white.opacity(0.74), radius: 1.2, x: 0, y: 0.5)
 
                     Spacer(minLength: LuckyCatLayout.compactBottomBandCenterGap)

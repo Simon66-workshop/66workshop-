@@ -12,13 +12,30 @@ struct LuckyCatCompactView: View {
         viewModel.luckyCatPresentationTitle()
     }
 
+    private var compactDisplayTitle: String {
+        switch displayTitle.uppercased() {
+        case "RUNNING":
+            return "Running"
+        case "BLOCKED":
+            return "Blocked"
+        case "PENDING":
+            return "Pending"
+        case "DONE":
+            return "Done"
+        case "IDLE":
+            return "Idle"
+        default:
+            return displayTitle.prefix(1).uppercased() + displayTitle.dropFirst().lowercased()
+        }
+    }
+
     var body: some View {
         ZStack {
             LuckyCatCompactShell(
                 status: status,
                 progress: viewModel.compactProgressValue(),
                 highlightsBell: viewModel.compactShowsAlertBell(),
-                statusTitle: displayTitle,
+                statusTitle: compactDisplayTitle,
                 elapsedLabel: viewModel.quotaCompactText(),
                 elapsedLabelColor: quotaTextColor,
                 elapsedStatusDotColor: quotaFreshnessDotColor,

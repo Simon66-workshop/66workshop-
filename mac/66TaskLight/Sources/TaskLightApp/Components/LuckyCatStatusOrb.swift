@@ -29,43 +29,93 @@ struct LuckyCatStatusOrb: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            style == .embedded ? status.tint.opacity(0.98) : Color.white.opacity(0.92),
-                            status.tint.opacity(style == .embedded ? 0.88 : 0.95),
-                            status.tint.opacity(style == .embedded ? 0.30 : 0.42)
+                            style == .embedded ? status.tint : Color.white.opacity(0.92),
+                            status.tint,
+                            status.tint.opacity(style == .embedded ? 0.92 : 0.42)
                         ],
-                        center: style == .embedded ? .center : .topLeading,
+                        center: .topLeading,
                         startRadius: 1,
                         endRadius: size * (style == .embedded ? 0.62 : 0.72)
                     )
                 )
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.42), lineWidth: 1)
+                        .stroke(Color.white.opacity(style == .embedded ? 0.58 : 0.42), lineWidth: 1)
                 )
                 .frame(width: size, height: size)
 
             if style == .embedded {
                 Circle()
                     .fill(
-                        RadialGradient(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.58),
+                                Color.white.opacity(0.14),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .center
+                        )
+                    )
+                    .frame(width: size * 0.96, height: size * 0.96)
+                    .blendMode(.screen)
+
+                Circle()
+                    .stroke(
+                        LinearGradient(
                             colors: [
                                 Color.white.opacity(0.72),
+                                status.tint.opacity(0.18),
+                                status.tint.opacity(0.26)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 2.4
+                    )
+                    .frame(width: size * 0.92, height: size * 0.92)
+                    .blendMode(.screen)
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(0.76),
                                 Color.white.opacity(0.18),
                                 Color.clear
                             ],
                             center: .topLeading,
                             startRadius: 1,
-                            endRadius: size * 0.44
+                            endRadius: size * 0.48
                         )
                     )
+                    .frame(width: size * 0.78, height: size * 0.78)
+                    .offset(x: -size * 0.12, y: -size * 0.13)
+                    .blendMode(.screen)
+
+                Ellipse()
+                    .fill(Color.white.opacity(0.50))
+                    .frame(width: size * 0.38, height: size * 0.14)
+                    .rotationEffect(.degrees(-24))
+                    .offset(x: -size * 0.10, y: -size * 0.26)
+                    .blur(radius: 0.4)
+
+                Circle()
+                    .trim(from: 0.08, to: 0.27)
+                    .stroke(
+                        Color.white.opacity(pulsing ? 0.34 : 0.16),
+                        style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
+                    )
                     .frame(width: size * 0.72, height: size * 0.72)
-                    .offset(x: -size * 0.11, y: -size * 0.12)
+                    .rotationEffect(.degrees(animated ? 338 : -24))
+                    .offset(x: size * 0.03, y: size * 0.02)
+                    .blur(radius: 0.25)
                     .blendMode(.screen)
             }
 
             Circle()
-                .fill(Color.white.opacity(style == .embedded ? 0.38 : 0.44))
-                .frame(width: size * (style == .embedded ? 0.18 : 0.22), height: size * (style == .embedded ? 0.18 : 0.22))
+                .fill(Color.white.opacity(style == .embedded ? 0.58 : 0.44))
+                .frame(width: size * (style == .embedded ? 0.16 : 0.22), height: size * (style == .embedded ? 0.16 : 0.22))
                 .offset(x: -size * 0.14, y: -size * 0.14)
         }
         .animation(pulsing ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : nil, value: animated)
