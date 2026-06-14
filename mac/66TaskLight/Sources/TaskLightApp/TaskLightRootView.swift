@@ -37,7 +37,7 @@ struct TaskLightRootView: View {
             LuckyCatExpandedDashboardView(viewModel: viewModel)
                 .contentShape(Rectangle())
                 .overlay {
-                    RightClickCollapseLayer {
+                    ExpandedCollapseGestureLayer {
                         viewModel.collapseExpanded()
                     }
                 }
@@ -45,29 +45,68 @@ struct TaskLightRootView: View {
     }
 }
 
-private struct RightClickCollapseLayer: NSViewRepresentable {
-    let onRightClick: () -> Void
+private struct ExpandedCollapseGestureLayer: NSViewRepresentable {
+    let onCollapse: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCollapse: onCollapse)
+    }
 
     func makeNSView(context: Context) -> NSView {
-        let view = RightClickCollapseNSView()
-        view.onRightClick = onRightClick
+        let view = ExpandedCollapseGestureNSView()
+        view.coordinator = context.coordinator
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? RightClickCollapseNSView)?.onRightClick = onRightClick
+        context.coordinator.onCollapse = onCollapse
+        (nsView as? ExpandedCollapseGestureNSView)?.coordinator = context.coordinator
+    }
+
+    final class Coordinator {
+        var onCollapse: () -> Void
+
+        init(onCollapse: @escaping () -> Void) {
+            self.onCollapse = onCollapse
+        }
     }
 }
 
-private final class RightClickCollapseNSView: NSView {
-    var onRightClick: (() -> Void)?
+private final class ExpandedCollapseGestureNSView: NSView {
+    weak var coordinator: ExpandedCollapseGestureLayer.Coordinator?
+    private var eventMonitor: Any?
 
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        NSApp.currentEvent?.type == .rightMouseDown ? self : nil
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        removeEventMonitor()
+        guard window != nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            if event.type == .rightMouseDown {
+                self.coordinator?.onCollapse()
+                return nil
+            }
+            if event.type == .leftMouseDown && event.clickCount >= 2 {
+                self.coordinator?.onCollapse()
+                return nil
+            }
+            return event
+        }
     }
 
-    override func rightMouseDown(with event: NSEvent) {
-        onRightClick?()
+    deinit {
+        removeEventMonitor()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
+    }
+
+    private func removeEventMonitor() {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
     }
 }
 
