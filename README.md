@@ -750,3 +750,9 @@ When LuckyCat and Codex disagree about active work, start with:
 ```
 
 Coverage can write sanitized recommended fixtures with `--write-recommended-fixtures`; this is for regression capture only and never changes the main lamp.
+
+### Figma 备份
+
+- 一键备份组件与图标资产：
+  - `./script/backup_figma_assets.sh`
+- 产物：`backups/figma/66tasklight-figma-backup_YYYYMMDD_HHMMSS.tar.gz`
