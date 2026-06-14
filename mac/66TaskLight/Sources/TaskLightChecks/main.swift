@@ -99,7 +99,7 @@ do {
 
     let uiNow = TaskLightTaskRecord.nowString()
 	    let projectedUIState = TaskLightUIState(
-	        projector_version: "M3.3",
+	        projector_version: "M3.7",
 	        projector_pid: Int(ProcessInfo.processInfo.processIdentifier),
 	        projector_executable_path: "/tmp/state_projector.py",
 	        projector_code_hash: "sha256:checks",
@@ -250,7 +250,7 @@ do {
     try JSONEncoder().encode(projectedUIState).write(to: config.uiStateURL)
     let loadedUIState = store.loadProjectedUIState()
 	    check(loadedUIState.source == "state_projector", "ui_state preferred when fresh")
-	    check(loadedUIState.projector_version == "M3.3", "ui_state projector version decodes")
+	    check(loadedUIState.projector_version == "M3.7", "ui_state projector version decodes")
 	    check(loadedUIState.global_display_title == "RUNNING", "ui_state title decodes")
 	    check(loadedUIState.counts.running == 1, "ui_state counts decode")
 	    check(loadedUIState.counts.appserver_active == 1, "ui_state appserver count decodes")

@@ -335,7 +335,7 @@ public final class TaskLightStore {
         guard uiState.source == "state_projector" else {
             return false
         }
-        guard uiState.projector_version == "M3.3" else {
+        guard uiState.projector_version == "M3.7" else {
             return false
         }
         if let writerStatus = uiState.diagnostics.writer_status,
