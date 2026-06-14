@@ -2,7 +2,7 @@ import SwiftUI
 import TaskLightCore
 
 struct LuckyCatExpandedDashboardView: View {
-    private enum Section: String, CaseIterable {
+    fileprivate enum Section: String, CaseIterable {
         case overview = "总览"
         case tasks = "任务"
         case events = "事件"
@@ -19,7 +19,24 @@ struct LuckyCatExpandedDashboardView: View {
     }
 
     @ObservedObject var viewModel: TaskLightViewModel
-    @State private var selectedSection: Section = .overview
+    @State private var renderedSection: Section = .overview
+    @State private var cacheKey = ""
+    @State private var cachedManagedTasks: [TaskLightTaskSummary] = []
+    @State private var cachedInvalidTasks: [TaskLightTaskSummary] = []
+    @State private var cachedObservedThreads: [TaskLightObservationRecord] = []
+    @State private var cachedEvents: [TaskLightEventRecord] = []
+    @State private var overviewTaskVisibleLimit = TaskLightUIPerformanceBudget.expandedOverviewManagedTaskInitialRenderLimit
+    @State private var taskPageVisibleLimit = TaskLightUIPerformanceBudget.expandedTaskInitialRenderLimit
+    @State private var eventVisibleLimit = TaskLightUIPerformanceBudget.expandedRecentEventInitialRenderLimit
+    @State private var lastSectionChangeAt = Date.distantPast
+    @State private var cacheRefreshGeneration = 0
+
+    private enum TaskRowStyle {
+        case card
+        case compact
+    }
+
+    private static let cacheRefreshDeferralSeconds: TimeInterval = 0.24
 
     private var status: LuckyCatVisualStatus {
         viewModel.luckyCatPresentationStatus()
@@ -30,34 +47,32 @@ struct LuckyCatExpandedDashboardView: View {
     }
 
     var body: some View {
-        let managedTasks = viewModel.sortedManagedTasks()
-        let invalidTasks = viewModel.invalidManagedTasks()
-        let observedThreads = viewModel.visibleObservedThreads()
-
         LuckyCatGlassPanel(status: status) {
             VStack(alignment: .leading, spacing: 14) {
                 headerBar
+                    .frame(height: LuckyCatLayout.expandedHeaderHeight)
 
                 HStack(alignment: .top, spacing: 18) {
                     sidebar
                         .frame(width: LuckyCatLayout.expandedSidebarWidth)
+                        .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
+                        .clipped()
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        summaryStrip
-
-                        ScrollView(.vertical, showsIndicators: false) {
-                            dashboardContent(managedTasks: managedTasks, invalidTasks: invalidTasks, observedThreads: observedThreads)
-                            .padding(.trailing, 2)
-                            .transaction { transaction in
-                                transaction.animation = nil
-                                transaction.disablesAnimations = true
-                            }
-                        }
-                    }
+                    prewarmedContentDeck
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .topLeading)
                 }
+                .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(width: LuckyCatLayout.expandedWidth, height: LuckyCatLayout.expandedHeight)
+        .onAppear {
+            refreshContentCache(force: true)
+        }
+        .onReceive(viewModel.$uiState) { _ in
+            scheduleContentCacheRefresh()
+        }
     }
 
     private var headerBar: some View {
@@ -81,130 +96,427 @@ struct LuckyCatExpandedDashboardView: View {
                 )
 
             Spacer()
-
-            HStack(spacing: 14) {
-                Image(systemName: "minus")
-                Image(systemName: "xmark")
-            }
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(LuckyCatTokens.Palette.textPrimary.opacity(0.82))
         }
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             LuckyCatMascotView(status: status, large: true)
+                .frame(
+                    width: LuckyCatLayout.expandedSidebarMascotWidth,
+                    height: LuckyCatLayout.expandedSidebarMascotHeight,
+                    alignment: .center
+                )
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(displayTitle)
-                    .font(LuckyCatTokens.Typography.title)
+                    .font(.system(size: 32, weight: .black, design: .rounded))
                     .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 Text("M\(viewModel.managedActiveCount()) · O\(viewModel.observedDisplayCount())")
                     .font(LuckyCatTokens.Typography.subtitle)
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
                 Text(viewModel.luckyCatExpandedStatusText())
                     .font(LuckyCatTokens.Typography.taskMeta)
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
-                    .lineLimit(3)
-                Text(viewModel.stateSourceDiagnosticLabel())
-                    .font(LuckyCatTokens.Typography.taskMeta)
-                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
-                    .lineLimit(4)
-                Text(viewModel.currentThreadDiagnosticLabel())
-                    .font(LuckyCatTokens.Typography.taskMeta)
-                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
-                    .lineLimit(3)
-                Text(viewModel.bridgeHealthDiagnosticLabel())
-                    .font(LuckyCatTokens.Typography.taskMeta)
-                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
-                    .lineLimit(3)
+                    .lineLimit(2)
             }
+            .frame(height: LuckyCatLayout.expandedSidebarStatusHeight, alignment: .topLeading)
 
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Section.allCases, id: \.self) { section in
-                    sidebarTab(section)
-                }
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: LuckyCatLayout.expandedSidebarTabSpacing) {
+                LuckyCatExpandedSidebarNavigation(
+                    sections: Section.allCases,
+                    initialSelection: renderedSection,
+                    onSelect: selectSection
+                )
             }
-            .padding(.top, 4)
+        }
+        .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
+    }
+
+    private func selectSection(_ section: Section) {
+        guard renderedSection != section else { return }
+        lastSectionChangeAt = Date()
+        var renderTransaction = Transaction()
+        renderTransaction.disablesAnimations = true
+        renderTransaction.animation = nil
+        withTransaction(renderTransaction) {
+            renderedSection = section
+        }
+    }
+
+    private var prewarmedContentDeck: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Section.allCases, id: \.self) { section in
+                let isVisible = renderedSection == section
+                contentScrollPane(section: section)
+                    .opacity(isVisible ? 1 : 0)
+                    .allowsHitTesting(isVisible)
+                    .accessibilityHidden(!isVisible)
+                    .zIndex(isVisible ? 1 : 0)
+            }
+        }
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
+    }
+
+    private func contentScrollPane(
+        section: Section
+    ) -> some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                summaryStrip
+                dashboardContent(section: section)
+            }
+            .padding(.trailing, 8)
+            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(height: LuckyCatLayout.expandedMainHeight, alignment: .top)
+        .clipped()
+        .contentShape(Rectangle())
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
         }
     }
 
     @ViewBuilder
     private func dashboardContent(
-        managedTasks: [TaskLightTaskSummary],
-        invalidTasks: [TaskLightTaskSummary],
-        observedThreads: [TaskLightObservationRecord]
+        section: Section
     ) -> some View {
-        switch selectedSection {
+        switch section {
         case .overview:
             LazyVStack(alignment: .leading, spacing: 14) {
-                managedTaskSection(managedTasks)
-                invalidTaskSection(invalidTasks)
-                observedThreadSection(observedThreads)
+                codexUsageSection
+                managedTaskSection(
+                    cachedManagedTasks,
+                    visibleLimit: $overviewTaskVisibleLimit,
+                    maxLimit: TaskLightUIPerformanceBudget.expandedOverviewManagedTaskRenderLimit,
+                    rowStyle: .card
+                )
+                invalidTaskSection(cachedInvalidTasks, rowStyle: .card)
+                observedThreadSection(cachedObservedThreads)
             }
         case .tasks:
             LazyVStack(alignment: .leading, spacing: 14) {
-                managedTaskSection(managedTasks)
-                invalidTaskSection(invalidTasks)
+                managedTaskSection(
+                    cachedManagedTasks,
+                    visibleLimit: $taskPageVisibleLimit,
+                    maxLimit: TaskLightUIPerformanceBudget.expandedManagedTaskRenderLimit,
+                    rowStyle: .compact
+                )
+                invalidTaskSection(cachedInvalidTasks, rowStyle: .compact)
             }
         case .events:
-            eventSection(viewModel.recentEvents(limit: TaskLightUIPerformanceBudget.expandedRecentEventLimit))
+            eventSection(cachedEvents, visibleLimit: $eventVisibleLimit)
         case .settings:
             settingsSection
         }
     }
 
+    private func scheduleContentCacheRefresh() {
+        let elapsed = Date().timeIntervalSince(lastSectionChangeAt)
+        guard elapsed >= Self.cacheRefreshDeferralSeconds else {
+            cacheRefreshGeneration += 1
+            let generation = cacheRefreshGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.cacheRefreshDeferralSeconds) {
+                guard cacheRefreshGeneration == generation else { return }
+                refreshContentCache()
+            }
+            return
+        }
+        refreshContentCache()
+    }
+
+    private func refreshContentCache(force: Bool = false) {
+        let nextKey = [
+            viewModel.uiState.projector_generated_at,
+            String(viewModel.uiState.tasks.count),
+            String(viewModel.uiState.observations.count)
+        ].joined(separator: "|")
+        guard force || nextKey != cacheKey else { return }
+        cacheKey = nextKey
+        cachedManagedTasks = viewModel.sortedManagedTasks()
+        cachedInvalidTasks = viewModel.invalidManagedTasks()
+        cachedObservedThreads = viewModel.visibleObservedThreads()
+        cachedEvents = viewModel.recentEvents(limit: TaskLightUIPerformanceBudget.expandedRecentEventLimit)
+    }
+
+    private var codexUsageSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Codex Usage", subtitle: viewModel.quotaStatusLabel())
+            if let quota = viewModel.uiState.quota, quota.fresh {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Remaining")
+                                .font(LuckyCatTokens.Typography.statusPill)
+                                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                            Text("⚡ \(percentText(quota.effective_remaining_percent))")
+                                .font(.system(size: 24, weight: .black, design: .rounded))
+                                .foregroundStyle(quotaColor(quota.status))
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Text(quota.status.uppercased())
+                            .font(LuckyCatTokens.Typography.statusPill)
+                            .foregroundStyle(quotaColor(quota.status))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(quotaColor(quota.status).opacity(0.16))
+                            )
+                    }
+
+                    HStack(spacing: 10) {
+                        quotaMetric(
+                            title: quota.short_label ?? "短周期",
+                            value: percentText(quota.short_percent),
+                            detail: quotaWindowDetail(reset: quota.short_reset_label, bucketID: quota.short_bucket_id),
+                            status: quota.status
+                        )
+                        quotaMetric(
+                            title: quota.long_label ?? "长周期",
+                            value: percentText(quota.long_percent),
+                            detail: quotaWindowDetail(reset: quota.long_reset_label, bucketID: quota.long_bucket_id),
+                            status: quota.status
+                        )
+                    }
+
+                    HStack(spacing: 8) {
+                        quotaInfoPill(
+                            title: "Reset",
+                            value: quota.manual_resets_available.map { "R\($0)" } ?? "not provided"
+                        )
+                        quotaInfoPill(title: "Source", value: quota.source ?? "unknown")
+                    }
+
+                    HStack(spacing: 8) {
+                        quotaInfoPill(title: "Bucket", value: quota.bucket_id ?? quota.short_bucket_id ?? "unknown")
+                        quotaInfoPill(title: "Probe", value: quota.probe_mode ?? "unknown")
+                        quotaInfoPill(title: "Raw", value: quota.raw_window_count.map(String.init) ?? "unknown")
+                    }
+
+                    Text("Captured · \(quota.captured_at ?? "unknown") · \(quota.recommendation ?? "normal")")
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+                }
+                .padding(12)
+                .background(usageCardBackground)
+            } else {
+                HStack(spacing: 10) {
+                    Text("⚡Q?")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Quota missing or stale")
+                            .font(LuckyCatTokens.Typography.taskTitle)
+                            .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                        Text("State projector will keep the main lamp unchanged.")
+                            .font(LuckyCatTokens.Typography.taskMeta)
+                            .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(usageCardBackground)
+            }
+        }
+    }
+
+    private func quotaMetric(title: String, value: String, detail: String, status: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(LuckyCatTokens.Typography.statusPill)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                .lineLimit(1)
+            Text(value)
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(quotaColor(status))
+                .lineLimit(1)
+            Text(detail)
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.86))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(10)
+        .frame(minHeight: 62)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.42))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.44), lineWidth: 1)
+        )
+    }
+
+    private func quotaWindowDetail(reset: String?, bucketID: String?) -> String {
+        let resetPart = resetText(reset)
+        if let bucketID, !bucketID.isEmpty {
+            return "bucket \(bucketID) · \(resetPart)"
+        }
+        return resetPart
+    }
+
+    private func quotaInfoPill(title: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title.uppercased())
+                .font(LuckyCatTokens.Typography.statusPill)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            Text(value)
+                .font(LuckyCatTokens.Typography.taskMeta.weight(.bold))
+                .foregroundStyle(LuckyCatTokens.Palette.textPrimary.opacity(0.86))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.34))
+        )
+    }
+
+    private var usageCardBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(LuckyCatTokens.Palette.glass.opacity(0.58))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.44), lineWidth: 1)
+            )
+            .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.14), radius: 10, x: 0, y: 4)
+    }
+
+    private func percentText(_ value: Int?) -> String {
+        guard let value else { return "--" }
+        return "\(value)%"
+    }
+
+    private func resetText(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "reset unknown" }
+        return "\(value) reset"
+    }
+
+    private func quotaColor(_ status: String) -> Color {
+        switch status {
+        case "ok":
+            return LuckyCatTokens.Palette.green
+        case "watch":
+            return LuckyCatTokens.Palette.amber
+        case "low":
+            return LuckyCatTokens.Palette.collarRed
+        case "critical":
+            return LuckyCatTokens.Palette.red
+        default:
+            return LuckyCatTokens.Palette.textSecondary
+        }
+    }
+
     @ViewBuilder
-    private func managedTaskSection(_ managedTasks: [TaskLightTaskSummary]) -> some View {
-        sectionHeader("Managed Tasks", subtitle: "\(managedTasks.count) visible")
+    private func managedTaskSection(
+        _ managedTasks: [TaskLightTaskSummary],
+        visibleLimit: Binding<Int>,
+        maxLimit: Int,
+        rowStyle: TaskRowStyle
+    ) -> some View {
+        let cappedTotal = min(managedTasks.count, maxLimit)
+        let renderedCount = min(visibleLimit.wrappedValue, cappedTotal)
+        let visibleTasks = Array(managedTasks.prefix(renderedCount))
+        sectionHeader("Managed Tasks", subtitle: visibleCountSubtitle(rendered: visibleTasks.count, total: managedTasks.count))
         if managedTasks.isEmpty {
             emptyText("No managed tasks")
         } else {
             LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(managedTasks) { task in
-                    LuckyCatTaskCard(task: task, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
+                ForEach(visibleTasks) { task in
+                    switch rowStyle {
+                    case .card:
+                        LuckyCatTaskCard(task: task, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
+                    case .compact:
+                        LuckyCatTaskListRow(task: task)
+                    }
                 }
+                virtualListSentinel(
+                    rendered: renderedCount,
+                    maxRender: cappedTotal,
+                    total: managedTasks.count,
+                    noun: "tasks",
+                    visibleLimit: visibleLimit
+                )
             }
         }
     }
 
     @ViewBuilder
-    private func invalidTaskSection(_ invalidTasks: [TaskLightTaskSummary]) -> some View {
+    private func invalidTaskSection(_ invalidTasks: [TaskLightTaskSummary], rowStyle: TaskRowStyle) -> some View {
         if !invalidTasks.isEmpty {
-            sectionHeader("Invalid Task JSON", subtitle: "\(invalidTasks.count) isolated")
+            let visibleTasks = Array(invalidTasks.prefix(TaskLightUIPerformanceBudget.expandedInvalidTaskRenderLimit))
+            sectionHeader("Invalid Task JSON", subtitle: visibleCountSubtitle(rendered: visibleTasks.count, total: invalidTasks.count))
             LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(invalidTasks) { task in
-                    LuckyCatTaskCard(task: task, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
+                ForEach(visibleTasks) { task in
+                    switch rowStyle {
+                    case .card:
+                        LuckyCatTaskCard(task: task, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
+                    case .compact:
+                        LuckyCatTaskListRow(task: task)
+                    }
                 }
+                overflowHint(rendered: visibleTasks.count, total: invalidTasks.count, noun: "invalid tasks")
             }
         }
     }
 
     @ViewBuilder
     private func observedThreadSection(_ observedThreads: [TaskLightObservationRecord]) -> some View {
-        sectionHeader("Live Observed Threads", subtitle: "\(observedThreads.count) active")
+        let visibleThreads = Array(observedThreads.prefix(TaskLightUIPerformanceBudget.expandedObservedThreadRenderLimit))
+        sectionHeader("Live Observed Threads", subtitle: visibleCountSubtitle(rendered: visibleThreads.count, total: observedThreads.count))
         if observedThreads.isEmpty {
             emptyText("No live observed threads")
         } else {
             LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(observedThreads) { thread in
+                ForEach(visibleThreads) { thread in
                     LuckyCatObservedThreadCard(thread: thread, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
                 }
+                overflowHint(rendered: visibleThreads.count, total: observedThreads.count, noun: "observed threads")
             }
         }
     }
 
     @ViewBuilder
-    private func eventSection(_ events: [TaskLightEventRecord]) -> some View {
+    private func eventSection(_ events: [TaskLightEventRecord], visibleLimit: Binding<Int>) -> some View {
+        let renderedCount = min(visibleLimit.wrappedValue, events.count)
+        let visibleEvents = Array(events.prefix(renderedCount))
         LazyVStack(alignment: .leading, spacing: 10) {
             sectionHeader("Events", subtitle: "\(events.count) recent")
             if events.isEmpty {
                 emptyText("No events yet")
             } else {
-                ForEach(events, id: \.event_id) { event in
+                ForEach(visibleEvents, id: \.event_id) { event in
                     eventRow(event)
                 }
+                virtualListSentinel(
+                    rendered: renderedCount,
+                    maxRender: events.count,
+                    total: events.count,
+                    noun: "events",
+                    visibleLimit: visibleLimit
+                )
             }
         }
     }
@@ -247,39 +559,6 @@ struct LuckyCatExpandedDashboardView: View {
         )
     }
 
-    private func sidebarTab(_ section: Section) -> some View {
-        let selected = selectedSection == section
-        return Button {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            transaction.animation = nil
-            withTransaction(transaction) {
-                selectedSection = section
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: section.icon)
-                    .frame(width: 16)
-                Text(section.rawValue)
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 14, weight: selected ? .semibold : .regular, design: .rounded))
-            .foregroundStyle(selected ? LuckyCatTokens.Palette.textPrimary : LuckyCatTokens.Palette.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.55) : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
-        .transaction { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-        }
-    }
-
     private func sectionHeader(_ title: String, subtitle: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title.uppercased())
@@ -289,6 +568,83 @@ struct LuckyCatExpandedDashboardView: View {
             Text(subtitle)
                 .font(LuckyCatTokens.Typography.taskMeta)
                 .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+        }
+    }
+
+    private func visibleCountSubtitle(rendered: Int, total: Int) -> String {
+        guard total > rendered else { return "\(total) visible" }
+        return "\(rendered)/\(total) visible"
+    }
+
+    private func virtualListSentinel(
+        rendered: Int,
+        maxRender: Int,
+        total: Int,
+        noun: String,
+        visibleLimit: Binding<Int>
+    ) -> some View {
+        Group {
+            if total > rendered {
+                Button {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        guard rendered < maxRender else { return }
+                        let next = min(maxRender, rendered + TaskLightUIPerformanceBudget.expandedTaskRenderBatchSize)
+                        if visibleLimit.wrappedValue != next {
+                            visibleLimit.wrappedValue = next
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(virtualListHint(rendered: rendered, maxRender: maxRender, total: total, noun: noun))
+                    }
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white.opacity(0.28))
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            }
+        }
+    }
+
+    private func virtualListHint(rendered: Int, maxRender: Int, total: Int, noun: String) -> String {
+        if rendered < maxRender {
+            return "Show more \(noun) · \(rendered)/\(total)"
+        }
+        if total > maxRender {
+            return "Showing \(rendered) of \(total) \(noun). Use logs for full history."
+        }
+        return "Showing \(rendered) of \(total) \(noun)."
+    }
+
+    @ViewBuilder
+    private func overflowHint(rendered: Int, total: Int, noun: String) -> some View {
+        if total > rendered {
+            Text("Showing first \(rendered) of \(total) \(noun). Use state filters or logs for the full history.")
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.78))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.28))
+                )
         }
     }
 
@@ -383,5 +739,163 @@ private struct LuckyCatSummaryBubble: View {
                 .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct LuckyCatTaskListRow: View {
+    let task: TaskLightTaskSummary
+
+    private var visualStatus: LuckyCatVisualStatus {
+        LuckyCatStatusStyle.taskStatus(from: task)
+    }
+
+    private var statusLabel: String {
+        switch task.effective_status {
+        case TaskLightStatus.blocked.rawValue:
+            return "BLOCKED"
+        case TaskLightStatus.stale.rawValue:
+            return "STALE"
+        case TaskLightStatus.running.rawValue:
+            return "RUNNING"
+        case TaskLightStatus.queued.rawValue:
+            return "QUEUED"
+        case TaskLightStatus.done_unverified.rawValue:
+            return "待验收"
+        case TaskLightStatus.done_verified.rawValue:
+            return "DONE"
+        case TaskLightStatus.cancelled.rawValue:
+            return "CANCELLED"
+        default:
+            return task.effective_status.uppercased()
+        }
+    }
+
+    private var detailText: String {
+        if let phase = task.phase, !phase.isEmpty {
+            return phase
+        }
+        if let summary = task.summary, !summary.isEmpty {
+            return summary
+        }
+        if let message = task.message, !message.isEmpty {
+            return message
+        }
+        return task.short_task_id
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(visualStatus.tint.opacity(0.88))
+                .frame(width: 9, height: 9)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task.title)
+                    .font(LuckyCatTokens.Typography.taskTitle)
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    .lineLimit(1)
+                Text(detailText)
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(statusLabel)
+                    .font(LuckyCatTokens.Typography.statusPill)
+                    .foregroundStyle(visualStatus.tint)
+                    .lineLimit(1)
+                if let timestamp = task.updated_at ?? task.started_at ?? task.created_at {
+                    Text(timestamp)
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.72))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.42))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.34), lineWidth: 1)
+        )
+    }
+}
+
+private struct LuckyCatExpandedSidebarNavigation: View {
+    let sections: [LuckyCatExpandedDashboardView.Section]
+    let initialSelection: LuckyCatExpandedDashboardView.Section
+    let onSelect: (LuckyCatExpandedDashboardView.Section) -> Void
+
+    @State private var selectedSection: LuckyCatExpandedDashboardView.Section
+
+    init(
+        sections: [LuckyCatExpandedDashboardView.Section],
+        initialSelection: LuckyCatExpandedDashboardView.Section,
+        onSelect: @escaping (LuckyCatExpandedDashboardView.Section) -> Void
+    ) {
+        self.sections = sections
+        self.initialSelection = initialSelection
+        self.onSelect = onSelect
+        _selectedSection = State(initialValue: initialSelection)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LuckyCatLayout.expandedSidebarTabSpacing) {
+            ForEach(sections, id: \.self) { section in
+                tab(section)
+            }
+        }
+        .onChange(of: initialSelection) { newValue in
+            guard selectedSection != newValue else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            transaction.animation = nil
+            withTransaction(transaction) {
+                selectedSection = newValue
+            }
+        }
+    }
+
+    private func tab(_ section: LuckyCatExpandedDashboardView.Section) -> some View {
+        let selected = selectedSection == section
+        return Button {
+            guard selectedSection != section else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            transaction.animation = nil
+            withTransaction(transaction) {
+                selectedSection = section
+            }
+            onSelect(section)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: section.icon)
+                    .frame(width: 16)
+                Text(section.rawValue)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 14, weight: selected ? .semibold : .regular, design: .rounded))
+            .foregroundStyle(selected ? LuckyCatTokens.Palette.textPrimary : LuckyCatTokens.Palette.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(height: LuckyCatLayout.expandedSidebarTabHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(selected ? Color.white.opacity(0.55) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 }

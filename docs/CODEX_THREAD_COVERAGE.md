@@ -12,6 +12,15 @@ can be captured by `script/capture_status_mismatch.sh` and converted into a
 status-reflection smoke case without saving prompt, response, auth, or raw log
 body content.
 
+M3.7 can also write those recommended fixtures directly when explicitly asked:
+
+```bash
+./script/check_codex_thread_coverage.sh --write-recommended-fixtures
+```
+
+The default report remains read-only. Fixture writing is only for regression
+capture.
+
 ## Why Coverage Matters
 
 Codex project hooks are loaded per workspace. A hook configuration in the
@@ -26,6 +35,7 @@ are diagnostic only and must not light the main lamp.
 ./script/check_codex_thread_coverage.sh
 ./script/check_codex_thread_coverage.sh --json
 ./script/check_codex_thread_coverage.sh --workspace "/path/to/project"
+./script/check_codex_thread_coverage.sh --write-recommended-fixtures
 ./script/install_hooks_for_workspace.sh "/path/to/project"
 ./script/capture_status_mismatch.sh --expected running --note "Codex is active but LuckyCat stayed DONE"
 ```

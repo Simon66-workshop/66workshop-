@@ -147,6 +147,50 @@ do {
 	                state_cause: "codex_hook:item_started"
 	            )
 	        ],
+	        quota: CodexQuotaUIState(
+	            source: "clipboard_import",
+	            fresh: true,
+	            status: "watch",
+	            effective_remaining_percent: 42,
+	            display_windows: [
+	                CodexQuotaWindowUIState(
+	                    id: "short",
+	                    label: "5小时",
+	                    bucket_id: "manual",
+	                    remaining_percent: 93,
+	                    reset_label: "11:44",
+	                    window_duration_mins: 300,
+	                    health: "ok",
+	                    selection_reason: "selected_manual_or_unknown_bucket_from_1_candidate"
+	                ),
+	                CodexQuotaWindowUIState(
+	                    id: "long",
+	                    label: "1周",
+	                    bucket_id: "manual",
+	                    remaining_percent: 42,
+	                    reset_label: "6月18日",
+	                    window_duration_mins: 10080,
+	                    health: "watch",
+	                    selection_reason: "selected_manual_or_unknown_bucket_from_1_candidate"
+	                )
+	            ],
+	            raw_window_count: 2,
+	            captured_age_sec: 1,
+	            probe_mode: "manual",
+	            bucket_id: "manual",
+	            warnings: [],
+	            short_percent: 93,
+	            short_label: "5小时",
+	            short_reset_label: "11:44",
+	            short_bucket_id: "manual",
+	            long_percent: 42,
+	            long_label: "1周",
+	            long_reset_label: "6月18日",
+	            long_bucket_id: "manual",
+	            manual_resets_available: 1,
+	            captured_at: uiNow,
+	            recommendation: "watch_usage"
+	        ),
 	        diagnostics: TaskLightUIDiagnostics(
 	            writer_status: "ok",
 	            hook_bridge_status: "ok",
@@ -193,7 +237,14 @@ do {
 	                )
 	            ],
 	            appserver_active_count: 1,
-	            process_observed_count: 1
+	            process_observed_count: 1,
+	            quota_status: "watch",
+	            quota_fresh: true,
+	            quota_source: "clipboard_import",
+	            quota_state_path: config.stateDirectory.appendingPathComponent("quota_state.json").path,
+	            quota_probe_status: "ok",
+	            quota_probe_health_path: config.stateDirectory.appendingPathComponent("quota_probe_health.json").path,
+	            quota_warning_count: 0
 	        )
 	    )
     try JSONEncoder().encode(projectedUIState).write(to: config.uiStateURL)
@@ -206,6 +257,15 @@ do {
 	    check(loadedUIState.counts.process_observed == 1, "ui_state process observed count decodes")
 	    check(loadedUIState.runtime_candidates?.first?.display_scope == "active_execution", "ui_state runtime candidates decode")
 	    check(loadedUIState.diagnostics.writer_status == "ok", "ui_state writer status decodes")
+	    check(loadedUIState.quota?.status == "watch", "ui_state quota status decodes")
+	    check(loadedUIState.quota?.short_percent == 93, "ui_state quota short percent decodes")
+	    check(loadedUIState.quota?.long_percent == 42, "ui_state quota long percent decodes")
+	    check(loadedUIState.quota?.manual_resets_available == 1, "ui_state quota reset count decodes")
+	    check(loadedUIState.quota?.display_windows?.count == 2, "ui_state quota display windows decode")
+	    check(loadedUIState.quota?.raw_window_count == 2, "ui_state quota raw window count decodes")
+	    check(loadedUIState.quota?.bucket_id == "manual", "ui_state quota bucket id decodes")
+	    check(loadedUIState.diagnostics.quota_status == "watch", "ui_state diagnostics decode quota status")
+	    check(loadedUIState.diagnostics.quota_probe_status == "ok", "ui_state diagnostics decode quota probe status")
 	    check(loadedUIState.diagnostics.signal_bus_status == "readable", "ui_state diagnostics decode signal bus status")
     check(loadedUIState.diagnostics.signal_bus_record_count == 7, "ui_state diagnostics decode signal bus record count")
     check(loadedUIState.diagnostics.signal_bus_source_counts?["codex_hook"] == 4, "ui_state diagnostics decode signal bus source counts")
@@ -228,9 +288,116 @@ do {
     var staleProjectedUIState = projectedUIState
     staleProjectedUIState.projector_generated_at = "2020-01-01T00:00:00Z"
     try JSONEncoder().encode(staleProjectedUIState).write(to: config.uiStateURL)
-    let staleFallbackUIState = store.loadProjectedUIState()
-    check(staleFallbackUIState.source == "swift_fallback", "stale ui_state falls back")
-    check(staleFallbackUIState.diagnostics.fallback_reason == "projector_stale", "fallback reason records stale projector")
+    let staleLoadedUIState = store.loadProjectedUIState()
+    check(staleLoadedUIState.source == "state_projector", "readable stale ui_state remains UI truth")
+    check(staleLoadedUIState.diagnostics.fallback_reason != "projector_stale", "readable stale ui_state does not enter legacy fallback")
+
+    let fallbackQuotaJSON = """
+    {
+      "schema_version": "0.2",
+      "source": "codex_appserver",
+      "fresh": true,
+      "quota_status": "watch",
+      "effective_remaining_percent": 41,
+      "captured_at": "\(uiNow)",
+      "recommendation": "watch_usage",
+      "manual_resets": { "available_count": null },
+      "raw_windows": [
+        {
+          "bucket_id": "codex_bengalfox",
+          "label": "5小时",
+          "remaining_percent": 97,
+          "reset_label": "15:18",
+          "window_duration_mins": 300,
+          "selection_reason": "raw_model_specific_codex_bucket"
+        },
+        {
+          "bucket_id": "codex",
+          "label": "5小时",
+          "remaining_percent": 98,
+          "reset_label": "16:45",
+          "window_duration_mins": 300,
+          "selection_reason": "raw_account_codex_bucket"
+        },
+        {
+          "bucket_id": "codex_bengalfox",
+          "label": "1周",
+          "remaining_percent": 43,
+          "reset_label": "6月18日",
+          "window_duration_mins": 10080,
+          "selection_reason": "raw_model_specific_codex_bucket"
+        },
+        {
+          "bucket_id": "codex",
+          "label": "1周",
+          "remaining_percent": 40,
+          "reset_label": "6月18日",
+          "window_duration_mins": 10080,
+          "selection_reason": "raw_account_codex_bucket"
+        }
+      ],
+      "display_windows": [
+        {
+          "id": "short",
+          "bucket_id": "codex",
+          "label": "5小时",
+          "remaining_percent": 98,
+          "reset_label": "16:45",
+          "window_duration_mins": 300,
+          "selection_reason": "selected_account_codex_bucket_from_2_candidates"
+        },
+        {
+          "id": "long",
+          "bucket_id": "codex",
+          "label": "1周",
+          "remaining_percent": 40,
+          "reset_label": "6月18日",
+          "window_duration_mins": 10080,
+          "selection_reason": "selected_account_codex_bucket_from_2_candidates"
+        }
+      ],
+      "windows": [
+        {
+          "bucket_id": "codex_bengalfox",
+          "label": "5小时",
+          "remaining_percent": 97,
+          "reset_label": "15:18",
+          "window_duration_mins": 300
+        },
+        {
+          "bucket_id": "codex",
+          "label": "5小时",
+          "remaining_percent": 98,
+          "reset_label": "16:45",
+          "window_duration_mins": 300
+        },
+        {
+          "bucket_id": "codex_bengalfox",
+          "label": "1周",
+          "remaining_percent": 43,
+          "reset_label": "6月18日",
+          "window_duration_mins": 10080
+        },
+        {
+          "bucket_id": "codex",
+          "label": "1周",
+          "remaining_percent": 40,
+          "reset_label": "6月18日",
+          "window_duration_mins": 10080
+        }
+      ]
+    }
+    """
+    try fallbackQuotaJSON.data(using: .utf8)!.write(to: config.stateDirectory.appendingPathComponent("quota_state.json"))
+    try "{broken".data(using: .utf8)!.write(to: config.uiStateURL)
+    let quotaFallbackUIState = store.loadProjectedUIState()
+    check(quotaFallbackUIState.source == "swift_fallback", "corrupt ui_state still enters fallback")
+    check(quotaFallbackUIState.quota?.source == "codex_appserver", "fallback ui_state loads quota_state source")
+    check(quotaFallbackUIState.quota?.short_percent == 98, "fallback ui_state prefers account-level short quota bucket")
+    check(quotaFallbackUIState.quota?.long_percent == 40, "fallback ui_state prefers account-level long quota bucket")
+    check(quotaFallbackUIState.quota?.raw_window_count == 4, "fallback ui_state records raw quota window count")
+    check(quotaFallbackUIState.quota?.short_bucket_id == "codex", "fallback ui_state exposes short quota bucket")
+    check(quotaFallbackUIState.diagnostics.quota_status == "watch", "fallback diagnostics records quota status")
 
     store.saveUIClientRecord(
         bundleID: "com.66tasklight.checks",

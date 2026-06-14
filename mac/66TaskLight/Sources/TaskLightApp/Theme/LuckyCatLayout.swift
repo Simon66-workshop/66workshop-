@@ -20,8 +20,8 @@ enum LuckyCatLayout {
     static let compactBottomOrbSize: CGFloat = 46
     static let compactBottomOrbFrameSize: CGFloat = 46
     static let compactBottomOrbInset: CGFloat = 4
-    static let expandedWidth: CGFloat = 680
-    static let expandedHeight: CGFloat = 500
+    static let expandedWidth: CGFloat = 800
+    static let expandedHeight: CGFloat = 680
     static let cornerRadius: CGFloat = 34
     static let panelPadding: CGFloat = 22
 
@@ -41,4 +41,13 @@ enum LuckyCatLayout {
     static let taskCardCornerRadius: CGFloat = 16
     static let observedCardCornerRadius: CGFloat = 16
     static let expandedSidebarWidth: CGFloat = 210
+    static let expandedHeaderHeight: CGFloat = 34
+    static let expandedMainHeight: CGFloat = expandedHeight - (panelPadding * 2) - expandedHeaderHeight - 14
+    static let expandedSummaryStripHeight: CGFloat = 104
+    static let expandedContentScrollHeight: CGFloat = expandedMainHeight - expandedSummaryStripHeight - 14
+    static let expandedSidebarMascotWidth: CGFloat = 172
+    static let expandedSidebarMascotHeight: CGFloat = 166
+    static let expandedSidebarStatusHeight: CGFloat = 112
+    static let expandedSidebarTabHeight: CGFloat = 34
+    static let expandedSidebarTabSpacing: CGFloat = 7
 }

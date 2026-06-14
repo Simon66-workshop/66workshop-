@@ -5,6 +5,14 @@ public enum TaskLightUIPerformanceBudget {
     public static let expandedScrollUsesOptimizedCards = true
     public static let expandedScrollDisablesCardPulseAnimations = true
     public static let expandedScrollAvoidsPerCardMaterial = true
+    public static let expandedOverviewManagedTaskInitialRenderLimit = 4
+    public static let expandedOverviewManagedTaskRenderLimit = 16
+    public static let expandedTaskInitialRenderLimit = 10
+    public static let expandedManagedTaskRenderLimit = 80
+    public static let expandedTaskRenderBatchSize = 12
+    public static let expandedInvalidTaskRenderLimit = 40
+    public static let expandedObservedThreadRenderLimit = 40
+    public static let expandedRecentEventInitialRenderLimit = 12
     public static let expandedRecentEventLimit = 40
 
     public static func renderingScore(

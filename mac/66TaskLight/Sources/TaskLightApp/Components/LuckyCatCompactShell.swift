@@ -9,6 +9,8 @@ struct LuckyCatCompactShell<Content: View>: View {
     let highlightsBell: Bool
     let statusTitle: String
     let elapsedLabel: String
+    let elapsedLabelColor: Color
+    let elapsedStatusDotColor: Color?
     let onNoseTripleTap: (() -> Void)?
     let content: Content
 
@@ -20,6 +22,8 @@ struct LuckyCatCompactShell<Content: View>: View {
         highlightsBell: Bool = false,
         statusTitle: String,
         elapsedLabel: String,
+        elapsedLabelColor: Color = LuckyCatTokens.Palette.textPrimary.opacity(0.9),
+        elapsedStatusDotColor: Color? = nil,
         onNoseTripleTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -28,6 +32,8 @@ struct LuckyCatCompactShell<Content: View>: View {
         self.highlightsBell = highlightsBell
         self.statusTitle = statusTitle
         self.elapsedLabel = elapsedLabel
+        self.elapsedLabelColor = elapsedLabelColor
+        self.elapsedStatusDotColor = elapsedStatusDotColor
         self.onNoseTripleTap = onNoseTripleTap
         self.content = content()
     }
@@ -586,14 +592,22 @@ struct LuckyCatCompactShell<Content: View>: View {
 
                     Spacer(minLength: LuckyCatLayout.compactBottomBandCenterGap)
 
-                    Text(elapsedLabel)
-                        .font(.system(size: LuckyCatLayout.compactBottomBandTextSize, weight: .heavy, design: .rounded))
-                        .foregroundStyle(LuckyCatTokens.Palette.textPrimary.opacity(0.9))
-                        .tracking(0)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.38)
-                        .frame(width: LuckyCatLayout.compactBottomBandRightTextWidth, alignment: .trailing)
-                        .shadow(color: Color.white.opacity(0.74), radius: 1.2, x: 0, y: 0.5)
+                    HStack(spacing: 4) {
+                        if let elapsedStatusDotColor {
+                            Circle()
+                                .fill(elapsedStatusDotColor)
+                                .frame(width: 5, height: 5)
+                                .shadow(color: elapsedStatusDotColor.opacity(0.45), radius: 2, x: 0, y: 0)
+                        }
+                        Text(elapsedLabel)
+                            .font(.system(size: LuckyCatLayout.compactBottomBandTextSize, weight: .heavy, design: .rounded))
+                            .foregroundStyle(elapsedLabelColor)
+                            .tracking(0)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.38)
+                    }
+                    .frame(width: LuckyCatLayout.compactBottomBandRightTextWidth, alignment: .trailing)
+                    .shadow(color: Color.white.opacity(0.74), radius: 1.2, x: 0, y: 0.5)
                 }
                 .padding(.horizontal, LuckyCatLayout.compactBottomBandHorizontalPadding)
                 .offset(y: LuckyCatLayout.compactBottomBandTextVerticalOffset)

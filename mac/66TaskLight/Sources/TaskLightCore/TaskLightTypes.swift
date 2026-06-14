@@ -1067,6 +1067,13 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
     public var appserver_active_count: Int?
     public var process_observed_count: Int?
     public var fallback_reason: String?
+    public var quota_status: String?
+    public var quota_fresh: Bool?
+    public var quota_source: String?
+    public var quota_state_path: String?
+    public var quota_probe_status: String?
+    public var quota_probe_health_path: String?
+    public var quota_warning_count: Int?
 
     public init(
         writer_status: String? = nil,
@@ -1114,7 +1121,14 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
         top_runtime_candidates: [TaskLightRuntimeCandidate]? = nil,
         appserver_active_count: Int? = nil,
         process_observed_count: Int? = nil,
-        fallback_reason: String? = nil
+        fallback_reason: String? = nil,
+        quota_status: String? = nil,
+        quota_fresh: Bool? = nil,
+        quota_source: String? = nil,
+        quota_state_path: String? = nil,
+        quota_probe_status: String? = nil,
+        quota_probe_health_path: String? = nil,
+        quota_warning_count: Int? = nil
     ) {
         self.writer_status = writer_status
         self.hook_bridge_status = hook_bridge_status
@@ -1162,6 +1176,117 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
         self.appserver_active_count = appserver_active_count
         self.process_observed_count = process_observed_count
         self.fallback_reason = fallback_reason
+        self.quota_status = quota_status
+        self.quota_fresh = quota_fresh
+        self.quota_source = quota_source
+        self.quota_state_path = quota_state_path
+        self.quota_probe_status = quota_probe_status
+        self.quota_probe_health_path = quota_probe_health_path
+        self.quota_warning_count = quota_warning_count
+    }
+}
+
+public struct CodexQuotaWindowUIState: Codable, Equatable {
+    public var id: String?
+    public var label: String?
+    public var bucket_id: String?
+    public var remaining_percent: Int?
+    public var used_percent: Int?
+    public var reset_label: String?
+    public var window_duration_mins: Int?
+    public var health: String?
+    public var selection_reason: String?
+
+    public init(
+        id: String? = nil,
+        label: String? = nil,
+        bucket_id: String? = nil,
+        remaining_percent: Int? = nil,
+        used_percent: Int? = nil,
+        reset_label: String? = nil,
+        window_duration_mins: Int? = nil,
+        health: String? = nil,
+        selection_reason: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.bucket_id = bucket_id
+        self.remaining_percent = remaining_percent
+        self.used_percent = used_percent
+        self.reset_label = reset_label
+        self.window_duration_mins = window_duration_mins
+        self.health = health
+        self.selection_reason = selection_reason
+    }
+}
+
+public struct CodexQuotaUIState: Codable, Equatable {
+    public var source: String?
+    public var fresh: Bool
+    public var status: String
+    public var effective_remaining_percent: Int?
+    public var display_windows: [CodexQuotaWindowUIState]?
+    public var raw_window_count: Int?
+    public var captured_age_sec: Double?
+    public var probe_mode: String?
+    public var bucket_id: String?
+    public var warnings: [String]?
+    public var short_percent: Int?
+    public var short_label: String?
+    public var short_reset_label: String?
+    public var short_bucket_id: String?
+    public var long_percent: Int?
+    public var long_label: String?
+    public var long_reset_label: String?
+    public var long_bucket_id: String?
+    public var manual_resets_available: Int?
+    public var captured_at: String?
+    public var recommendation: String?
+
+    public init(
+        source: String? = nil,
+        fresh: Bool = false,
+        status: String = "unknown",
+        effective_remaining_percent: Int? = nil,
+        display_windows: [CodexQuotaWindowUIState]? = nil,
+        raw_window_count: Int? = nil,
+        captured_age_sec: Double? = nil,
+        probe_mode: String? = nil,
+        bucket_id: String? = nil,
+        warnings: [String]? = nil,
+        short_percent: Int? = nil,
+        short_label: String? = nil,
+        short_reset_label: String? = nil,
+        short_bucket_id: String? = nil,
+        long_percent: Int? = nil,
+        long_label: String? = nil,
+        long_reset_label: String? = nil,
+        long_bucket_id: String? = nil,
+        manual_resets_available: Int? = nil,
+        captured_at: String? = nil,
+        recommendation: String? = nil
+    ) {
+        self.source = source
+        self.fresh = fresh
+        self.status = status
+        self.effective_remaining_percent = effective_remaining_percent
+        self.display_windows = display_windows
+        self.raw_window_count = raw_window_count
+        self.captured_age_sec = captured_age_sec
+        self.probe_mode = probe_mode
+        self.bucket_id = bucket_id
+        self.warnings = warnings
+        self.short_percent = short_percent
+        self.short_label = short_label
+        self.short_reset_label = short_reset_label
+        self.short_bucket_id = short_bucket_id
+        self.long_percent = long_percent
+        self.long_label = long_label
+        self.long_reset_label = long_reset_label
+        self.long_bucket_id = long_bucket_id
+        self.manual_resets_available = manual_resets_available
+        self.captured_at = captured_at
+        self.recommendation = recommendation
     }
 }
 
@@ -1183,6 +1308,7 @@ public struct TaskLightUIState: Codable, Equatable {
     public var tasks: [TaskLightUITask]
     public var observations: [TaskLightUIObservation]
     public var runtime_candidates: [TaskLightRuntimeCandidate]?
+    public var quota: CodexQuotaUIState?
     public var diagnostics: TaskLightUIDiagnostics
 
     public init(
@@ -1203,6 +1329,7 @@ public struct TaskLightUIState: Codable, Equatable {
         tasks: [TaskLightUITask] = [],
         observations: [TaskLightUIObservation] = [],
         runtime_candidates: [TaskLightRuntimeCandidate]? = nil,
+        quota: CodexQuotaUIState? = nil,
         diagnostics: TaskLightUIDiagnostics = TaskLightUIDiagnostics()
     ) {
         self.schema_version = schema_version
@@ -1222,6 +1349,7 @@ public struct TaskLightUIState: Codable, Equatable {
         self.tasks = tasks
         self.observations = observations
         self.runtime_candidates = runtime_candidates
+        self.quota = quota
         self.diagnostics = diagnostics
     }
 }

@@ -1,0 +1,97 @@
+# Codex Quota Widget
+
+M3.6 adds a local Codex usage widget for LuckyCat. Quota is display-only: it never changes `global_status`, `lamp_status`, `global_display_title`, task status, sounds, or hook/runtime arbitration.
+
+## Data Flow
+
+```text
+Codex App Server account/rateLimits/read
+Codex App Server account/rateLimits/updated
+manual text / clipboard / file fallback
+        -> quota_state.json
+        -> state_projector.py
+        -> ui_state.quota
+        -> LuckyCat compact + expanded dashboard
+```
+
+The preferred source is local Codex App Server. The short probe reads `account/rateLimits/read`; the watcher prefers `account/rateLimits/updated` and falls back to bounded polling when local notifications are unavailable. Manual and clipboard import exist as fallback. OCR, cookie scraping, keychain reads, `~/.codex/auth.json`, purchases, and automatic resets are out of scope.
+
+## Commands
+
+```bash
+python3 script/codex_quota_appserver_probe.py
+python3 script/codex_quota_appserver_watcher.py --once
+python3 script/codex_quota_appserver_watcher.py --watch
+./script/install_codex_quota_watcher_launch_agent.sh
+./script/check_codex_quota_watcher_launch_agent.sh
+./script/uninstall_codex_quota_watcher_launch_agent.sh
+python3 script/codex_quota_import.py --text "5小时 93% 11:44
+1周 42% 6月18日
+1次可用重置"
+python3 script/codex_quota_import.py --from-clipboard
+python3 script/codex_quota_import.py --input-file /path/to/usage.txt
+./script/check_codex_quota.sh
+```
+
+## Percent Semantics
+
+App Server reports `usedPercent`, so TaskLight converts it to remaining percent:
+
+```text
+remaining_percent = 100 - usedPercent
+```
+
+Manual Usage text is treated as already being remaining percent. This avoids reversing dashboard values such as `5小时 93%`.
+
+## Display Rules
+
+Compact examples:
+
+```text
+⚡ 93 · 42 · R1
+⚡ 93 · 42
+⚡ 42%
+⚡ Q?
+```
+
+Expanded dashboard shows short window, long window, reset count, quota status, source, capture time, and recommendation.
+
+M3.7 adds a small compact freshness dot:
+
+- green dot: quota is fresh.
+- gray dot: quota is stale or missing.
+- the dot does not affect `RUNNING`, `BLOCKED`, `PENDING`, or `DONE`.
+
+Expanded dashboard also shows `captured_at`, `bucket_id`, probe mode, and raw bucket count so the value can be compared against the Codex Usage UI.
+
+Quota health:
+
+```text
+>= 50    ok
+20-49    watch
+5-19     low
+< 5      critical
+missing  unknown
+```
+
+`effective_remaining_percent` is the minimum remaining percent across valid `display_windows`.
+
+## Quota State Schema
+
+`quota_state.json` stores two window sets:
+
+- `raw_windows[]`: every sanitized codex-like bucket from App Server or manual input.
+- `display_windows[]`: the windows selected for UI display.
+
+When multiple buckets share a duration, display selection is:
+
+1. `bucket_id == "codex"`
+2. account-level codex-like bucket
+3. model-specific bucket such as `codex_bengalfox`
+4. conservative fallback
+
+`windows[]` remains a backwards-compatible alias for `display_windows[]`.
+
+## Safety
+
+Quota state is a sidecar at `~/.66tasklight/quota_state.json`. Projector copies a sanitized view to `ui_state.quota`. If quota is missing, stale, or invalid, LuckyCat shows `⚡ Q?` and the main lamp stays governed only by task/runtime state.

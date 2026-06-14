@@ -84,7 +84,7 @@ projector_version = ui_state.get("projector_version", "none")
 projector_hash = ui_state.get("projector_code_hash", "none")
 source = ui_state.get("source", "none")
 writer_status = diagnostics.get("writer_status", "ok")
-if source != "state_projector" or projector_version != "M3.3" or projector_hash != expected_hash:
+if source != "state_projector" or projector_version != "M3.7" or projector_hash != expected_hash:
     writer_status = "old_writer"
 if process_count > 1:
     writer_status = "multiple_writers"
@@ -158,6 +158,18 @@ print(f"binding_identity_count={diagnostics.get('binding_identity_count', 'none'
 print(f"latest_bridge_decision={diagnostics.get('latest_bridge_decision', 'none')}")
 print(f"current_thread_signal_source={diagnostics.get('current_thread_signal_source', 'none')}")
 print(f"current_thread_signal_status={diagnostics.get('current_thread_signal_status', 'none')}")
+quota = ui_state.get("quota") if isinstance(ui_state.get("quota"), dict) else {}
+print(f"quota_status={diagnostics.get('quota_status', quota.get('status', 'none'))}")
+print(f"quota_fresh={diagnostics.get('quota_fresh', quota.get('fresh', 'none'))}")
+print(f"quota_source={diagnostics.get('quota_source', quota.get('source', 'none'))}")
+print(f"quota_effective_remaining_percent={quota.get('effective_remaining_percent', 'none')}")
+print(f"quota_probe_status={diagnostics.get('quota_probe_status', 'none')}")
+print(f"quota_probe_mode={diagnostics.get('quota_probe_mode', quota.get('probe_mode', 'none'))}")
+print(f"quota_bucket_id={quota.get('bucket_id', 'none')}")
+print(f"quota_raw_window_count={diagnostics.get('quota_raw_window_count', quota.get('raw_window_count', 'none'))}")
+print(f"quota_captured_at={quota.get('captured_at', 'none')}")
+print(f"quota_captured_age_sec={quota.get('captured_age_sec', 'none')}")
+print(f"quota_state_path={diagnostics.get('quota_state_path', 'none')}")
 print(f"ui_state_generated_at={ui_state.get('projector_generated_at', 'none')}")
 print(f"state_projector_health_path={health_path}")
 print(f"state_projector_health_status={health_status}")

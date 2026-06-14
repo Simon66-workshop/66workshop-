@@ -20,6 +20,16 @@ Create a fixture from a captured case:
 python3 script/status_reflection_case.py fixture --case docs/status-reflections/cases/<case>.json
 ```
 
+Or write recommended coverage fixtures directly:
+
+```bash
+./script/check_codex_thread_coverage.sh --write-recommended-fixtures
+```
+
+Use this when the question is specifically “why did LuckyCat not turn blue?” and
+the coverage report already points at missing hooks, weak appserver evidence, or
+process-only/private-probe signals.
+
 Run regression checks:
 
 ```bash

@@ -10,6 +10,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,6 +63,21 @@ def load_json(path: Path, default: Any) -> Any:
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return default
     return payload
+
+
+def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=True, sort_keys=True, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_name, path)
+
+
+def reflection_fixture_dir() -> Path:
+    return Path(os.environ.get("TASKLIGHT_STATUS_REFLECTION_DIR", str(PROJECT_ROOT / "docs" / "status-reflections"))).expanduser() / "fixtures"
 
 
 def read_jsonl(path: Path, limit: int) -> list[dict[str, Any]]:
@@ -569,6 +585,35 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def write_recommended_fixtures(report: dict[str, Any], output_dir: Path) -> list[str]:
+    written: list[str] = []
+    fixtures = report.get("recommended_fixtures") if isinstance(report.get("recommended_fixtures"), list) else []
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            continue
+        mismatch_class = "missed_running" if fixture.get("decision") == "uncovered_active_suspect" else str(fixture.get("decision") or "coverage")
+        payload = {
+            "schema_version": "0.1",
+            "fixture_id": f"coverage-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{index + 1}-{mismatch_class}",
+            "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "source": "check_codex_thread_coverage",
+            "recommended_fixture": fixture,
+            "assertions": {
+                "mismatch_class": mismatch_class,
+                "requires_workspace_hook_or_appserver_active_evidence": fixture.get("decision") == "uncovered_active_suspect",
+                "weak_appserver_evidence_never_global_running": str(fixture.get("status_hint") or "").lower() in {"notloaded", "not_loaded", "unknown", "idle"},
+                "process_observer_only_never_global_running": fixture.get("source") == "process_observer",
+                "global_private_probe_never_global_running": fixture.get("source") == "codex_private_probe",
+                "must_not_read_sensitive_logs": True,
+                "verify_remains_only_done_green_path": True,
+            },
+        }
+        target = output_dir / f"{payload['fixture_id']}.json"
+        atomic_write_json(target, payload)
+        written.append(str(target))
+    return written
+
+
 def print_human(report: dict[str, Any]) -> None:
     summary = report["summary"]
     print(f"STATUS={report['status']}")
@@ -608,6 +653,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--appserver-timeout", type=float, default=2.0)
     parser.add_argument("--skip-appserver", action="store_true")
     parser.add_argument("--no-default-workspace", action="store_true")
+    parser.add_argument("--write-recommended-fixtures", action="store_true")
+    parser.add_argument("--fixture-output-dir")
     return parser
 
 
@@ -625,6 +672,9 @@ def main() -> int:
     else:
         args.default_workspace = str(PROJECT_ROOT)
     report = build_report(args)
+    if args.write_recommended_fixtures:
+        output_dir = Path(args.fixture_output_dir).expanduser() if args.fixture_output_dir else reflection_fixture_dir()
+        report["written_recommended_fixtures"] = write_recommended_fixtures(report, output_dir)
     if args.json:
         print(json.dumps(report, ensure_ascii=True, sort_keys=True, indent=2))
     else:

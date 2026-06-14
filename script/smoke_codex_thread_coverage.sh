@@ -52,6 +52,18 @@ import json, sys
 payload = json.load(open(sys.argv[1]))
 assert payload["summary"]["uncovered_active_suspects"] >= 1, payload
 PY
+run_json --workspace "$WORKSPACE" --write-recommended-fixtures --fixture-output-dir "$STATE_DIR/fixtures" >"$STATE_DIR/unknown-fixture.json"
+python3 - "$STATE_DIR/unknown-fixture.json" "$STATE_DIR/fixtures" <<'PY'
+import json, sys
+from pathlib import Path
+payload = json.load(open(sys.argv[1]))
+written = payload.get("written_recommended_fixtures") or []
+assert written, payload
+fixture = json.load(open(written[0]))
+assert fixture["assertions"]["mismatch_class"] == "missed_running", fixture
+assert fixture["assertions"]["weak_appserver_evidence_never_global_running"], fixture
+assert Path(written[0]).is_relative_to(Path(sys.argv[2])) if hasattr(Path(written[0]), "is_relative_to") else str(written[0]).startswith(str(sys.argv[2])), written
+PY
 
 write_signals '[{"signal_id":"sig-process","source":"process_observer","event_type":"observed_active","thread_id":"thread-proc","occurred_at":"2099-01-01T00:00:00Z","confidence":0.8,"source_quality":"process_observer","status_hint":"observed_active"}]'
 run_json --workspace "$WORKSPACE" >"$STATE_DIR/process.json"

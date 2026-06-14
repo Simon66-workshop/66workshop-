@@ -301,8 +301,37 @@ public final class TaskLightStore {
         var health: TaskLightSourceHealth
     }
 
+    private struct QuotaFallbackState: Decodable {
+        var source: String?
+        var fresh: Bool?
+        var quota_status: String?
+        var effective_remaining_percent: Int?
+        var captured_at: String?
+        var recommendation: String?
+        var warnings: [String]?
+        var display_windows: [QuotaFallbackWindow]?
+        var raw_windows: [QuotaFallbackWindow]?
+        var windows: [QuotaFallbackWindow]?
+        var manual_resets: QuotaFallbackResets?
+    }
+
+    private struct QuotaFallbackWindow: Decodable {
+        var id: String?
+        var bucket_id: String?
+        var label: String?
+        var remaining_percent: Int?
+        var used_percent: Int?
+        var reset_label: String?
+        var window_duration_mins: Int?
+        var health: String?
+        var selection_reason: String?
+    }
+
+    private struct QuotaFallbackResets: Decodable {
+        var available_count: Int?
+    }
+
     private func isUIStateFresh(_ uiState: TaskLightUIState) -> Bool {
-        let maxAge = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_MAX_AGE_SECONDS"].flatMap(Double.init) ?? 5
         guard uiState.source == "state_projector" else {
             return false
         }
@@ -310,13 +339,13 @@ public final class TaskLightStore {
             return false
         }
         if let writerStatus = uiState.diagnostics.writer_status,
-           ["old_writer", "multiple_writers", "stale", "error"].contains(writerStatus) {
+           ["old_writer", "multiple_writers", "error"].contains(writerStatus) {
             return false
         }
-        guard let generatedAt = TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) else {
+        guard TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) != nil else {
             return false
         }
-        return Date().timeIntervalSince(generatedAt) <= maxAge
+        return true
     }
 
     private func projectRootURL() -> URL {
@@ -337,6 +366,7 @@ public final class TaskLightStore {
     }
 
     private func fallbackUIState(from dashboard: TaskLightAggregateState, reason: String) -> TaskLightUIState {
+        let quota = loadQuotaFallback()
         let observedActive = dashboard.observations_state?.observations.filter {
             $0.isActive && $0.managed_task_id == nil && $0.confidence >= 0.70
         }.count ?? 0
@@ -417,6 +447,7 @@ public final class TaskLightStore {
             counts: counts,
             tasks: tasks,
             observations: observations,
+            quota: quota,
             diagnostics: TaskLightUIDiagnostics(
                 writer_status: "fallback",
                 hook_bridge_status: "unknown",
@@ -453,9 +484,90 @@ public final class TaskLightStore {
                 top_runtime_candidates: [],
                 appserver_active_count: 0,
                 process_observed_count: observedActive,
-                fallback_reason: reason
+                fallback_reason: reason,
+                quota_status: quota?.status,
+                quota_fresh: quota?.fresh,
+                quota_source: quota?.source,
+                quota_state_path: config.stateDirectory.appendingPathComponent("quota_state.json").path,
+                quota_warning_count: nil
             )
         )
+    }
+
+    private func loadQuotaFallback() -> CodexQuotaUIState? {
+        let url = config.stateDirectory.appendingPathComponent("quota_state.json")
+        guard FileManager.default.fileExists(atPath: url.path),
+              let raw: QuotaFallbackState = try? readJSON(from: url) else {
+            return nil
+        }
+        let sourceWindows = raw.display_windows ?? selectQuotaFallbackWindows(raw.windows ?? [])
+        let windows = selectQuotaFallbackWindows(sourceWindows)
+        let short = windows.first
+        let long = windows.count > 1 ? windows.last : nil
+        return CodexQuotaUIState(
+            source: raw.source,
+            fresh: raw.fresh ?? false,
+            status: raw.quota_status ?? "unknown",
+            effective_remaining_percent: raw.effective_remaining_percent,
+            display_windows: windows.map { window in
+                CodexQuotaWindowUIState(
+                    id: window.id,
+                    label: window.label,
+                    bucket_id: window.bucket_id,
+                    remaining_percent: window.remaining_percent,
+                    used_percent: window.used_percent,
+                    reset_label: window.reset_label,
+                    window_duration_mins: window.window_duration_mins,
+                    health: window.health,
+                    selection_reason: window.selection_reason
+                )
+            },
+            raw_window_count: raw.raw_windows?.count ?? raw.windows?.count,
+            captured_age_sec: nil,
+            probe_mode: nil,
+            bucket_id: short?.bucket_id,
+            warnings: raw.warnings,
+            short_percent: short?.remaining_percent,
+            short_label: short?.label,
+            short_reset_label: short?.reset_label,
+            short_bucket_id: short?.bucket_id,
+            long_percent: long?.remaining_percent,
+            long_label: long?.label,
+            long_reset_label: long?.reset_label,
+            long_bucket_id: long?.bucket_id,
+            manual_resets_available: raw.manual_resets?.available_count,
+            captured_at: raw.captured_at,
+            recommendation: raw.recommendation
+        )
+    }
+
+    private func selectQuotaFallbackWindows(_ windows: [QuotaFallbackWindow]) -> [QuotaFallbackWindow] {
+        let grouped = Dictionary(grouping: windows.filter { $0.remaining_percent != nil }) { window in
+            window.window_duration_mins.map(String.init) ?? window.label ?? "unknown"
+        }
+        return grouped.values
+            .compactMap { candidates in candidates.sorted(by: quotaFallbackWindowSort).first }
+            .sorted {
+                ($0.window_duration_mins ?? Int.max) < ($1.window_duration_mins ?? Int.max)
+            }
+    }
+
+    private func quotaFallbackWindowSort(_ lhs: QuotaFallbackWindow, _ rhs: QuotaFallbackWindow) -> Bool {
+        quotaFallbackPriority(lhs) < quotaFallbackPriority(rhs)
+    }
+
+    private func quotaFallbackPriority(_ window: QuotaFallbackWindow) -> (Int, Int) {
+        let bucketID = (window.bucket_id ?? "").lowercased()
+        if bucketID == "codex" {
+            return (0, 0)
+        }
+        if bucketID.hasPrefix("codex_") {
+            return (2, window.remaining_percent ?? 0)
+        }
+        if bucketID.contains("codex") {
+            return (1, window.remaining_percent ?? 0)
+        }
+        return (3, window.remaining_percent ?? 0)
     }
 
     private func fallbackDisplayScope(for status: String) -> String {

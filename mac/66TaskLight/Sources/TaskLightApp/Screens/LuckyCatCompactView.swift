@@ -19,7 +19,9 @@ struct LuckyCatCompactView: View {
                 progress: viewModel.compactProgressValue(),
                 highlightsBell: viewModel.compactShowsAlertBell(),
                 statusTitle: displayTitle,
-                elapsedLabel: viewModel.compactDataLabel(),
+                elapsedLabel: viewModel.quotaCompactText(),
+                elapsedLabelColor: quotaTextColor,
+                elapsedStatusDotColor: quotaFreshnessDotColor,
                 onNoseTripleTap: {
                     viewModel.runWorkspaceCoverageReport()
                 }
@@ -76,6 +78,28 @@ struct LuckyCatCompactView: View {
         }
         .frame(width: LuckyCatLayout.compactWidth, height: LuckyCatLayout.compactHeight)
         .animation(.easeInOut(duration: 0.18), value: viewModel.workspaceCoveragePresentation?.message)
+    }
+
+    private var quotaTextColor: Color {
+        switch viewModel.uiState.quota?.status {
+        case "ok":
+            return LuckyCatTokens.Palette.green.opacity(0.92)
+        case "watch":
+            return LuckyCatTokens.Palette.amber
+        case "low":
+            return LuckyCatTokens.Palette.collarRed.opacity(0.94)
+        case "critical":
+            return LuckyCatTokens.Palette.red
+        default:
+            return LuckyCatTokens.Palette.textSecondary.opacity(0.88)
+        }
+    }
+
+    private var quotaFreshnessDotColor: Color {
+        guard let quota = viewModel.uiState.quota else {
+            return LuckyCatTokens.Palette.textSecondary.opacity(0.52)
+        }
+        return quota.fresh ? LuckyCatTokens.Palette.green.opacity(0.92) : LuckyCatTokens.Palette.textSecondary.opacity(0.52)
     }
 }
 

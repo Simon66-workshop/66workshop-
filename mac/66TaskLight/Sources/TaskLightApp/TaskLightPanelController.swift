@@ -4,8 +4,31 @@ import SwiftUI
 import TaskLightCore
 
 final class TaskLightPanel: NSPanel {
+    var roundedHitTestRadius: CGFloat = 0
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        guard !shouldDropMouseEvent(event) else { return }
+        super.sendEvent(event)
+    }
+
+    private func shouldDropMouseEvent(_ event: NSEvent) -> Bool {
+        guard roundedHitTestRadius > 0 else { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel:
+            let hitRect = NSRect(origin: .zero, size: frame.size)
+            let hitPath = NSBezierPath(
+                roundedRect: hitRect,
+                xRadius: roundedHitTestRadius,
+                yRadius: roundedHitTestRadius
+            )
+            return !hitPath.contains(event.locationInWindow)
+        default:
+            return false
+        }
+    }
 }
 
 @MainActor
@@ -103,10 +126,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.isFloatingPanel = true
         panel.level = .floating
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false
+        panel.roundedHitTestRadius = displayMode == .expanded ? LuckyCatLayout.cornerRadius : 0
         panel.contentViewController = hosting
         panel.delegate = self
         return panel

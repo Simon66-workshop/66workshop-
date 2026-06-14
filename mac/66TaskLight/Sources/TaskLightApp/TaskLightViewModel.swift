@@ -363,6 +363,33 @@ final class TaskLightViewModel: ObservableObject {
         "M\(managedActiveCount()) O\(observedDisplayCount())"
     }
 
+    func quotaCompactText() -> String {
+        guard let quota = uiState.quota, quota.fresh else {
+            return "⚡Q?"
+        }
+        var parts: [String] = []
+        if let short = quota.short_percent {
+            parts.append("\(short)")
+        }
+        if let long = quota.long_percent, long != quota.short_percent {
+            parts.append("\(long)")
+        }
+        if parts.isEmpty, let effective = quota.effective_remaining_percent {
+            parts.append("\(effective)%")
+        }
+        if let resets = quota.manual_resets_available {
+            parts.append("R\(resets)")
+        }
+        guard !parts.isEmpty else {
+            return "⚡Q?"
+        }
+        return "⚡" + parts.joined(separator: "·")
+    }
+
+    func quotaStatusLabel() -> String {
+        uiState.quota?.status.uppercased() ?? "UNKNOWN"
+    }
+
     func compactProgressValue() -> CGFloat {
         if let task = compactReferenceTask() {
             let fallback: CGFloat

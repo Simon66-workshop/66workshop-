@@ -21,7 +21,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = "0.1"
-PROJECTOR_VERSION = "M3.3"
+PROJECTOR_VERSION = "M3.7"
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROJECTOR_INSTANCE_ID = f"{int(time.time())}-{os.getpid()}"
@@ -208,6 +208,36 @@ def normalized_signals_path(root: Path) -> Path:
     return Path(os.environ.get("TASKLIGHT_NORMALIZED_SIGNALS_PATH", str(root / "normalized_signals.jsonl"))).expanduser()
 
 
+def quota_state_path(root: Path) -> Path:
+    return Path(os.environ.get("TASKLIGHT_QUOTA_STATE_PATH", str(root / "quota_state.json"))).expanduser()
+
+
+def quota_probe_health_path(root: Path) -> Path:
+    return Path(os.environ.get("TASKLIGHT_QUOTA_PROBE_HEALTH_PATH", str(root / "quota_probe_health.json"))).expanduser()
+
+
+def quota_max_age_seconds() -> float:
+    return float(os.environ.get("TASKLIGHT_QUOTA_STATE_MAX_AGE_SECONDS", "600"))
+
+
+def quota_autoprobe_interval_seconds() -> float:
+    return float(os.environ.get("TASKLIGHT_QUOTA_AUTOPROBE_INTERVAL_SECONDS", "120"))
+
+
+def quota_autoprobe_timeout_seconds() -> float:
+    return float(os.environ.get("TASKLIGHT_QUOTA_AUTOPROBE_TIMEOUT_SECONDS", "2"))
+
+
+def quota_autoprobe_enabled(root: Path) -> bool:
+    raw = os.environ.get("TASKLIGHT_QUOTA_AUTOPROBE")
+    if raw is not None:
+        return raw.lower() not in {"0", "false", "no", "off"}
+    try:
+        return root.expanduser().resolve() == DEFAULT_STATE_DIR.resolve()
+    except OSError:
+        return False
+
+
 def signal_bus_max_age_seconds() -> float:
     return float(os.environ.get("TASKLIGHT_SIGNAL_BUS_MAX_AGE_SECONDS", "86400"))
 
@@ -386,6 +416,167 @@ def load_ui_clients(root: Path) -> list[dict[str, Any]]:
             payload["file_path"] = str(path)
             clients.append(payload)
     return clients
+
+
+def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
+    if not quota_autoprobe_enabled(root):
+        return
+    health_path = quota_probe_health_path(root)
+    health = load_json(health_path, {})
+    last_probe_age = age_seconds((health or {}).get("last_probe_at"), now_ts) if isinstance(health, dict) else None
+    if last_probe_age is not None and last_probe_age < quota_autoprobe_interval_seconds():
+        return
+    payload: dict[str, Any]
+    try:
+        from codex_quota_appserver_probe import read_rate_limits
+        from codex_quota_import import normalize_appserver_response
+
+        quota_payload = normalize_appserver_response(read_rate_limits(quota_autoprobe_timeout_seconds()))
+        atomic_write_json(quota_state_path(root), quota_payload)
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "status": "ok",
+            "source": "codex_appserver",
+            "mode": "poll_fallback",
+            "last_event_at": None,
+            "last_probe_at": now_iso(),
+            "quota_status": quota_payload.get("quota_status"),
+            "effective_remaining_percent": quota_payload.get("effective_remaining_percent"),
+            "last_error": None,
+            "updated_at": now_iso(),
+        }
+    except Exception as error:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "status": "error",
+            "source": "codex_appserver",
+            "mode": "poll_fallback",
+            "last_event_at": None,
+            "last_probe_at": now_iso(),
+            "quota_status": "unknown",
+            "effective_remaining_percent": None,
+            "last_error": str(error)[:240],
+            "updated_at": now_iso(),
+        }
+    atomic_write_json(health_path, payload)
+
+
+def quota_display_bucket_priority(window: dict[str, Any]) -> tuple[int, int]:
+    bucket_id = str(window.get("bucket_id") or "").lower()
+    remaining = int(window.get("remaining_percent") or 0)
+    if bucket_id == "codex":
+        return (0, 0)
+    if bucket_id.startswith("codex_"):
+        return (2, remaining)
+    if "codex" in bucket_id:
+        return (1, remaining)
+    return (3, remaining)
+
+
+def select_quota_display_windows(windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    valid = [window for window in windows if isinstance(window, dict) and isinstance(window.get("remaining_percent"), int)]
+    grouped: dict[Any, list[dict[str, Any]]] = {}
+    for window in valid:
+        key = window.get("window_duration_mins") if window.get("window_duration_mins") is not None else window.get("label")
+        grouped.setdefault(key, []).append(window)
+    selected = [sorted(candidates, key=quota_display_bucket_priority)[0] for candidates in grouped.values()]
+    selected.sort(key=lambda item: item.get("window_duration_mins") if item.get("window_duration_mins") is not None else 10**9)
+    return selected
+
+
+def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    path = quota_state_path(root)
+    diagnostics = {
+        "quota_state_path": str(path),
+        "quota_probe_health_path": str(quota_probe_health_path(root)),
+        "quota_status": "missing",
+        "quota_fresh": False,
+        "quota_source": None,
+        "quota_probe_status": "disabled" if not quota_autoprobe_enabled(root) else "unknown",
+        "quota_warning_count": 0,
+    }
+    if not path.exists():
+        maybe_autoprobe_quota(root, now_ts)
+    else:
+        maybe_autoprobe_quota(root, now_ts)
+    if not path.exists():
+        health = load_json(quota_probe_health_path(root), {})
+        if isinstance(health, dict):
+            diagnostics["quota_probe_status"] = health.get("status", "unknown")
+        return None, diagnostics
+    payload = load_json(path, None)
+    if not isinstance(payload, dict):
+        diagnostics["quota_status"] = "invalid"
+        return None, diagnostics
+    captured_at = payload.get("captured_at")
+    age = age_seconds(captured_at, now_ts)
+    stale = age is None or age > quota_max_age_seconds()
+    warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
+    raw_windows = payload.get("raw_windows") if isinstance(payload.get("raw_windows"), list) else []
+    legacy_windows = payload.get("windows") if isinstance(payload.get("windows"), list) else []
+    display_source = payload.get("display_windows") if isinstance(payload.get("display_windows"), list) else []
+    raw_window_count = len(raw_windows) if raw_windows else len(legacy_windows)
+    valid_windows = select_quota_display_windows(display_source) if display_source else select_quota_display_windows(legacy_windows)
+    short = valid_windows[0] if valid_windows else {}
+    long = valid_windows[-1] if len(valid_windows) > 1 else {}
+    resets = payload.get("manual_resets") if isinstance(payload.get("manual_resets"), dict) else {}
+    status = "unknown" if stale else str(payload.get("quota_status") or "unknown")
+    if stale:
+        maybe_autoprobe_quota(root, now_ts)
+        refreshed = load_json(path, None)
+        if isinstance(refreshed, dict) and refreshed.get("captured_at") != captured_at:
+            return project_quota_state(root, time.time())
+    health = load_json(quota_probe_health_path(root), {})
+    probe_mode = health.get("mode") if isinstance(health, dict) else None
+    diagnostics.update(
+        {
+            "quota_status": status,
+            "quota_fresh": not stale,
+            "quota_source": payload.get("source"),
+            "quota_probe_status": health.get("status", "unknown") if isinstance(health, dict) else "unknown",
+            "quota_probe_mode": probe_mode,
+            "quota_warning_count": len(warnings),
+            "quota_raw_window_count": raw_window_count,
+        }
+    )
+    display_windows = [
+        {
+            "id": window.get("id"),
+            "label": window.get("label"),
+            "bucket_id": window.get("bucket_id"),
+            "remaining_percent": None if stale else window.get("remaining_percent"),
+            "used_percent": window.get("used_percent"),
+            "reset_label": window.get("reset_label"),
+            "window_duration_mins": window.get("window_duration_mins"),
+            "health": "unknown" if stale else window.get("health"),
+            "selection_reason": window.get("selection_reason"),
+        }
+        for window in valid_windows
+    ]
+    quota = {
+        "source": payload.get("source"),
+        "fresh": not stale,
+        "status": status,
+        "effective_remaining_percent": None if stale else payload.get("effective_remaining_percent"),
+        "display_windows": display_windows,
+        "raw_window_count": raw_window_count,
+        "captured_age_sec": age,
+        "probe_mode": probe_mode,
+        "bucket_id": short.get("bucket_id"),
+        "warnings": warnings,
+        "short_percent": None if stale else short.get("remaining_percent"),
+        "short_label": short.get("label"),
+        "short_reset_label": short.get("reset_label"),
+        "short_bucket_id": short.get("bucket_id"),
+        "long_percent": None if stale else long.get("remaining_percent"),
+        "long_label": long.get("label"),
+        "long_reset_label": long.get("reset_label"),
+        "long_bucket_id": long.get("bucket_id"),
+        "manual_resets_available": None if stale else resets.get("available_count"),
+        "captured_at": captured_at,
+        "recommendation": payload.get("recommendation"),
+    }
+    return quota, diagnostics
 
 
 def task_timestamp(task: dict[str, Any]) -> Any:
@@ -1497,6 +1688,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     )
     appserver_thread_signals = [signal for signal in bus_signals if str(signal.get("source") or "") == "codex_appserver"]
     appserver_thread_health = load_json(appserver_thread_watcher_health_path(root), {})
+    quota, quota_diagnostics = project_quota_state(root, now_ts)
     if appserver_thread_signals:
         appserver_thread_signal_status = "bus"
     elif isinstance(appserver_thread_health, dict) and appserver_thread_health.get("status"):
@@ -1654,6 +1846,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         "tasks": projected_tasks,
         "observations": observations,
         "runtime_candidates": runtime_candidates,
+        "quota": quota,
         "diagnostics": {
             "writer_status": "ok",
             "hook_bridge_status": hook_health.get("status", "unknown") if isinstance(hook_health, dict) else "unknown",
@@ -1707,6 +1900,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
             "observed_false_positive_count": observed_false_positive_count,
             "active_thread_bindings": sum(1 for binding in thread_bindings if binding.get("status") == "active"),
             "binding_identity_count": len(by_identity),
+            **quota_diagnostics,
         },
     }
     atomic_write_json(output_path(root), payload)

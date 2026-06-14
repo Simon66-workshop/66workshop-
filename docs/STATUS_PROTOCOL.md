@@ -611,3 +611,56 @@ Each runtime candidate contains:
 drive `global_status=running`. Fresh appserver runtime candidates may drive
 `RUNNING` only when they include active-like evidence and the arbiter scores
 them as high-confidence active observations.
+
+## Quota Display Sidecar
+
+M3.6 adds optional display-only quota data to `ui_state.json`. M3.7 separates the raw quota buckets from the display-selected windows:
+
+```json
+{
+  "quota": {
+    "source": "clipboard_import",
+    "fresh": true,
+    "status": "watch",
+    "effective_remaining_percent": 42,
+    "display_windows": [
+      {
+        "id": "short",
+        "label": "5小时",
+        "bucket_id": "codex",
+        "remaining_percent": 93,
+        "reset_label": "11:44",
+        "selection_reason": "selected_account_codex_bucket_from_2_candidates"
+      }
+    ],
+    "raw_window_count": 4,
+    "captured_age_sec": 2.4,
+    "probe_mode": "poll_fallback",
+    "bucket_id": "codex",
+    "short_percent": 93,
+    "short_label": "5小时",
+    "short_reset_label": "11:44",
+    "short_bucket_id": "codex",
+    "long_percent": 42,
+    "long_label": "1周",
+    "long_reset_label": "6月18日",
+    "long_bucket_id": "codex",
+    "manual_resets_available": 1,
+    "captured_at": "2026-06-14T10:42:00+08:00",
+    "recommendation": "watch_usage",
+    "warnings": []
+  }
+}
+```
+
+Quota is copied from `quota_state.json` by `state_projector.py`. It must not change `global_status`, `lamp_status`, `global_display_title`, task transitions, sound events, or runtime candidate scoring. Missing, stale, or invalid quota should produce `unknown` diagnostics and compact `⚡ Q?`, not a projector failure.
+
+`quota_state.json` may contain:
+
+- `raw_windows[]`: all sanitized codex-like buckets returned by App Server or manual import.
+- `display_windows[]`: the UI-selected windows. For duplicate durations, `bucket_id=codex` wins over model-specific buckets such as `codex_*`.
+- `windows[]`: backwards-compatible alias for `display_windows[]`.
+
+Only `display_windows[]` should drive compact and expanded quota UI. `raw_windows[]` is for diagnostics and manual comparison.
+
+`quota_probe_health.json` may include `mode=event|event_fixture|poll_fallback`; UI may display that mode for diagnostics, but it must not affect the main lamp.

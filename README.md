@@ -717,3 +717,36 @@ Tools install does not provide the XCTest / new Testing path used by the repo.
 - `docs/SMOKE_TESTS.md` smoke test scenarios and expected matrix
 - `script/smoke_observations.sh` live observation regression
 - `docs/REAL_TRIAL.md` low-risk trial plan and what to log
+
+## Codex Quota Widget
+
+M3.6+ replaces the compact panel's old right-side `M... O...` readout with a Codex quota summary such as `⚡ 93 · 42 · R1`.
+
+Quota is display-only. It does not affect `RUNNING`, `BLOCKED`, `PENDING`, `DONE`, task status, sounds, hook bridge decisions, or State Projector runtime arbitration.
+
+Quota is auto-probed by the resident State Projector through the local Codex App Server. M3.7 also provides an event-first watcher for `account/rateLimits/updated`; if local notifications are unavailable, it falls back to bounded polling. Manual import remains a fallback:
+
+```bash
+python3 script/codex_quota_appserver_probe.py
+python3 script/codex_quota_appserver_watcher.py --once
+python3 script/codex_quota_appserver_watcher.py --watch
+./script/install_codex_quota_watcher_launch_agent.sh
+./script/check_codex_quota_watcher_launch_agent.sh
+./script/uninstall_codex_quota_watcher_launch_agent.sh
+python3 script/codex_quota_import.py --from-clipboard
+python3 script/codex_quota_import.py --text "5小时 93% 11:44
+1周 42% 6月18日
+1次可用重置"
+./script/check_codex_quota.sh
+```
+
+App Server `usedPercent` is converted to remaining percent. Manual Usage text is treated as already being remaining percent. `quota_state.json` keeps `raw_windows` for all codex-like buckets and `display_windows` for the selected UI buckets; same-duration display windows prefer `bucket_id=codex` over model-specific buckets. Missing or stale quota shows `⚡ Q?`.
+
+When LuckyCat and Codex disagree about active work, start with:
+
+```bash
+./script/check_codex_thread_coverage.sh
+./script/capture_status_mismatch.sh --expected running --note "Codex is active but LuckyCat stayed DONE"
+```
+
+Coverage can write sanitized recommended fixtures with `--write-recommended-fixtures`; this is for regression capture only and never changes the main lamp.
