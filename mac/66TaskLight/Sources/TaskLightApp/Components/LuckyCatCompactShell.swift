@@ -79,15 +79,15 @@ struct LuckyCatCompactShell<Content: View>: View {
     private var panelBackdrop: some View {
         ZStack {
             LuckyCatShellShape()
-                .fill(.regularMaterial)
+                .fill(.ultraThinMaterial)
                 .overlay(
                     LuckyCatShellShape()
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.78),
-                                    LuckyCatTokens.Palette.cream.opacity(0.70),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.48)
+                                    Color.white.opacity(0.46),
+                                    LuckyCatTokens.Palette.glassCreamTint,
+                                    LuckyCatTokens.Palette.glassWarmDepth
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -103,8 +103,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                             LinearGradient(
                                 colors: [
                                     Color.white.opacity(0.82),
-                                    LuckyCatTokens.Palette.cream.opacity(0.74),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
+                                    LuckyCatTokens.Palette.cream.opacity(0.52),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.30)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -118,8 +118,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                             LinearGradient(
                                 colors: [
                                     Color.white.opacity(0.82),
-                                    LuckyCatTokens.Palette.cream.opacity(0.74),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
+                                    LuckyCatTokens.Palette.cream.opacity(0.52),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.30)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -139,8 +139,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                             LinearGradient(
                                 colors: [
                                     Color.white.opacity(0.82),
-                                    LuckyCatTokens.Palette.cream.opacity(0.74),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.52)
+                                    LuckyCatTokens.Palette.cream.opacity(0.52),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.30)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -161,7 +161,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                 .padding(.trailing, 4)
             }
         }
-        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.15), radius: 10, x: 0, y: 6)
+        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.11), radius: 12, x: 0, y: 7)
     }
 
     private var panelMask: some View {
@@ -210,15 +210,15 @@ struct LuckyCatCompactShell<Content: View>: View {
     private var shellSurface: some View {
         ZStack {
             LuckyCatShellShape()
-                .fill(.regularMaterial)
+                .fill(.ultraThinMaterial)
                 .overlay(
                     LuckyCatShellShape()
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.80),
-                                    LuckyCatTokens.Palette.cream.opacity(0.74),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.54)
+                                    Color.white.opacity(0.50),
+                                    LuckyCatTokens.Palette.glassCreamTint,
+                                    LuckyCatTokens.Palette.glassWarmDepth
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -227,7 +227,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                 )
                 .overlay(
                     LuckyCatShellShape()
-                        .stroke(Color.white.opacity(0.62), lineWidth: 1.1)
+                        .stroke(LuckyCatTokens.Palette.glassEdgeLight, lineWidth: 1.1)
                 )
                 .overlay(
                     LuckyCatShellShape()
@@ -235,8 +235,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                             LinearGradient(
                                 colors: [
                                     Color.white.opacity(0.44),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.26),
-                                    LuckyCatTokens.Palette.creamDeep.opacity(0.14)
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.18),
+                                    LuckyCatTokens.Palette.creamDeep.opacity(0.08)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -249,14 +249,15 @@ struct LuckyCatCompactShell<Content: View>: View {
                 .overlay(bottomBellyBlend)
                 .overlay(
                     LuckyCatShellShape()
-                        .stroke(Color.white.opacity(0.24), lineWidth: 7)
+                        .stroke(LuckyCatTokens.Palette.glassInnerLight, lineWidth: 7)
                         .padding(5)
                         .blur(radius: 1.6)
                 )
+                .overlay(glassRefractionBands)
                 .overlay(shellSheen)
-                .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.30), radius: 14, x: 0, y: 8)
+                .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.20), radius: 16, x: 0, y: 9)
                 .clipShape(LuckyCatShellShape())
-                .shadow(color: status.glow.opacity(0.17), radius: 11, x: 0, y: 0)
+                .shadow(color: status.glow.opacity(0.13), radius: 11, x: 0, y: 0)
 
             faceAccents
             outlineRails
@@ -270,15 +271,15 @@ struct LuckyCatCompactShell<Content: View>: View {
                 LinearGradient(
                     colors: [
                         Color.white.opacity(0.72),
-                        status.glow.opacity(0.20),
-                        LuckyCatTokens.Palette.creamDeep.opacity(0.18)
+                        status.glow.opacity(0.16),
+                        LuckyCatTokens.Palette.creamDeep.opacity(0.10)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
-                lineWidth: 7
+                lineWidth: 6
             )
-            .blur(radius: 7)
+            .blur(radius: 6)
             .padding(5)
     }
 
@@ -288,8 +289,8 @@ struct LuckyCatCompactShell<Content: View>: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color.white.opacity(0.34),
-                            LuckyCatTokens.Palette.cream.opacity(0.18),
+                            Color.white.opacity(0.24),
+                            LuckyCatTokens.Palette.cream.opacity(0.12),
                             Color.clear
                         ],
                         center: .center,
@@ -301,7 +302,7 @@ struct LuckyCatCompactShell<Content: View>: View {
                 .offset(y: 114)
 
             Ellipse()
-                .stroke(LuckyCatTokens.Palette.creamDeep.opacity(0.16), lineWidth: 10)
+                .stroke(LuckyCatTokens.Palette.creamDeep.opacity(0.10), lineWidth: 10)
                 .frame(width: 314, height: 138)
                 .blur(radius: 6.2)
                 .offset(y: 116)
@@ -313,17 +314,54 @@ struct LuckyCatCompactShell<Content: View>: View {
         LinearGradient(
             colors: [
                 Color.white.opacity(0.0),
-                Color.white.opacity(0.16),
-                status.glow.opacity(0.06),
+                Color.white.opacity(0.24),
+                status.glow.opacity(0.04),
                 Color.white.opacity(0.0)
             ],
             startPoint: .top,
             endPoint: .bottom
         )
         .frame(width: 86, height: 320)
-        .blur(radius: 10)
+        .blur(radius: 9)
         .rotationEffect(.degrees(18))
         .offset(x: 42, y: -10)
+        .blendMode(.screen)
+        .mask(LuckyCatShellShape())
+        .allowsHitTesting(false)
+    }
+
+    private var glassRefractionBands: some View {
+        ZStack {
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            LuckyCatTokens.Palette.glassRefraction,
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 220, height: 24)
+                .rotationEffect(.degrees(-12))
+                .offset(x: -10, y: -44)
+                .blur(radius: 3.2)
+
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 152, height: 12)
+                .rotationEffect(.degrees(-14))
+                .offset(x: 44, y: 26)
+                .blur(radius: 2.2)
+
+            Ellipse()
+                .stroke(Color.white.opacity(0.18), lineWidth: 6)
+                .frame(width: 250, height: 104)
+                .offset(y: 84)
+                .blur(radius: 4)
+        }
         .blendMode(.screen)
         .mask(LuckyCatShellShape())
         .allowsHitTesting(false)
