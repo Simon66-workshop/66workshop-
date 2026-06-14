@@ -132,7 +132,7 @@ assert_file_contains() {
 make_state_env missing-evidence
 write_fixture_commands missing_evidence
 write_baseline_override
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"idle","global_display_title":"IDLE","lamp_status":"idle","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["idle"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"idle","global_display_title":"IDLE","lamp_status":"idle","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["idle"]}}'
 write_signals '[{"signal_id":"sig-1","source":"codex_hook","event_type":"item_started"}]'
 run_review SMOKE-MISSING-EVIDENCE
 assert_json_field "$TMP_ROOT/SMOKE-MISSING-EVIDENCE.out" 'payload["decision"]' "REJECT"
@@ -141,7 +141,7 @@ assert_json_field "$TMP_ROOT/SMOKE-MISSING-EVIDENCE.out" 'payload["decision"]' "
 make_state_env check-all-fail
 write_fixture_commands check_all_fail
 write_baseline_override
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"idle","global_display_title":"IDLE","lamp_status":"idle","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["idle"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"idle","global_display_title":"IDLE","lamp_status":"idle","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["idle"]}}'
 write_signals '[{"signal_id":"sig-2","source":"codex_hook","event_type":"item_started"}]'
 run_review SMOKE-CHECK-ALL-FAIL
 assert_json_field "$TMP_ROOT/SMOKE-CHECK-ALL-FAIL.out" 'payload["decision"]' "REJECT"
@@ -150,7 +150,7 @@ assert_json_field "$TMP_ROOT/SMOKE-CHECK-ALL-FAIL.out" 'payload["decision"]' "RE
 make_state_env process-only-running
 write_fixture_commands clean
 write_baseline_override
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
 write_signals '[{"signal_id":"sig-3","source":"process_observer","event_type":"observed_active"}]'
 run_review SMOKE-PROCESS-ONLY-RUNNING
 assert_json_field "$TMP_ROOT/SMOKE-PROCESS-ONLY-RUNNING.out" 'payload["decision"]' "REJECT"
@@ -161,7 +161,7 @@ make_state_env stop-pending
 write_fixture_commands clean
 write_baseline_override
 write_task stop-task done_unverified
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"pending","global_display_title":"PENDING","lamp_status":"pending","counts":{"pending_verify_count":1},"diagnostics":{"writer_status":"ok","projector_reason":["pending_verify"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"pending","global_display_title":"PENDING","lamp_status":"pending","counts":{"pending_verify_count":1},"diagnostics":{"writer_status":"ok","projector_reason":["pending_verify"]}}'
 write_signals '[{"signal_id":"sig-4","source":"codex_hook","event_type":"stop"}]'
 run_review SMOKE-STOP-PENDING
 python3 - "$TMP_ROOT/SMOKE-STOP-PENDING.out" <<'PY'
@@ -175,7 +175,7 @@ make_state_env fake-green
 write_fixture_commands clean
 write_baseline_override
 write_task fake-green done_unverified
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"done_verified","global_display_title":"DONE","lamp_status":"done_verified","counts":{"pending_verify_count":1},"diagnostics":{"writer_status":"ok","projector_reason":["recent_done"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"done_verified","global_display_title":"DONE","lamp_status":"done_verified","counts":{"pending_verify_count":1},"diagnostics":{"writer_status":"ok","projector_reason":["recent_done"]}}'
 write_signals '[{"signal_id":"sig-5","source":"codex_hook","event_type":"stop"}]'
 run_review SMOKE-FAKE-GREEN
 assert_json_field "$TMP_ROOT/SMOKE-FAKE-GREEN.out" 'payload["decision"]' "REJECT"
@@ -185,7 +185,7 @@ assert_file_contains "$TMP_ROOT/fake-green/reports/SMOKE-FAKE-GREEN/reflection.j
 make_state_env final-report
 write_fixture_commands clean
 write_baseline_override
-write_ui_state '{"source":"state_projector","projector_version":"M3.3","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
+write_ui_state '{"source":"state_projector","projector_version":"M3.7","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
 write_signals '[{"signal_id":"sig-6","source":"codex_hook","event_type":"item_started"}]'
 run_review SMOKE-FINAL-REPORT
 assert_json_field "$TMP_ROOT/SMOKE-FINAL-REPORT.out" 'payload["decision"]' "PASS"

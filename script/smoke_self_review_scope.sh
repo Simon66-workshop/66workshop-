@@ -182,7 +182,7 @@ cp "$SMOKE_SOURCE_DIR/launch_agent_note.txt" "$REPO_SCOPE_DIR/launch_agent_note.
 cp "$SMOKE_SOURCE_DIR/auth_secret_note.py" "$REPO_SCOPE_DIR/auth_secret_note.py"
 cp "$SMOKE_SOURCE_DIR/in_scope_forbidden.py" "$REPO_SCOPE_IN_DIR/in_scope_forbidden.py"
 
-COMMON_UI='{"source":"state_projector","projector_version":"M3.3","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
+COMMON_UI='{"source":"state_projector","projector_version":"M3.7","global_status":"running","global_display_title":"RUNNING","lamp_status":"running","counts":{"pending_verify_count":0},"diagnostics":{"writer_status":"ok","projector_reason":["active_execution"]}}'
 COMMON_SIGNAL='[{"signal_id":"sig-scope","source":"codex_hook","event_type":"item_started"}]'
 
 # 1. scope 内 clean + scope 外 unrelated dirty -> 不 REJECT
