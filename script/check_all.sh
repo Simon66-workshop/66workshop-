@@ -27,6 +27,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_workspace_coverage.sh"
 "$ROOT_DIR/script/smoke_hooks_config.sh"
 "$ROOT_DIR/script/smoke_hook_signal_bridge.sh"
+"$ROOT_DIR/script/smoke_check_all_total_schema.sh"
 "$ROOT_DIR/script/smoke_stop_priority_guard.sh"
 "$ROOT_DIR/script/smoke_hook_bridge_launch_agent.sh"
 "$ROOT_DIR/script/smoke_signal_fusion.sh"

@@ -89,6 +89,20 @@ task_status() {
   "$ROOT_DIR/tasklight" show "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'
 }
 
+task_total() {
+  "$ROOT_DIR/tasklight" list | python3 -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+counts = payload.get("counts") or {}
+if "total" not in counts:
+    print("missing legacy task counts.total in tasklight list", file=sys.stderr)
+    raise SystemExit(1)
+print(counts["total"])
+'
+}
+
 binding_value() {
   local turn_id="$1"
   local key="$2"
@@ -181,10 +195,10 @@ run_bridge
 [[ "$(task_status "$task_blocked")" == "blocked" ]]
 [[ "$(binding_value turn-blocked last_bridge_decision)" == "stop_after_blocked_diagnostic" ]]
 
-before_total="$("$ROOT_DIR/tasklight" status | python3 -c 'import json,sys; print(json.load(sys.stdin)["counts"]["total"])')"
+before_total="$(task_total)"
 append_signal "stop" ""
 run_bridge
-after_total="$("$ROOT_DIR/tasklight" status | python3 -c 'import json,sys; print(json.load(sys.stdin)["counts"]["total"])')"
+after_total="$(task_total)"
 [[ "$before_total" == "$after_total" ]]
 
 decisions="$(processed_decisions_for_turn turn-soft)"
