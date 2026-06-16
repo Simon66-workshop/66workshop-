@@ -19,6 +19,7 @@ final class TaskLightViewModel: ObservableObject {
     @Published var contentExpanded: Bool
     @Published var muted: Bool
     @Published var workspaceCoveragePresentation: TaskLightWorkspaceCoveragePresentation?
+    @Published private(set) var uiStateRevision: Int
     @Published private var recentEventSnapshot: [TaskLightEventRecord]
 
     let config: TaskLightConfig
@@ -32,6 +33,8 @@ final class TaskLightViewModel: ObservableObject {
     private var pendingWorkspaceCoverageRefreshes: [DispatchWorkItem] = []
     private var pendingWorkspaceCoverageHide: DispatchWorkItem?
     private var recentEventsModifiedAt: Date?
+    private var lastUIEventFlowFingerprint: String?
+    private var lastUIStateRefreshSignature: String?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
@@ -46,6 +49,8 @@ final class TaskLightViewModel: ObservableObject {
         self.ledger = self.store.loadPlayedLedger()
         self.muted = self.ledger.muted
         self.recentEventSnapshot = []
+        self.uiStateRevision = 0
+        self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: initialUIState, config: config)
     }
 
     func start() {
@@ -62,7 +67,15 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func refresh() {
-        uiState = store.loadProjectedUIState()
+        let previousState = uiState
+        let nextState = store.loadProjectedUIState()
+        let nextSignature = Self.uiStateRefreshSignature(for: nextState, config: config)
+        if nextSignature != lastUIStateRefreshSignature || nextState != previousState {
+            uiStateRevision += 1
+        }
+        lastUIStateRefreshSignature = nextSignature
+        uiState = nextState
+        recordUIEventFlow(previous: previousState, current: nextState)
         refreshRecentEventsIfNeeded()
         saveUIClientDiagnostic()
         handleAlertPlayback()
@@ -164,7 +177,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func statusLabel() -> String {
-        uiState.lamp_status
+        projectedPrimaryStatus()
     }
 
     func compactCountsLabel() -> String {
@@ -272,11 +285,11 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func luckyCatPresentationTitle() -> String {
-        uiState.global_display_title
+        TaskLightProjectedPresentation.displayTitle(from: uiState)
     }
 
     func luckyCatPresentationStatus() -> LuckyCatVisualStatus {
-        switch uiState.lamp_status {
+        switch projectedPrimaryStatus() {
         case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
             return .blocked
         case TaskLightStatus.running.rawValue:
@@ -550,7 +563,11 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func overallLampStatus() -> String {
-        uiState.lamp_status
+        projectedPrimaryStatus()
+    }
+
+    private func projectedPrimaryStatus() -> String {
+        TaskLightProjectedPresentation.primaryStatus(from: uiState)
     }
 
     private func taskSortRank(_ status: String) -> Int {
@@ -599,7 +616,11 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func uiStateAgeSeconds() -> Double? {
-        guard let generatedAt = TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) else {
+        uiStateAgeSeconds(for: uiState)
+    }
+
+    private func uiStateAgeSeconds(for state: TaskLightUIState) -> Double? {
+        guard let generatedAt = TaskLightTaskRecord.parseTimestamp(state.projector_generated_at) else {
             return nil
         }
         return max(0, Date().timeIntervalSince(generatedAt))
@@ -648,14 +669,84 @@ final class TaskLightViewModel: ObservableObject {
         )
     }
 
+    private func recordUIEventFlow(previous: TaskLightUIState, current: TaskLightUIState) {
+        let reference = flowReferenceTask(in: current)
+        let reason = current.diagnostics.projector_reason ?? []
+        let fingerprintParts = [
+            current.global_status,
+            current.lamp_status,
+            "\(current.counts.blocked)",
+            "\(current.counts.stale)",
+            "\(current.counts.running)",
+            "\(current.counts.queued)",
+            "\(current.counts.pending_verify_count)",
+            "\(current.counts.observed_active)",
+            reason.joined(separator: ","),
+            reference?.task_id ?? "none",
+            reference?.display_scope ?? "none",
+            reference?.effective_status ?? "none",
+            current.diagnostics.current_thread_signal_status ?? "none",
+            current.diagnostics.current_thread_fusion_decision ?? "none"
+        ]
+        let fingerprint = fingerprintParts.joined(separator: "|")
+        guard fingerprint != lastUIEventFlowFingerprint else { return }
+        lastUIEventFlowFingerprint = fingerprint
+
+        var payload: [String: Any] = [
+            "schema_version": "0.1",
+            "event_type": "ui_state_consumed",
+            "recorded_at": TaskLightTaskRecord.nowString(),
+            "pid": Int(ProcessInfo.processInfo.processIdentifier),
+            "source": current.source,
+            "projector_version": current.projector_version ?? "unknown",
+            "previous_global_status": previous.global_status,
+            "previous_lamp_status": previous.lamp_status,
+            "global_status": current.global_status,
+            "lamp_status": current.lamp_status,
+            "global_display_title": current.global_display_title,
+            "counts": [
+                "blocked": current.counts.blocked,
+                "stale": current.counts.stale,
+                "running": current.counts.running,
+                "queued": current.counts.queued,
+                "pending_verify_count": current.counts.pending_verify_count,
+                "observed_active": current.counts.observed_active,
+                "managed_active": current.counts.managed_active
+            ],
+            "projector_reason": reason,
+            "fallback_reason": current.diagnostics.fallback_reason ?? "none",
+            "writer_status": current.diagnostics.writer_status ?? "unknown",
+            "hook_bridge_status": current.diagnostics.hook_bridge_status ?? "unknown",
+            "current_thread_signal_status": current.diagnostics.current_thread_signal_status ?? "unknown",
+            "current_thread_fusion_decision": current.diagnostics.current_thread_fusion_decision ?? "unknown",
+            "ui_state_age_sec": uiStateAgeSeconds(for: current) ?? -1
+        ]
+        if let reference {
+            payload["reference_task"] = [
+                "task_id": reference.task_id,
+                "title": reference.title,
+                "effective_status": reference.effective_status,
+                "display_scope": reference.display_scope,
+                "state_cause": reference.state_cause ?? "unknown",
+                "phase": reference.phase ?? "unknown",
+                "turn_id": reference.turn_id ?? "none"
+            ]
+        }
+        store.appendUIEventFlowRecord(payload)
+    }
+
     private func compactReferenceTask() -> TaskLightTaskSummary? {
+        flowReferenceTask(in: uiState)?.asTaskSummary()
+    }
+
+    private func flowReferenceTask(in state: TaskLightUIState) -> TaskLightUITask? {
         let priority = ["open_blocker", "active_execution", "pending_verify", "recent_done", "stale_blocker", "resolved_blocker"]
         for scope in priority {
-            if let task = uiState.tasks.first(where: { $0.display_scope == scope }) {
-                return task.asTaskSummary()
+            if let task = state.tasks.first(where: { $0.display_scope == scope }) {
+                return task
             }
         }
-        return uiState.tasks.first?.asTaskSummary()
+        return state.tasks.first
     }
 
     private func isCompactPrimaryStatus(_ status: String) -> Bool {
@@ -675,6 +766,30 @@ final class TaskLightViewModel: ObservableObject {
         visibleObservedThreads().contains {
             $0.status == TaskLightObservationStatus.observed_attention.rawValue && $0.confidence >= 0.75
         }
+    }
+
+    private static func uiStateRefreshSignature(for state: TaskLightUIState, config: TaskLightConfig) -> String {
+        let fileAttributes = try? FileManager.default.attributesOfItem(atPath: config.uiStateURL.path)
+        let modifiedAt = (fileAttributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (fileAttributes?[.size] as? NSNumber)?.intValue ?? 0
+        let reason = state.diagnostics.projector_reason?.joined(separator: ",") ?? "none"
+        return [
+            String(format: "%.6f", modifiedAt),
+            "\(size)",
+            state.source,
+            state.projector_generated_at,
+            state.global_status,
+            state.lamp_status,
+            TaskLightProjectedPresentation.displayTitle(from: state),
+            "\(state.counts.blocked)",
+            "\(state.counts.stale)",
+            "\(state.counts.running)",
+            "\(state.counts.queued)",
+            "\(state.counts.pending_verify_count)",
+            "\(state.counts.done_verified_visible)",
+            "\(state.counts.observed_active)",
+            reason
+        ].joined(separator: "|")
     }
 
     private func clampedProgress(_ progress: Double?, fallback: CGFloat) -> CGFloat {

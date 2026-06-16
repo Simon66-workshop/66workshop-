@@ -7,6 +7,8 @@ struct LuckyCatPawCounterChip: View {
     var isActive: Bool = false
     var showsLabel: Bool = true
 
+    @State private var shimmer = false
+
     var body: some View {
         let hasCount = count > 0
         let active = isActive || hasCount
@@ -41,15 +43,20 @@ struct LuckyCatPawCounterChip: View {
         .frame(width: 48, height: 92)
         .background(
             PawTileShape()
+                .fill(.ultraThinMaterial)
+        )
+        .background(
+            PawTileShape()
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.94),
+                            Color.white.opacity(0.96),
+                            LuckyCatTokens.Palette.glassPrismBlue.opacity(active ? 0.24 : 0.10),
                             LuckyCatTokens.Palette.cream.opacity(0.82),
-                            LuckyCatTokens.Palette.creamDeep.opacity(0.62)
+                            LuckyCatTokens.Palette.creamDeep.opacity(0.56)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: shimmer ? .topLeading : .topTrailing,
+                        endPoint: .bottomTrailing
                     )
                 )
                 .overlay(
@@ -63,9 +70,27 @@ struct LuckyCatPawCounterChip: View {
         )
         .overlay(
             PawTileShape()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            Color.white.opacity(active ? 0.30 : 0.16),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .offset(x: shimmer ? 12 : -16)
+                .blur(radius: 4)
+                .blendMode(.screen)
+        )
+        .overlay(
+            PawTileShape()
                 .stroke(status.tint.opacity(active ? 0.28 : 0.10), lineWidth: active ? 1.4 : 1)
         )
-        .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.48), radius: 9, x: 0, y: 6)
+        .scaleEffect(active ? 1.03 : 1.0)
+        .shadow(color: LuckyCatTokens.Palette.glassDeepShadow.opacity(0.72), radius: 12, x: 0, y: 8)
         .shadow(color: status.tint.opacity(active ? 0.18 : 0), radius: 8, x: 0, y: 2)
         .overlay(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -73,6 +98,12 @@ struct LuckyCatPawCounterChip: View {
                 .frame(height: 12)
                 .blur(radius: 5)
                 .offset(y: 6)
+        }
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: active)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.7).repeatForever(autoreverses: true)) {
+                shimmer = true
+            }
         }
     }
 }

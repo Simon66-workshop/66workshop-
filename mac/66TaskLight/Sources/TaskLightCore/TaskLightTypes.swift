@@ -28,6 +28,7 @@ public struct TaskLightConfig {
     public var observationsStateURL: URL
     public var hookBridgeHealthURL: URL
     public var uiStateURL: URL
+    public var uiEventFlowURL: URL
     public var uiClientsDirectoryURL: URL
     public var workspaceCoverageDirectoryURL: URL
     public var workspaceCoverageRunStatusURL: URL
@@ -55,6 +56,7 @@ public struct TaskLightConfig {
         observationsStateURL: URL? = nil,
         hookBridgeHealthURL: URL? = nil,
         uiStateURL: URL? = nil,
+        uiEventFlowURL: URL? = nil,
         uiClientsDirectoryURL: URL? = nil,
         workspaceCoverageDirectoryURL: URL? = nil
     ) {
@@ -66,6 +68,7 @@ public struct TaskLightConfig {
         self.observationsStateURL = observationsStateURL ?? stateDirectory.appendingPathComponent("observations_state.json")
         self.hookBridgeHealthURL = hookBridgeHealthURL ?? stateDirectory.appendingPathComponent("hook_bridge_health.json")
         self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
+        self.uiEventFlowURL = uiEventFlowURL ?? stateDirectory.appendingPathComponent("ui_event_flow.jsonl")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
         self.workspaceCoverageRunStatusURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("run_status.json")
@@ -95,6 +98,7 @@ public struct TaskLightConfig {
         let observationsStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_OBSERVATIONS_STATE_PATH"].map { URL(fileURLWithPath: $0) }
         let hookBridgeHealthURL = ProcessInfo.processInfo.environment["TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH"].map { URL(fileURLWithPath: $0) }
         let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
+        let uiEventFlowURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_EVENT_FLOW_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
@@ -109,6 +113,7 @@ public struct TaskLightConfig {
             observationsStateURL: observationsStateURL,
             hookBridgeHealthURL: hookBridgeHealthURL,
             uiStateURL: uiStateURL,
+            uiEventFlowURL: uiEventFlowURL,
             uiClientsDirectoryURL: uiClientsDirectoryURL,
             workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL
         )
@@ -814,6 +819,27 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
 
     public var id: String { candidate_id }
 
+    private enum CodingKeys: String, CodingKey {
+        case candidate_id
+        case kind
+        case task_id
+        case thread_id
+        case turn_id
+        case pid
+        case source_set
+        case last_signal_at
+        case last_event_type
+        case base_confidence
+        case freshness_score
+        case identity_score
+        case consistency_score
+        case runtime_score
+        case display_scope
+        case state_cause
+        case reason
+        case message
+    }
+
     public init(
         candidate_id: String,
         kind: String? = nil,
@@ -852,6 +878,41 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
         self.state_cause = state_cause
         self.reason = reason
         self.message = message
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.candidate_id = try container.decode(String.self, forKey: .candidate_id)
+        self.kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        self.task_id = try container.decodeIfPresent(String.self, forKey: .task_id)
+        self.thread_id = try container.decodeIfPresent(String.self, forKey: .thread_id)
+        self.turn_id = try container.decodeIfPresent(String.self, forKey: .turn_id)
+        self.pid = try container.decodeIfPresent(Int.self, forKey: .pid)
+        self.source_set = try container.decodeIfPresent([String].self, forKey: .source_set) ?? []
+        self.last_signal_at = try Self.decodeLossyString(container, forKey: .last_signal_at)
+        self.last_event_type = try container.decodeIfPresent(String.self, forKey: .last_event_type)
+        self.base_confidence = try container.decodeIfPresent(Double.self, forKey: .base_confidence)
+        self.freshness_score = try container.decodeIfPresent(Double.self, forKey: .freshness_score)
+        self.identity_score = try container.decodeIfPresent(Double.self, forKey: .identity_score)
+        self.consistency_score = try container.decodeIfPresent(Double.self, forKey: .consistency_score)
+        self.runtime_score = try container.decodeIfPresent(Double.self, forKey: .runtime_score)
+        self.display_scope = try container.decodeIfPresent(String.self, forKey: .display_scope) ?? "ignored"
+        self.state_cause = try container.decodeIfPresent(String.self, forKey: .state_cause)
+        self.reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        self.message = try container.decodeIfPresent(String.self, forKey: .message)
+    }
+
+    private static func decodeLossyString<K: CodingKey>(_ container: KeyedDecodingContainer<K>, forKey key: K) throws -> String? {
+        if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return String(value)
+        }
+        return nil
     }
 }
 
@@ -977,6 +1038,20 @@ public struct TaskLightUIObservation: Codable, Equatable, Identifiable {
 
     public var id: String { observation_id }
 
+    private enum CodingKeys: String, CodingKey {
+        case observation_id
+        case title
+        case status
+        case confidence
+        case display_scope
+        case fresh
+        case last_seen_age_sec
+        case pid
+        case command_short
+        case cwd
+        case last_seen_at
+    }
+
     public init(
         observation_id: String,
         title: String,
@@ -1001,6 +1076,34 @@ public struct TaskLightUIObservation: Codable, Equatable, Identifiable {
         self.command_short = command_short
         self.cwd = cwd
         self.last_seen_at = last_seen_at
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.observation_id = try container.decode(String.self, forKey: .observation_id)
+        self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? observation_id
+        self.status = try container.decodeIfPresent(String.self, forKey: .status) ?? TaskLightObservationStatus.observed_quiet.rawValue
+        self.confidence = try container.decodeIfPresent(Double.self, forKey: .confidence) ?? 0
+        self.display_scope = try container.decodeIfPresent(String.self, forKey: .display_scope) ?? "history"
+        self.fresh = try container.decodeIfPresent(Bool.self, forKey: .fresh) ?? false
+        self.last_seen_age_sec = try container.decodeIfPresent(Double.self, forKey: .last_seen_age_sec)
+        self.pid = try container.decodeIfPresent(Int.self, forKey: .pid)
+        self.command_short = try container.decodeIfPresent(String.self, forKey: .command_short)
+        self.cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+        self.last_seen_at = try Self.decodeLossyString(container, forKey: .last_seen_at)
+    }
+
+    private static func decodeLossyString<K: CodingKey>(_ container: KeyedDecodingContainer<K>, forKey key: K) throws -> String? {
+        if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return String(value)
+        }
+        return nil
     }
 
     public func asObservationRecord() -> TaskLightObservationRecord {
@@ -1351,6 +1454,47 @@ public struct TaskLightUIState: Codable, Equatable {
         self.runtime_candidates = runtime_candidates
         self.quota = quota
         self.diagnostics = diagnostics
+    }
+}
+
+public enum TaskLightProjectedPresentation {
+    public static func primaryStatus(from state: TaskLightUIState) -> String {
+        let global = normalizedStatus(state.global_status)
+        let lamp = normalizedStatus(state.lamp_status)
+        return global.isEmpty ? (lamp.isEmpty ? TaskLightStatus.idle.rawValue : lamp) : global
+    }
+
+    public static func displayTitle(from state: TaskLightUIState) -> String {
+        let status = primaryStatus(from: state)
+        let expected = displayTitle(for: status)
+        let projected = state.global_display_title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !projected.isEmpty else {
+            return expected
+        }
+        let projectedUpper = projected.uppercased()
+        if expected != "IDLE", projectedUpper != expected {
+            return expected
+        }
+        return projected
+    }
+
+    public static func displayTitle(for status: String) -> String {
+        switch normalizedStatus(status) {
+        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+            return "BLOCKED"
+        case TaskLightStatus.running.rawValue, TaskLightStatus.queued.rawValue:
+            return "RUNNING"
+        case "pending", TaskLightStatus.done_unverified.rawValue:
+            return "PENDING"
+        case TaskLightStatus.done_verified.rawValue:
+            return "DONE"
+        default:
+            return "IDLE"
+        }
+    }
+
+    private static func normalizedStatus(_ status: String) -> String {
+        status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 

@@ -26,6 +26,25 @@ struct LuckyCatStatusOrb: View {
             }
 
             Circle()
+                .stroke(
+                    AngularGradient(
+                        colors: [
+                            Color.white.opacity(0.08),
+                            status.tint.opacity(0.46),
+                            LuckyCatTokens.Palette.glassPrismBlue.opacity(0.74),
+                            Color.white.opacity(0.58),
+                            status.tint.opacity(0.20)
+                        ],
+                        center: .center,
+                        angle: .degrees(animated ? 360 : 0)
+                    ),
+                    lineWidth: style == .embedded ? 2.6 : 3.2
+                )
+                .frame(width: size + (style == .embedded ? 5 : 8), height: size + (style == .embedded ? 5 : 8))
+                .blur(radius: style == .embedded ? 0.25 : 0.6)
+                .opacity(style == .embedded ? 0.72 : 0.58)
+
+            Circle()
                 .fill(
                     RadialGradient(
                         colors: [

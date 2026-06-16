@@ -170,6 +170,23 @@ public final class TaskLightStore {
         fsync(fd)
     }
 
+    public func appendUIEventFlowRecord(_ payload: [String: Any]) {
+        ensureLayout()
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return
+        }
+        let line = encoded + "\n"
+        let fd = open(config.uiEventFlowURL.path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.withCString { pointer in
+            write(fd, pointer, strlen(pointer))
+        }
+        fsync(fd)
+    }
+
     public func clear(taskID: String) {
         runCLI(arguments: ["clear", "--task-id", taskID])
     }

@@ -24,6 +24,18 @@ func makeTempStateDirectory() throws -> URL {
     return root
 }
 
+if let uiStatePath = ProcessInfo.processInfo.environment["TASKLIGHT_CHECK_UI_STATE_PATH"] {
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: uiStatePath))
+        _ = try JSONDecoder().decode(TaskLightUIState.self, from: data)
+        print("ui_state_decode=ok")
+        exit(0)
+    } catch {
+        FileHandle.standardError.write(Data("ui_state_decode=failed \(error)\n".utf8))
+        exit(1)
+    }
+}
+
 do {
     let stateDirectory = try makeTempStateDirectory()
     defer { try? FileManager.default.removeItem(at: stateDirectory) }
@@ -252,6 +264,7 @@ do {
 	    check(loadedUIState.source == "state_projector", "ui_state preferred when fresh")
 	    check(loadedUIState.projector_version == "M3.7", "ui_state projector version decodes")
 	    check(loadedUIState.global_display_title == "RUNNING", "ui_state title decodes")
+	    check(TaskLightProjectedPresentation.displayTitle(from: loadedUIState) == "RUNNING", "ui_state presentation title follows projected running status")
 	    check(loadedUIState.counts.running == 1, "ui_state counts decode")
 	    check(loadedUIState.counts.appserver_active == 1, "ui_state appserver count decodes")
 	    check(loadedUIState.counts.process_observed == 1, "ui_state process observed count decodes")
@@ -279,6 +292,13 @@ do {
 	    check(loadedUIState.diagnostics.latest_turn_binding_aliases?.contains("appserver:thread-1:turn-1") == true, "ui_state diagnostics decode binding aliases")
 	    check(loadedUIState.diagnostics.binding_identity_count == 3, "ui_state diagnostics decode binding identity count")
 	    check(loadedUIState.diagnostics.runtime_candidate_count == 1, "ui_state diagnostics decode runtime candidate count")
+
+    var mismatchedTitleUIState = projectedUIState
+    mismatchedTitleUIState.global_status = "running"
+    mismatchedTitleUIState.lamp_status = "running"
+    mismatchedTitleUIState.global_display_title = "DONE"
+    check(TaskLightProjectedPresentation.displayTitle(from: mismatchedTitleUIState) == "RUNNING", "ui_state presentation guards stale Done title during projected running")
+    check(TaskLightProjectedPresentation.primaryStatus(from: mismatchedTitleUIState) == "running", "ui_state presentation primary status follows projected running")
 
     try "{broken".data(using: .utf8)!.write(to: config.uiStateURL)
     let fallbackUIState = store.loadProjectedUIState()
