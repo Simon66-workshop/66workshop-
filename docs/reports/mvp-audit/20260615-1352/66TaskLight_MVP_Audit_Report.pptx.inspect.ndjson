@@ -1,0 +1,389 @@
+{"kind":"deck","id":"pr/z32de8","name":"Deck"}
+{"kind":"layout","layoutId":"5270d726-725f-499f-befb-2eeb6c12086d","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"141e4409-0f1d-4e86-968a-0df295c790b2","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/hcphzb","slide":1,"title":"66TaskLight MVP 验收报告","textShapes":10}
+{"kind":"textbox","id":"sh/p4r65wju","slide":1,"text":"66TaskLight MVP 验收报告","textPreview":"66TaskLight MVP 验收报告","textChars":20,"textLines":1,"bbox":[72,180,860,76]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":1,"text":"独立审计复盘 | Decision: REJECT | Score: 99/100","textPreview":"独立审计复盘 | Decision: REJECT | Score: 99/100","textChars":41,"textLines":1,"bbox":[76,268,900,34]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":1,"bbox":[76,356,330,120]}
+{"kind":"shape","id":"sh/0bi9s36h","slide":1,"bbox":[76,356,6,120]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":1,"text":"结论","textPreview":"结论","textChars":2,"textLines":1,"bbox":[94,370,298,26]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":1,"text":"按硬门禁与证据重新判定。","textPreview":"按硬门禁与证据重新判定。","textChars":12,"textLines":1,"bbox":[94,402,298,62]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":1,"bbox":[430,356,330,120]}
+{"kind":"shape","id":"sh/0z61032l","slide":1,"bbox":[430,356,6,120]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":1,"text":"证据","textPreview":"证据","textChars":2,"textLines":1,"bbox":[448,370,298,26]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":1,"text":"14/15 checks passed","textPreview":"14/15 checks passed","textChars":19,"textLines":1,"bbox":[448,402,298,62]}
+{"kind":"shape","id":"sh/cbulwval","slide":1,"bbox":[784,356,330,120]}
+{"kind":"shape","id":"sh/nqxs72x4","slide":1,"bbox":[784,356,6,120]}
+{"kind":"textbox","id":"sh/u54zidon","slide":1,"text":"风险","textPreview":"风险","textChars":2,"textLines":1,"bbox":[802,370,298,26]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":1,"text":"29 missing hooks","textPreview":"29 missing hooks","textChars":16,"textLines":1,"bbox":[802,402,298,62]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":1,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/hcphzb","slide":1,"text":""}
+{"kind":"slide","id":"sl/r2ivnk","slide":2,"title":"MVP 原始目标与验收范围","textShapes":10}
+{"kind":"textbox","id":"sh/u54zidon","slide":2,"text":"MVP 原始目标与验收范围","textPreview":"MVP 原始目标与验收范围","textChars":13,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/5sneloj2","slide":2,"text":"目标不是证明“能跑”，而是证明状态链路不会误导用户。","textPreview":"目标不是证明“能跑”，而是证明状态链路不会误导用户。","textChars":26,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/cbulwval","slide":2,"bbox":[70,154,340,150]}
+{"kind":"shape","id":"sh/neloj2t8","slide":2,"bbox":[70,154,6,150]}
+{"kind":"textbox","id":"sh/ytsvu9kn","slide":2,"text":"范围","textPreview":"范围","textChars":2,"textLines":1,"bbox":[88,168,308,26]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":2,"text":"LuckyCat UI, Hook Bridge, State Projector, Turn Runtime Arbiter, Workspace Coverage, Quota Widget, Self-Review.","textPreview":"LuckyCat UI, Hook Bridge, State Projector, Turn Runtime Arbiter, Workspace Coverage, Quota Widget, Self-Review.","textChars":111,"textLines":1,"bbox":[88,200,308,92]}
+{"kind":"shape","id":"sh/czed8v6p","slide":2,"bbox":[470,154,340,150]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":2,"bbox":[470,154,6,150]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":2,"text":"硬边界","textPreview":"硬边界","textChars":3,"textLines":1,"bbox":[488,168,308,26]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":2,"text":"不修代码、不 trust hooks、不读 auth、不输出敏感原文、不 commit/push。","textPreview":"不修代码、不 trust hooks、不读 auth、不输出敏感原文、不 commit/push。","textChars":49,"textLines":1,"bbox":[488,200,308,92]}
+{"kind":"shape","id":"sh/9w3m94fu","slide":2,"bbox":[870,154,300,150]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":2,"bbox":[870,154,6,150]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":2,"text":"验收逻辑","textPreview":"验收逻辑","textChars":4,"textLines":1,"bbox":[888,168,268,26]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":2,"text":"硬门禁优先于分数；测试通过不等于 MVP 通过。","textPreview":"硬门禁优先于分数；测试通过不等于 MVP 通过。","textChars":24,"textLines":1,"bbox":[888,200,268,92]}
+{"kind":"textbox","id":"sh/9knih4by","slide":2,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/r2ivnk","slide":2,"text":""}
+{"kind":"slide","id":"sl/ecy4t2","slide":3,"title":"系统架构总览","textShapes":18}
+{"kind":"textbox","id":"sh/r2p8nqxs","slide":3,"text":"系统架构总览","textPreview":"系统架构总览","textChars":6,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":3,"text":"审计以本地状态文件和只读检查脚本为证据源。","textPreview":"审计以本地状态文件和只读检查脚本为证据源。","textChars":21,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/94fu18jq","slide":3,"bbox":[90,250,160,90]}
+{"kind":"shape","id":"sh/2p8nqxs7","slide":3,"bbox":[90,250,6,90]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":3,"text":"Codex hooks","textPreview":"Codex hooks","textChars":11,"textLines":1,"bbox":[108,264,128,26]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":3,"text":"Local only","textPreview":"Local only","textChars":10,"textLines":1,"bbox":[108,296,128,32]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[260,278,40,40]}
+{"kind":"shape","id":"sh/2t83itgf","slide":3,"bbox":[300,250,160,90]}
+{"kind":"shape","id":"sh/re1w7mp0","slide":3,"bbox":[300,250,6,90]}
+{"kind":"textbox","id":"sh/bulwval8","slide":3,"text":"Hook Bridge","textPreview":"Hook Bridge","textChars":11,"textLines":1,"bbox":[318,264,128,26]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":3,"text":"Local only","textPreview":"Local only","textChars":10,"textLines":1,"bbox":[318,296,128,32]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[470,278,40,40]}
+{"kind":"shape","id":"sh/0fepkzup","slide":3,"bbox":[510,250,160,90]}
+{"kind":"shape","id":"sh/bi9s36hc","slide":3,"bbox":[510,250,6,90]}
+{"kind":"textbox","id":"sh/ixczed8v","slide":3,"text":"Signal bus","textPreview":"Signal bus","textChars":10,"textLines":1,"bbox":[528,264,128,26]}
+{"kind":"textbox","id":"sh/tovahoza","slide":3,"text":"Local only","textPreview":"Local only","textChars":10,"textLines":1,"bbox":[528,296,128,32]}
+{"kind":"textbox","id":"sh/032lszqt","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[680,278,40,40]}
+{"kind":"shape","id":"sh/b6xkf6dc","slide":3,"bbox":[720,250,160,90]}
+{"kind":"shape","id":"sh/il0rqd4v","slide":3,"bbox":[720,250,6,90]}
+{"kind":"textbox","id":"sh/ulwval87","slide":3,"text":"State Projector","textPreview":"State Projector","textChars":15,"textLines":1,"bbox":[738,264,128,26]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":3,"text":"Local only","textPreview":"Local only","textChars":10,"textLines":1,"bbox":[738,296,128,32]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":3,"text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[890,278,40,40]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":3,"bbox":[960,250,160,90]}
+{"kind":"shape","id":"sh/uxc3ylc7","slide":3,"bbox":[960,250,6,90]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":3,"text":"LuckyCat UI","textPreview":"LuckyCat UI","textChars":11,"textLines":1,"bbox":[978,264,128,26]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":3,"text":"Reads ui_state","textPreview":"Reads ui_state","textChars":14,"textLines":1,"bbox":[978,296,128,32]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":3,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/q5o7qpg3","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/ecy4t2","slide":3,"text":""}
+{"kind":"slide","id":"sl/ycpnt6","slide":4,"title":"状态链路：Codex turn → hooks → bridge → projector → LuckyCat","textShapes":19}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":4,"text":"状态链路：Codex turn → hooks → bridge → projector → LuckyCat","textPreview":"状态链路：Codex turn → hooks → bridge → projector → LuckyCat","textChars":55,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":4,"text":"关键验收点是弱信号不能越权点亮主灯。","textPreview":"关键验收点是弱信号不能越权点亮主灯。","textChars":18,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/kb6xkf6d","slide":4,"bbox":[70,150,190,34]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":4,"text":"Stage","textPreview":"Stage","textChars":5,"textLines":1,"bbox":[78,158,174,24]}
+{"kind":"shape","id":"sh/2t83itgf","slide":4,"bbox":[260,150,380,34]}
+{"kind":"textbox","id":"sh/9knih4by","slide":4,"text":"Allowed role","textPreview":"Allowed role","textChars":12,"textLines":1,"bbox":[268,158,364,24]}
+{"kind":"shape","id":"sh/kzupwb2h","slide":4,"bbox":[640,150,530,34]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":4,"text":"Audit focus","textPreview":"Audit focus","textChars":11,"textLines":1,"bbox":[648,158,514,24]}
+{"kind":"shape","id":"sh/2p8nqxs7","slide":4,"bbox":[70,184,190,34]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":4,"text":"Hooks","textPreview":"Hooks","textChars":5,"textLines":1,"bbox":[78,192,174,24]}
+{"kind":"shape","id":"sh/9gr2p8nq","slide":4,"bbox":[260,184,380,34]}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":4,"text":"Emit trusted local events","textPreview":"Emit trusted local events","textChars":25,"textLines":1,"bbox":[268,192,364,24]}
+{"kind":"shape","id":"sh/ra5gbq1o","slide":4,"bbox":[640,184,530,34]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":4,"text":"No automatic trust","textPreview":"No automatic trust","textChars":18,"textLines":1,"bbox":[648,192,514,24]}
+{"kind":"shape","id":"sh/94fu18jq","slide":4,"bbox":[70,218,190,34]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":4,"text":"Bridge","textPreview":"Bridge","textChars":6,"textLines":1,"bbox":[78,226,174,24]}
+{"kind":"shape","id":"sh/r2p8nqxs","slide":4,"bbox":[260,218,380,34]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":4,"text":"Map turn to managed task","textPreview":"Map turn to managed task","textChars":24,"textLines":1,"bbox":[268,226,364,24]}
+{"kind":"shape","id":"sh/9w3m94fu","slide":4,"bbox":[640,218,530,34]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":4,"text":"No prompt/response/auth output","textPreview":"No prompt/response/auth output","textChars":30,"textLines":1,"bbox":[648,226,514,24]}
+{"kind":"shape","id":"sh/ovahoza1","slide":4,"bbox":[70,252,190,34]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":4,"text":"Projector","textPreview":"Projector","textChars":9,"textLines":1,"bbox":[78,260,174,24]}
+{"kind":"shape","id":"sh/6tovahoz","slide":4,"bbox":[260,252,380,34]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":4,"text":"Single UI decision point","textPreview":"Single UI decision point","textChars":24,"textLines":1,"bbox":[268,260,364,24]}
+{"kind":"shape","id":"sh/onyd0z61","slide":4,"bbox":[640,252,530,34]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":4,"text":"writer_status, weak-signal suppression","textPreview":"writer_status, weak-signal suppression","textChars":38,"textLines":1,"bbox":[648,260,514,24]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":4,"bbox":[70,286,190,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":4,"text":"LuckyCat","textPreview":"LuckyCat","textChars":8,"textLines":1,"bbox":[78,294,174,24]}
+{"kind":"shape","id":"sh/oj2t83it","slide":4,"bbox":[260,286,380,34]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":4,"text":"Render ui_state","textPreview":"Render ui_state","textChars":15,"textLines":1,"bbox":[268,294,364,24]}
+{"kind":"shape","id":"sh/rytsvu9k","slide":4,"bbox":[640,286,530,34]}
+{"kind":"textbox","id":"sh/gfmlkjm1","slide":4,"text":"No recomputation from raw files","textPreview":"No recomputation from raw files","textChars":31,"textLines":1,"bbox":[648,294,514,24]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":4,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/y1kre1w7","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/ycpnt6","slide":4,"text":""}
+{"kind":"slide","id":"sl/51zkib","slide":5,"title":"测试方法与证据来源","textShapes":18}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":5,"text":"测试方法与证据来源","textPreview":"测试方法与证据来源","textChars":9,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":5,"text":"命令输出只保留安全摘要，不保存原始日志正文。","textPreview":"命令输出只保留安全摘要，不保存原始日志正文。","textChars":22,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/61032lsz","slide":5,"bbox":[70,150,310,120]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":5,"bbox":[70,150,6,120]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":5,"text":"文档","textPreview":"文档","textChars":2,"textLines":1,"bbox":[88,164,278,26]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":5,"text":"10/10 required docs present and read.","textPreview":"10/10 required docs present and read.","textChars":37,"textLines":1,"bbox":[88,196,278,62]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":5,"bbox":[420,150,310,120]}
+{"kind":"shape","id":"sh/d8v6psfi","slide":5,"bbox":[420,150,6,120]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":5,"text":"检查脚本","textPreview":"检查脚本","textChars":4,"textLines":1,"bbox":[438,164,278,26]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":5,"text":"15 scripts executed","textPreview":"15 scripts executed","textChars":19,"textLines":1,"bbox":[438,196,278,62]}
+{"kind":"shape","id":"sh/7adsji5s","slide":5,"bbox":[770,150,310,120]}
+{"kind":"shape","id":"sh/wval87ed","slide":5,"bbox":[770,150,6,120]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":5,"text":"状态文件","textPreview":"状态文件","textChars":4,"textLines":1,"bbox":[788,164,278,26]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":5,"text":"ui_state, projector, bridge, coverage, quota, signal counts.","textPreview":"ui_state, projector, bridge, coverage, quota, signal counts.","textChars":60,"textLines":1,"bbox":[788,196,278,62]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":5,"bbox":[70,330,360,34]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":5,"text":"Metric","textPreview":"Metric","textChars":6,"textLines":1,"bbox":[78,338,344,24]}
+{"kind":"shape","id":"sh/psfil0rq","slide":5,"bbox":[430,330,640,34]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":5,"text":"Value","textPreview":"Value","textChars":5,"textLines":1,"bbox":[438,338,624,24]}
+{"kind":"shape","id":"sh/7u54zido","slide":5,"bbox":[70,364,360,34]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":5,"text":"Command pass rate","textPreview":"Command pass rate","textChars":17,"textLines":1,"bbox":[78,372,344,24]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":5,"bbox":[430,364,640,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":5,"text":"93.3%","textPreview":"93.3%","textChars":5,"textLines":1,"bbox":[438,372,624,24]}
+{"kind":"shape","id":"sh/oj2t83it","slide":5,"bbox":[70,398,360,34]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":5,"text":"Writer status","textPreview":"Writer status","textChars":13,"textLines":1,"bbox":[78,406,344,24]}
+{"kind":"shape","id":"sh/61032lsz","slide":5,"bbox":[430,398,640,34]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":5,"text":"ok","textPreview":"ok","textChars":2,"textLines":1,"bbox":[438,406,624,24]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":5,"bbox":[70,432,360,34]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":5,"text":"Quota in ui_state","textPreview":"Quota in ui_state","textChars":17,"textLines":1,"bbox":[78,440,344,24]}
+{"kind":"shape","id":"sh/6tovahoz","slide":5,"bbox":[430,432,640,34]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":5,"text":"yes","textPreview":"yes","textChars":3,"textLines":1,"bbox":[438,440,624,24]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":5,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/51zkib","slide":5,"text":""}
+{"kind":"slide","id":"sl/y3nzca","slide":6,"title":"功能验收总览","textShapes":16}
+{"kind":"textbox","id":"sh/ulwval87","slide":6,"text":"功能验收总览","textPreview":"功能验收总览","textChars":6,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":6,"text":"核心功能可进入试运行，但仍有覆盖和现场稳定性风险。","textPreview":"核心功能可进入试运行，但仍有覆盖和现场稳定性风险。","textChars":25,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":6,"bbox":[70,145,310,110]}
+{"kind":"shape","id":"sh/ji5snelo","slide":6,"bbox":[70,145,6,110]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":6,"text":"functionality","textPreview":"functionality","textChars":13,"textLines":1,"bbox":[88,159,278,26]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":6,"text":"20 points","textPreview":"20 points","textChars":9,"textLines":1,"bbox":[88,191,278,52]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":6,"bbox":[440,145,310,110]}
+{"kind":"shape","id":"sh/jqh0fepk","slide":6,"bbox":[440,145,6,110]}
+{"kind":"textbox","id":"sh/q5o7qpg3","slide":6,"text":"stateAccuracy","textPreview":"stateAccuracy","textChars":13,"textLines":1,"bbox":[458,159,278,26]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":6,"text":"25 points","textPreview":"25 points","textChars":9,"textLines":1,"bbox":[458,191,278,52]}
+{"kind":"shape","id":"sh/9knih4by","slide":6,"bbox":[810,145,310,110]}
+{"kind":"shape","id":"sh/2t83itgf","slide":6,"bbox":[810,145,6,110]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":6,"text":"stability","textPreview":"stability","textChars":9,"textLines":1,"bbox":[828,159,278,26]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":6,"text":"15 points","textPreview":"15 points","textChars":9,"textLines":1,"bbox":[828,191,278,52]}
+{"kind":"shape","id":"sh/9w3m94fu","slide":6,"bbox":[70,295,310,110]}
+{"kind":"shape","id":"sh/25kb6xkf","slide":6,"bbox":[70,295,6,110]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":6,"text":"testCoverage","textPreview":"testCoverage","textChars":12,"textLines":1,"bbox":[88,309,278,26]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":6,"text":"14 points","textPreview":"14 points","textChars":9,"textLines":1,"bbox":[88,341,278,52]}
+{"kind":"shape","id":"sh/94fu18jq","slide":6,"bbox":[440,295,310,110]}
+{"kind":"shape","id":"sh/d0z61032","slide":6,"bbox":[440,295,6,110]}
+{"kind":"textbox","id":"sh/kf6dcbul","slide":6,"text":"safetyBoundary","textPreview":"safetyBoundary","textChars":14,"textLines":1,"bbox":[458,309,278,26]}
+{"kind":"textbox","id":"sh/vu9knih4","slide":6,"text":"10 points","textPreview":"10 points","textChars":9,"textLines":1,"bbox":[458,341,278,52]}
+{"kind":"shape","id":"sh/29gr2p8n","slide":6,"bbox":[810,295,310,110]}
+{"kind":"shape","id":"sh/d8bat47y","slide":6,"bbox":[810,295,6,110]}
+{"kind":"textbox","id":"sh/knih4byh","slide":6,"text":"explainability","textPreview":"explainability","textChars":14,"textLines":1,"bbox":[828,309,278,26]}
+{"kind":"textbox","id":"sh/v6psfil0","slide":6,"text":"10 points","textPreview":"10 points","textChars":9,"textLines":1,"bbox":[828,341,278,52]}
+{"kind":"textbox","id":"sh/2lszqtcj","slide":6,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/dcbulwva","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/y3nzca","slide":6,"text":""}
+{"kind":"slide","id":"sl/1xxga1","slide":7,"title":"状态准确性矩阵","textShapes":37}
+{"kind":"textbox","id":"sh/oj2t83it","slide":7,"text":"状态准确性矩阵","textPreview":"状态准确性矩阵","textChars":7,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":7,"text":"弱信号与完成态是本次验收的主线。","textPreview":"弱信号与完成态是本次验收的主线。","textChars":16,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":7,"bbox":[50,130,410,34]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":7,"text":"Case","textPreview":"Case","textChars":4,"textLines":1,"bbox":[58,138,394,24]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":7,"bbox":[460,130,130,34]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":7,"text":"Result","textPreview":"Result","textChars":6,"textLines":1,"bbox":[468,138,114,24]}
+{"kind":"shape","id":"sh/61032lsz","slide":7,"bbox":[590,130,640,34]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":7,"text":"Evidence","textPreview":"Evidence","textChars":8,"textLines":1,"bbox":[598,138,624,24]}
+{"kind":"shape","id":"sh/ovahoza1","slide":7,"bbox":[50,164,410,34]}
+{"kind":"textbox","id":"sh/mtwra5gb","slide":7,"text":"hook running -> RUNNING","textPreview":"hook running -> RUNNING","textChars":23,"textLines":1,"bbox":[58,172,394,24]}
+{"kind":"shape","id":"sh/fepkzupw","slide":7,"bbox":[460,164,130,34]}
+{"kind":"textbox","id":"sh/4zidonyd","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,172,114,24]}
+{"kind":"shape","id":"sh/xkf6dcbu","slide":7,"bbox":[590,164,640,34]}
+{"kind":"textbox","id":"sh/mlkjm1cf","slide":7,"text":"Covered by runtime arbiter/projector smoke.","textPreview":"Covered by runtime arbiter/projector smoke.","textChars":43,"textLines":1,"bbox":[598,172,624,24]}
+{"kind":"shape","id":"sh/f6dcbulw","slide":7,"bbox":[50,198,410,34]}
+{"kind":"textbox","id":"sh/4r65wjud","slide":7,"text":"process only -> not RUNNING","textPreview":"process only -> not RUNNING","textChars":27,"textLines":1,"bbox":[58,206,394,24]}
+{"kind":"shape","id":"sh/xc3ylc7u","slide":7,"bbox":[460,198,130,34]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,206,114,24]}
+{"kind":"shape","id":"sh/fu18jqh0","slide":7,"bbox":[590,198,640,34]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":7,"text":"Weak process-only evidence must be suppressed by arbiter.","textPreview":"Weak process-only evidence must be suppressed by arbiter.","textChars":57,"textLines":1,"bbox":[598,206,624,24]}
+{"kind":"shape","id":"sh/i5sneloj","slide":7,"bbox":[50,232,410,34]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":7,"text":"global private probe only -> not RUNNING","textPreview":"global private probe only -> not RUNNING","textChars":40,"textLines":1,"bbox":[58,240,394,24]}
+{"kind":"shape","id":"sh/0bi9s36h","slide":7,"bbox":[460,232,130,34]}
+{"kind":"textbox","id":"sh/7y1kre1w","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,240,114,24]}
+{"kind":"shape","id":"sh/ed8v6psf","slide":7,"bbox":[590,232,640,34]}
+{"kind":"textbox","id":"sh/p4r65wju","slide":7,"text":"Global-only private probes are weak evidence.","textPreview":"Global-only private probes are weak evidence.","textChars":45,"textLines":1,"bbox":[598,240,624,24]}
+{"kind":"shape","id":"sh/wjudg7ad","slide":7,"bbox":[50,266,410,34]}
+{"kind":"textbox","id":"sh/72x4nap4","slide":7,"text":"appserver unknown/notLoaded -> not RUNNING","textPreview":"appserver unknown/notLoaded -> not RUNNING","textChars":42,"textLines":1,"bbox":[58,274,394,24]}
+{"kind":"shape","id":"sh/ih4byhgn","slide":7,"bbox":[460,266,130,34]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,274,114,24]}
+{"kind":"shape","id":"sh/1kre1w7m","slide":7,"bbox":[590,266,640,34]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":7,"text":"Unknown/notLoaded appserver state must not light main lamp.","textPreview":"Unknown/notLoaded appserver state must not light main lamp.","textChars":59,"textLines":1,"bbox":[598,274,624,24]}
+{"kind":"shape","id":"sh/ji5snelo","slide":7,"bbox":[50,300,410,34]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":7,"text":"appserver active-like -> may RUNNING","textPreview":"appserver active-like -> may RUNNING","textChars":36,"textLines":1,"bbox":[58,308,394,24]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":7,"bbox":[460,300,130,34]}
+{"kind":"textbox","id":"sh/ulwval87","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,308,114,24]}
+{"kind":"shape","id":"sh/j6tovaho","slide":7,"bbox":[590,300,640,34]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":7,"text":"Active-like appserver evidence is allowed but needs field observation.","textPreview":"Active-like appserver evidence is allowed but needs field observation.","textChars":70,"textLines":1,"bbox":[598,308,624,24]}
+{"kind":"shape","id":"sh/18jqh0fe","slide":7,"bbox":[50,334,410,34]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":7,"text":"permission request -> BLOCKED","textPreview":"permission request -> BLOCKED","textChars":29,"textLines":1,"bbox":[58,342,394,24]}
+{"kind":"shape","id":"sh/4byhgn29","slide":7,"bbox":[460,334,130,34]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,342,114,24]}
+{"kind":"shape","id":"sh/m58z25kb","slide":7,"bbox":[590,334,640,34]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":7,"text":"Permission requests are blocker evidence.","textPreview":"Permission requests are blocker evidence.","textChars":41,"textLines":1,"bbox":[598,342,624,24]}
+{"kind":"shape","id":"sh/4nap4r65","slide":7,"bbox":[50,368,410,34]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":7,"text":"stop -> PENDING","textPreview":"stop -> PENDING","textChars":15,"textLines":1,"bbox":[58,376,394,24]}
+{"kind":"shape","id":"sh/mhk3q5o7","slide":7,"bbox":[460,368,130,34]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,376,114,24]}
+{"kind":"shape","id":"sh/4vmtwra5","slide":7,"bbox":[590,368,640,34]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":7,"text":"Stop releases running and awaits verify.","textPreview":"Stop releases running and awaits verify.","textChars":40,"textLines":1,"bbox":[598,376,624,24]}
+{"kind":"shape","id":"sh/7adsji5s","slide":7,"bbox":[50,402,410,34]}
+{"kind":"textbox","id":"sh/wval87ed","slide":7,"text":"verify -> DONE","textPreview":"verify -> DONE","textChars":14,"textLines":1,"bbox":[58,410,394,24]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":7,"bbox":[460,402,130,34]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,410,114,24]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":7,"bbox":[590,402,640,34]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":7,"text":"Verify is the only green/DONE path.","textPreview":"Verify is the only green/DONE path.","textChars":35,"textLines":1,"bbox":[598,410,624,24]}
+{"kind":"shape","id":"sh/psfil0rq","slide":7,"bbox":[50,436,410,34]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":7,"text":"old projector writer -> detected","textPreview":"old projector writer -> detected","textChars":32,"textLines":1,"bbox":[58,444,394,24]}
+{"kind":"shape","id":"sh/7u54zido","slide":7,"bbox":[460,436,130,34]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,444,114,24]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":7,"bbox":[590,436,640,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":7,"text":"writer_status=ok","textPreview":"writer_status=ok","textChars":16,"textLines":1,"bbox":[598,444,624,24]}
+{"kind":"shape","id":"sh/oj2t83it","slide":7,"bbox":[50,470,410,34]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":7,"text":"multiple projector -> detected","textPreview":"multiple projector -> detected","textChars":30,"textLines":1,"bbox":[58,478,394,24]}
+{"kind":"shape","id":"sh/61032lsz","slide":7,"bbox":[460,470,130,34]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":7,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[468,478,114,24]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":7,"bbox":[590,470,640,34]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":7,"text":"writer_status=ok","textPreview":"writer_status=ok","textChars":16,"textLines":1,"bbox":[598,478,624,24]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":7,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/1xxga1","slide":7,"text":""}
+{"kind":"slide","id":"sl/d167k0","slide":8,"title":"数据分析：通过率、Workspace Coverage、信号源分布","textShapes":22}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":8,"text":"数据分析：通过率、Workspace Coverage、信号源分布","textPreview":"数据分析：通过率、Workspace Coverage、信号源分布","textChars":33,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":8,"text":"覆盖差距是试运行前的主要已知风险。","textPreview":"覆盖差距是试运行前的主要已知风险。","textChars":17,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/dsji5sne","slide":8,"bbox":[70,145,300,118]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":8,"bbox":[70,145,6,118]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":8,"text":"Check Pass Rate","textPreview":"Check Pass Rate","textChars":15,"textLines":1,"bbox":[88,159,268,26]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":8,"text":"93.3%","textPreview":"93.3%","textChars":5,"textLines":1,"bbox":[88,191,268,60]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":8,"bbox":[410,145,300,118]}
+{"kind":"shape","id":"sh/6hcrmhk3","slide":8,"bbox":[410,145,6,118]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":8,"text":"Missing Hooks","textPreview":"Missing Hooks","textChars":13,"textLines":1,"bbox":[428,159,268,26]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":8,"text":"29","textPreview":"29","textChars":2,"textLines":1,"bbox":[428,191,268,60]}
+{"kind":"shape","id":"sh/6dcbulwv","slide":8,"bbox":[750,145,300,118]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":8,"bbox":[750,145,6,118]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":8,"text":"Signal Sources","textPreview":"Signal Sources","textChars":14,"textLines":1,"bbox":[768,159,268,26]}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":8,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[768,191,268,60]}
+{"kind":"shape","id":"sh/61032lsz","slide":8,"bbox":[70,330,560,34]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":8,"text":"Signal source","textPreview":"Signal source","textChars":13,"textLines":1,"bbox":[78,338,544,24]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":8,"bbox":[630,330,220,34]}
+{"kind":"textbox","id":"sh/vahoza1g","slide":8,"text":"Count","textPreview":"Count","textChars":5,"textLines":1,"bbox":[638,338,204,24]}
+{"kind":"shape","id":"sh/6tovahoz","slide":8,"bbox":[70,364,560,34]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":8,"text":"codex_appserver","textPreview":"codex_appserver","textChars":15,"textLines":1,"bbox":[78,372,544,24]}
+{"kind":"shape","id":"sh/7adsji5s","slide":8,"bbox":[630,364,220,34]}
+{"kind":"textbox","id":"sh/wval87ed","slide":8,"text":"3779","textPreview":"3779","textChars":4,"textLines":1,"bbox":[638,372,204,24]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":8,"bbox":[70,398,560,34]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":8,"text":"process_observer","textPreview":"process_observer","textChars":16,"textLines":1,"bbox":[78,406,544,24]}
+{"kind":"shape","id":"sh/7mp0bi9s","slide":8,"bbox":[630,398,220,34]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":8,"text":"433","textPreview":"433","textChars":3,"textLines":1,"bbox":[638,406,204,24]}
+{"kind":"shape","id":"sh/psfil0rq","slide":8,"bbox":[70,432,560,34]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":8,"text":"codex_hook","textPreview":"codex_hook","textChars":10,"textLines":1,"bbox":[78,440,544,24]}
+{"kind":"shape","id":"sh/7u54zido","slide":8,"bbox":[630,432,220,34]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":8,"text":"329","textPreview":"329","textChars":3,"textLines":1,"bbox":[638,440,204,24]}
+{"kind":"shape","id":"sh/4byhgn29","slide":8,"bbox":[70,466,560,34]}
+{"kind":"textbox","id":"sh/bq1oryts","slide":8,"text":"explicit","textPreview":"explicit","textChars":8,"textLines":1,"bbox":[78,474,544,24]}
+{"kind":"shape","id":"sh/m58z25kb","slide":8,"bbox":[630,466,220,34]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":8,"text":"176","textPreview":"176","textChars":3,"textLines":1,"bbox":[638,474,204,24]}
+{"kind":"shape","id":"sh/4nap4r65","slide":8,"bbox":[70,500,560,34]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":8,"text":"hook_bridge","textPreview":"hook_bridge","textChars":11,"textLines":1,"bbox":[78,508,544,24]}
+{"kind":"shape","id":"sh/mhk3q5o7","slide":8,"bbox":[630,500,220,34]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":8,"text":"172","textPreview":"172","textChars":3,"textLines":1,"bbox":[638,508,204,24]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":8,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/d167k0","slide":8,"text":""}
+{"kind":"slide","id":"sl/roptax","slide":9,"title":"Bug / 风险清单","textShapes":13}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":9,"text":"Bug / 风险清单","textPreview":"Bug / 风险清单","textChars":10,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/zed8v6ps","slide":9,"text":"没有把风险折叠进通过结论。","textPreview":"没有把风险折叠进通过结论。","textChars":13,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/6xkf6dcb","slide":9,"bbox":[50,130,80,34]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":9,"text":"P","textPreview":"P","textChars":1,"textLines":1,"bbox":[58,138,64,24]}
+{"kind":"shape","id":"sh/obm58z25","slide":9,"bbox":[130,130,900,34]}
+{"kind":"textbox","id":"sh/zqtcj6to","slide":9,"text":"Bug","textPreview":"Bug","textChars":3,"textLines":1,"bbox":[138,138,884,24]}
+{"kind":"shape","id":"sh/65wjudg7","slide":9,"bbox":[1030,130,200,34]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":9,"text":"Blocks","textPreview":"Blocks","textChars":6,"textLines":1,"bbox":[1038,138,184,24]}
+{"kind":"shape","id":"sh/sfil0rqd","slide":9,"bbox":[50,164,80,34]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":9,"text":"P0","textPreview":"P0","textChars":2,"textLines":1,"bbox":[58,172,64,24]}
+{"kind":"shape","id":"sh/je9cvixc","slide":9,"bbox":[130,164,900,34]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":9,"text":"./script/check_all.sh did not pass","textPreview":"./script/check_all.sh did not pass","textChars":34,"textLines":1,"bbox":[138,172,884,24]}
+{"kind":"shape","id":"sh/1gvy90je","slide":9,"bbox":[1030,164,200,34]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":9,"text":"yes","textPreview":"yes","textChars":3,"textLines":1,"bbox":[1038,172,184,24]}
+{"kind":"shape","id":"sh/fmlkjm1c","slide":9,"bbox":[50,198,80,34]}
+{"kind":"textbox","id":"sh/87ed8bat","slide":9,"text":"P1","textPreview":"P1","textChars":2,"textLines":1,"bbox":[58,206,64,24]}
+{"kind":"shape","id":"sh/xs72x4na","slide":9,"bbox":[130,198,900,34]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":9,"text":"29 workspaces are missing hooks","textPreview":"29 workspaces are missing hooks","textChars":31,"textLines":1,"bbox":[138,206,884,24]}
+{"kind":"shape","id":"sh/fyxobm58","slide":9,"bbox":[1030,198,200,34]}
+{"kind":"textbox","id":"sh/7y1kre1w","slide":9,"text":"no","textPreview":"no","textChars":2,"textLines":1,"bbox":[1038,206,184,24]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":9,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/p4r65wju","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/roptax","slide":9,"text":""}
+{"kind":"slide","id":"sl/sqyddd","slide":10,"title":"安全边界审计","textShapes":16}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":10,"text":"安全边界审计","textPreview":"安全边界审计","textChars":6,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":10,"text":"本次审计保持 fail-closed 安全边界。","textPreview":"本次审计保持 fail-closed 安全边界。","textChars":24,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/bat47y1k","slide":10,"bbox":[90,150,520,34]}
+{"kind":"textbox","id":"sh/47y1kre1","slide":10,"text":"Boundary","textPreview":"Boundary","textChars":8,"textLines":1,"bbox":[98,158,504,24]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":10,"bbox":[610,150,520,34]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":10,"text":"Result","textPreview":"Result","textChars":6,"textLines":1,"bbox":[618,158,504,24]}
+{"kind":"shape","id":"sh/bm58z25k","slide":10,"bbox":[90,184,520,34]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":10,"text":"No ~/.codex/auth.json read","textPreview":"No ~/.codex/auth.json read","textChars":26,"textLines":1,"bbox":[98,192,504,24]}
+{"kind":"shape","id":"sh/twra5gbq","slide":10,"bbox":[610,184,520,34]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":10,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[618,192,504,24]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":10,"bbox":[90,218,520,34]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":10,"text":"No prompt/response/auth/raw log body in reports","textPreview":"No prompt/response/auth/raw log body in reports","textChars":47,"textLines":1,"bbox":[98,226,504,24]}
+{"kind":"shape","id":"sh/ulwval87","slide":10,"bbox":[610,218,520,34]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":10,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[618,226,504,24]}
+{"kind":"shape","id":"sh/c3ylc7u5","slide":10,"bbox":[90,252,520,34]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":10,"text":"No auto trust hooks","textPreview":"No auto trust hooks","textChars":19,"textLines":1,"bbox":[98,260,504,24]}
+{"kind":"shape","id":"sh/uxc3ylc7","slide":10,"bbox":[610,252,520,34]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":10,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[618,260,504,24]}
+{"kind":"shape","id":"sh/8bat47y1","slide":10,"bbox":[90,286,520,34]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":10,"text":"No auto commit/push","textPreview":"No auto commit/push","textChars":19,"textLines":1,"bbox":[98,294,504,24]}
+{"kind":"shape","id":"sh/dsji5sne","slide":10,"bbox":[610,286,520,34]}
+{"kind":"textbox","id":"sh/61032lsz","slide":10,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[618,294,504,24]}
+{"kind":"shape","id":"sh/vmtwra5g","slide":10,"bbox":[90,320,520,34]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":10,"text":"No auto purchase/reset quota","textPreview":"No auto purchase/reset quota","textChars":28,"textLines":1,"bbox":[98,328,504,24]}
+{"kind":"shape","id":"sh/d4vmtwra","slide":10,"bbox":[610,320,520,34]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":10,"text":"PASS","textPreview":"PASS","textChars":4,"textLines":1,"bbox":[618,328,504,24]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":10,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/sqyddd","slide":10,"text":""}
+{"kind":"slide","id":"sl/fw7qjo","slide":11,"title":"MVP 验收结论","textShapes":10}
+{"kind":"textbox","id":"sh/yd0z6103","slide":11,"text":"MVP 验收结论","textPreview":"MVP 验收结论","textChars":8,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/90je9cvi","slide":11,"text":"结论只从证据、分数和硬门禁推导。","textPreview":"结论只从证据、分数和硬门禁推导。","textChars":16,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"textbox","id":"sh/gfmlkjm1","slide":11,"text":"REJECT","textPreview":"REJECT","textChars":6,"textLines":1,"bbox":[80,165,700,76]}
+{"kind":"textbox","id":"sh/rmhk3q5o","slide":11,"text":"Score: 99 / 100","textPreview":"Score: 99 / 100","textChars":15,"textLines":1,"bbox":[84,250,360,38]}
+{"kind":"shape","id":"sh/y1kre1w7","slide":11,"bbox":[80,335,430,120]}
+{"kind":"shape","id":"sh/9s36hcrm","slide":11,"bbox":[80,335,6,120]}
+{"kind":"textbox","id":"sh/g7adsji5","slide":11,"text":"是否可试运行","textPreview":"是否可试运行","textChars":6,"textLines":1,"bbox":[98,349,398,26]}
+{"kind":"textbox","id":"sh/nih4byhg","slide":11,"text":"需要先处理硬门禁或人工复核。","textPreview":"需要先处理硬门禁或人工复核。","textChars":14,"textLines":1,"bbox":[98,381,398,62]}
+{"kind":"shape","id":"sh/yxobm58z","slide":11,"bbox":[570,335,430,120]}
+{"kind":"shape","id":"sh/obm58z25","slide":11,"bbox":[570,335,6,120]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":11,"text":"阻塞项","textPreview":"阻塞项","textChars":3,"textLines":1,"bbox":[588,349,398,26]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":11,"text":"check_all failed","textPreview":"check_all failed","textChars":16,"textLines":1,"bbox":[588,381,398,62]}
+{"kind":"textbox","id":"sh/zqtcj6to","slide":11,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/fw7qjo","slide":11,"text":""}
+{"kind":"slide","id":"sl/63n1tk","slide":12,"title":"下一轮迭代路线图","textShapes":19}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":12,"text":"下一轮迭代路线图","textPreview":"下一轮迭代路线图","textChars":8,"textLines":1,"bbox":[60,42,900,52]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":12,"text":"先降低观测盲区，再进入生产化硬化。","textPreview":"先降低观测盲区，再进入生产化硬化。","textChars":17,"textLines":1,"bbox":[60,92,980,34]}
+{"kind":"shape","id":"sh/xczed8v6","slide":12,"bbox":[80,150,90,34]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":12,"text":"Step","textPreview":"Step","textChars":4,"textLines":1,"bbox":[88,158,74,24]}
+{"kind":"shape","id":"sh/fyxobm58","slide":12,"bbox":[170,150,700,34]}
+{"kind":"textbox","id":"sh/8jqh0fep","slide":12,"text":"Recommendation","textPreview":"Recommendation","textChars":14,"textLines":1,"bbox":[178,158,684,24]}
+{"kind":"shape","id":"sh/x4nap4r6","slide":12,"bbox":[870,150,250,34]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":12,"text":"Owner mode","textPreview":"Owner mode","textChars":10,"textLines":1,"bbox":[878,158,234,24]}
+{"kind":"shape","id":"sh/fmlkjm1c","slide":12,"bbox":[80,184,90,34]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":12,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[88,192,74,24]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":12,"bbox":[170,184,700,34]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":12,"text":"Onboard common workspace hooks and manually trust in Codex UI","textPreview":"Onboard common workspace hooks and manually trust in Codex UI","textChars":61,"textLines":1,"bbox":[178,192,684,24]}
+{"kind":"shape","id":"sh/8bat47y1","slide":12,"bbox":[870,184,250,34]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":12,"text":"Human + developer","textPreview":"Human + developer","textChars":17,"textLines":1,"bbox":[878,192,234,24]}
+{"kind":"shape","id":"sh/qh0fepkz","slide":12,"bbox":[80,218,90,34]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":12,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[88,226,74,24]}
+{"kind":"shape","id":"sh/8nqxs72x","slide":12,"bbox":[170,218,700,34]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":12,"text":"Run 3-day real trial with incident ledger","textPreview":"Run 3-day real trial with incident ledger","textChars":41,"textLines":1,"bbox":[178,226,684,24]}
+{"kind":"shape","id":"sh/ulwval87","slide":12,"bbox":[870,218,250,34]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":12,"text":"Auditor","textPreview":"Auditor","textChars":7,"textLines":1,"bbox":[878,226,234,24]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":12,"bbox":[80,252,90,34]}
+{"kind":"textbox","id":"sh/wjudg7ad","slide":12,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[88,260,74,24]}
+{"kind":"shape","id":"sh/p4r65wju","slide":12,"bbox":[170,252,700,34]}
+{"kind":"textbox","id":"sh/i5sneloj","slide":12,"text":"Fix P1 bugs and LaunchAgent drift risks","textPreview":"Fix P1 bugs and LaunchAgent drift risks","textChars":39,"textLines":1,"bbox":[178,260,684,24]}
+{"kind":"shape","id":"sh/7qpg3ex0","slide":12,"bbox":[870,252,250,34]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":12,"text":"Developer","textPreview":"Developer","textChars":9,"textLines":1,"bbox":[878,260,234,24]}
+{"kind":"shape","id":"sh/pwb2hwfy","slide":12,"bbox":[80,286,90,34]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":12,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[88,294,74,24]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":12,"bbox":[170,286,700,34]}
+{"kind":"textbox","id":"sh/xkf6dcbu","slide":12,"text":"Re-run MVP Auditor before production hardening","textPreview":"Re-run MVP Auditor before production hardening","textChars":46,"textLines":1,"bbox":[178,294,684,24]}
+{"kind":"shape","id":"sh/4zidonyd","slide":12,"bbox":[870,286,250,34]}
+{"kind":"textbox","id":"sh/fepkzupw","slide":12,"text":"Auditor","textPreview":"Auditor","textChars":7,"textLines":1,"bbox":[878,294,234,24]}
+{"kind":"textbox","id":"sh/mtwra5gb","slide":12,"text":"66TaskLight MVP Auditor | 20260615-1352","textPreview":"66TaskLight MVP Auditor | 20260615-1352","textChars":39,"textLines":1,"bbox":[60,682,520,20]}
+{"kind":"textbox","id":"sh/xc3ylc7u","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1170,676,50,24]}
+{"kind":"notes","id":"nt/63n1tk","slide":12,"text":""}

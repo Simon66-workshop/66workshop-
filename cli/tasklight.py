@@ -216,6 +216,7 @@ def validate_task_id(task_id: str) -> None:
 class TaskLightConfig:
     state_dir: Path = DEFAULT_STATE_DIR
     state_path: Path = field(init=False)
+    ui_state_path: Path = field(init=False)
     tasks_dir: Path = field(init=False)
     current_path: Path = field(init=False)
     thread_bindings_dir: Path = field(init=False)
@@ -234,6 +235,7 @@ class TaskLightConfig:
     def __post_init__(self) -> None:
         self.state_dir = Path(self.state_dir).expanduser()
         self.state_path = self.state_dir / "state.json"
+        self.ui_state_path = self.state_dir / "ui_state.json"
         self.tasks_dir = self.state_dir / "tasks"
         self.current_path = self.state_dir / "current.json"
         self.thread_bindings_dir = self.state_dir / "thread_bindings"
@@ -260,6 +262,7 @@ class TaskLightConfig:
             stale_sound_name=os.environ.get("TASKLIGHT_STALE_SOUND", "Funk"),
         )
         explicit_state = os.environ.get("TASKLIGHT_STATE_PATH")
+        explicit_ui_state = os.environ.get("TASKLIGHT_UI_STATE_PATH")
         explicit_tasks = os.environ.get("TASKLIGHT_TASKS_DIR")
         explicit_current = os.environ.get("TASKLIGHT_CURRENT_PATH")
         explicit_thread_bindings = os.environ.get("TASKLIGHT_THREAD_BINDINGS_DIR")
@@ -270,6 +273,8 @@ class TaskLightConfig:
         explicit_lock = os.environ.get("TASKLIGHT_LOCK_PATH")
         if explicit_state:
             config.state_path = Path(explicit_state).expanduser()
+        if explicit_ui_state:
+            config.ui_state_path = Path(explicit_ui_state).expanduser()
         if explicit_tasks:
             config.tasks_dir = Path(explicit_tasks).expanduser()
         if explicit_current:
@@ -1861,19 +1866,7 @@ class TaskLightStore:
                 verification_ttl_seconds=self.config.verification_ttl_seconds,
             )
             if effective not in {"running", "stale", "queued"}:
-                blocked = self._blocked_from_record(
-                    record,
-                    reason="needs_human_review",
-                    message="heartbeat received in a terminal state",
-                    evidence=f"task status={effective}",
-                )
-                return self._persist_task_and_state(
-                    blocked,
-                    event_name="heartbeat",
-                    previous_status=effective,
-                    sound_type="blocked",
-                    details={"phase": phase, "progress": clamp_progress(progress), "reason": "needs_human_review"},
-                )
+                return summary, self.rebuild_state(extra_invalid=missing and summary or None)
             timestamp = iso_now()
             record.status = "running"
             record.phase = phase
@@ -2251,6 +2244,22 @@ def print_status(store: TaskLightStore) -> TaskLightAggregateState:
     return state
 
 
+def load_projected_status_payload(config: TaskLightConfig) -> Optional[dict[str, Any]]:
+    try:
+        payload = read_json_file(config.ui_state_path)
+    except (FileNotFoundError, OSError, json.JSONDecodeError, TaskLightStateError, TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("source") != "state_projector":
+        return None
+    if not payload.get("global_status") or not isinstance(payload.get("counts"), dict):
+        return None
+    payload = dict(payload)
+    payload.setdefault("compatibility_note", "tasklight status is sourced from projected ui_state; use tasklight list for legacy task-file aggregation")
+    return payload
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasklight", description="66TaskLight multi-task status bus")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -2357,7 +2366,8 @@ def dispatch(args: argparse.Namespace) -> int:
             _emit_json(store.show_task(args.task_id))
             return 0
         if args.command == "status":
-            _emit_json(store.load_state().to_dict())
+            projected = load_projected_status_payload(config)
+            _emit_json(projected or store.load_state().to_dict())
             return 0
         if args.command == "observe-local":
             state = store.observe_local(watch=args.watch)

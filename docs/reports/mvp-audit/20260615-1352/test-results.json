@@ -1,0 +1,560 @@
+{
+  "auditId": "20260615-1352",
+  "generatedAt": "2026-06-15T06:03:47.271Z",
+  "safety": {
+    "authFileRead": false,
+    "rawPromptResponseAuthLogStored": false,
+    "autoTrustHooks": false,
+    "autoCommitPush": false,
+    "autoPurchaseOrQuotaReset": false
+  },
+  "documents": [
+    {
+      "path": "README.md",
+      "present": true,
+      "bytes": 27079,
+      "sha256": "d8b76c5c5457dfc76b58aeee5d0c3074c1b74024a84e1dac9a1d52ee5b3a2d61",
+      "keyFindings": [
+        "State Projector is documented as read-only for task state and writes UI read-model files.",
+        "ui_state.json is the final LuckyCat read model.",
+        "Quota is display-only and must not change main lamp/status.",
+        "Safety boundary forbids auth-file reads and secret output.",
+        "Workspace hooks still require manual Codex UI trust.",
+        "Projector writer identity must detect old or multiple writers."
+      ]
+    },
+    {
+      "path": "docs/STATUS_PROTOCOL.md",
+      "present": true,
+      "bytes": 21062,
+      "sha256": "e9f0799e762e072a35c7e0eec2a45ac63e369f60119a35e708057d594c41f9f6",
+      "keyFindings": [
+        "Quota is display-only and must not change main lamp/status.",
+        "Projector writer identity must detect old or multiple writers.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/STATE_PROJECTOR.md",
+      "present": true,
+      "bytes": 9350,
+      "sha256": "474fcdc4a1e40be9293366b82347c75990d4abead1c5a56a6ce1d603fb3aa1c2",
+      "keyFindings": [
+        "State Projector is documented as read-only for task state and writes UI read-model files.",
+        "ui_state.json is the final LuckyCat read model.",
+        "Process-only evidence must not drive RUNNING.",
+        "Projector writer identity must detect old or multiple writers.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/HOOK_SIGNAL_BRIDGE.md",
+      "present": true,
+      "bytes": 7885,
+      "sha256": "ec4dfdcc878c7e370bb57f668d188ea32055b7554ed3a1124dcb0b2a74e8a1f8",
+      "keyFindings": [
+        "Safety boundary forbids auth-file reads and secret output.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/HOOK_BRIDGE_LAUNCH_AGENT.md",
+      "present": true,
+      "bytes": 2756,
+      "sha256": "80993dc9247f3dc8228a898c6c0db160d8d9618ad612e901ba3b1670e91df928",
+      "keyFindings": [
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/CODEX_WORKSPACE_ONBOARDING.md",
+      "present": true,
+      "bytes": 3374,
+      "sha256": "9920c378593f3e15d2a0d40ae17483b302e9d8c5a4a64c244640af47363605c1",
+      "keyFindings": [
+        "Safety boundary forbids auth-file reads and secret output.",
+        "Workspace hooks still require manual Codex UI trust.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/self-review/66TASKLIGHT_SELF_REVIEW_ENGINE.md",
+      "present": true,
+      "bytes": 4112,
+      "sha256": "d88c0adf32c12645202eeb702070aae7833f3632117836ffdb0a7a2b88d4d892",
+      "keyFindings": [
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/self-review/66TASKLIGHT_REVIEW_MATRIX.md",
+      "present": true,
+      "bytes": 1640,
+      "sha256": "70e6147174b1e2b8d8471d1a412db9c7d8a7b7f0168dfde42f63ea50837ed29d",
+      "keyFindings": [
+        "Process-only evidence must not drive RUNNING.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/self-review/66TASKLIGHT_FAILURE_TAXONOMY.md",
+      "present": true,
+      "bytes": 847,
+      "sha256": "943ae49e81fed98c1b08d588d765418e506d60a92bbc3171a8057e613be1c184",
+      "keyFindings": [
+        "Process-only evidence must not drive RUNNING.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    },
+    {
+      "path": "docs/CODEX_QUOTA_WIDGET.md",
+      "present": true,
+      "bytes": 3255,
+      "sha256": "37b910def747fe155f89114f7da8b95b5fce78dbfaa07b20198cc720fe44e8c0",
+      "keyFindings": [
+        "Quota is display-only and must not change main lamp/status.",
+        "Status model covers RUNNING, BLOCKED, PENDING, DONE, and IDLE."
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "command": "./script/check_all.sh",
+      "exists": true,
+      "exitCode": 1,
+      "signal": null,
+      "durationMs": 50350,
+      "status": "FAIL",
+      "summary": [
+        "TaskLightChecks passed",
+        "smoke_ui_refresh_latency: ok",
+        "smoke_signal_bus: ok",
+        "smoke_state_projector: ok",
+        "smoke_codex_quota: ok",
+        "smoke_codex_quota_watcher: ok",
+        "smoke_workspace_coverage=ok",
+        "smoke_hooks_config: ok",
+        "smoke_hook_signal_bridge: ok",
+        "OK",
+        "Traceback (most recent call last):",
+        "KeyError: 'total'"
+      ],
+      "outputSha256": "0b0d453aaf0414dbabebf6ee29ab8e241c4b0a7b666152fc02700ab5e75641be"
+    },
+    {
+      "command": "./script/check_state_projector.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 75,
+      "status": "PASS",
+      "summary": [
+        "launchctl_status=running",
+        "ui_state_status=readable",
+        "writer_status=ok",
+        "ui_state_global_status=running",
+        "global_status=running",
+        "display_title=RUNNING",
+        "quota_captured_at=2026-06-15T14:02:29+08:00",
+        "quota_captured_age_sec=19.330672025680542",
+        "quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json",
+        "state_projector_health_status=readable",
+        "state_projector_health_state=ok",
+        "STATUS=ok"
+      ],
+      "outputSha256": "9cccbac09e1e01f076c40dc3d574a386d6c1bbab7d08841e47a9e2c631e1c9a6"
+    },
+    {
+      "command": "./script/check_hook_bridge_launch_agent.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 79,
+      "status": "PASS",
+      "summary": [
+        "launchctl_status=running",
+        "hook_bridge_health_path=/Users/macmini-simon66/.66tasklight/hook_bridge_health.json",
+        "hook_bridge_health_status=readable",
+        "hook_bridge_health_state=ok",
+        "STATUS=ok"
+      ],
+      "outputSha256": "4ef871963285677d4765ad1f31aa79f8f1587621300bb664ab5ac5a430b507ad"
+    },
+    {
+      "command": "./script/check_ui_client.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 49,
+      "status": "PASS",
+      "summary": [
+        "running_app_pid=none",
+        "STATUS=ok"
+      ],
+      "outputSha256": "ebf34390fb3b35b639902d2b8998cc93b4500b7217b581416ba1805342993924"
+    },
+    {
+      "command": "./script/check_codex_hooks_trust.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 236,
+      "status": "PASS",
+      "summary": [
+        "PROJECT_ROOT: ok",
+        "CODEX_DIR: ok",
+        "HOOK_CONFIG: ok",
+        "HOOK_REFERENCE: ok",
+        "HOOK_HANDLER: ok",
+        "HOOK_HEALTH: ok",
+        "CODEX_APPSERVER_HOOKS: trusted=6",
+        "PROJECT_TRUST: trusted_possible",
+        "HOOK_VISIBILITY: visible_trusted",
+        "HOOK_VISIBILITY_REASON: Codex UI 已加载这个 workspace 的 hooks，而且它们已可信",
+        "STATUS: trusted_possible",
+        "NEXT_ACTION: hooks appear trusted; trigger a new Codex turn to verify spool events"
+      ],
+      "outputSha256": "c940dfec769a7f6a3dd576ce96b78026575c7693571e795936869de69f73f29d"
+    },
+    {
+      "command": "./script/check_codex_workspaces_coverage.sh --skip-appserver",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 718,
+      "status": "PASS",
+      "summary": [
+        "STATUS=needs_hooks",
+        "workspace_count=35",
+        "trusted=6",
+        "installed_needs_trust=0",
+        "missing_hooks=29",
+        "invalid_hooks=0",
+        "workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc9 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks",
+        "workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks",
+        "workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-cleanwork coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks",
+        "workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-ui-clean coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks",
+        "workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-wf-ui-only coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks",
+        "workspace=/Volumes/2T扩展盘/AI机器人/_local_tools/whisper.cpp coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks"
+      ],
+      "outputSha256": "92b83914dc53a78e89630444d7511f062e303527235addd8c3fcc72c9800bc28"
+    },
+    {
+      "command": "./script/check_codex_quota.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 39,
+      "status": "PASS",
+      "summary": [
+        "quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json",
+        "quota_status=watch",
+        "warnings=duplicate_quota_buckets_collapsed_to_display_windows",
+        "ui_state_quota_exists=yes",
+        "ui_state_quota_probe_mode=poll_fallback",
+        "ui_state_quota_bucket_id=codex",
+        "ui_state_quota_raw_window_count=4",
+        "STATUS=ok"
+      ],
+      "outputSha256": "86a96226ecc51663beedc060c9611b8138c5e41c4b1f81e96a4a2848a06bbfd1"
+    },
+    {
+      "command": "./script/smoke_codex_quota.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 560,
+      "status": "PASS",
+      "summary": [
+        "smoke_codex_quota: ok"
+      ],
+      "outputSha256": "029b8aadc2bdc214285a57705f5331fa9239c66f01875aaa950646702fa2d0ac"
+    },
+    {
+      "command": "./script/smoke_turn_runtime_arbiter.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1064,
+      "status": "PASS",
+      "summary": [
+        "smoke_turn_runtime_arbiter: ok"
+      ],
+      "outputSha256": "e5b7a27660119e44c94d3b58fd0ecdd7ab150a108a3476ef4b4c95710250bf77"
+    },
+    {
+      "command": "./script/smoke_state_projector.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2887,
+      "status": "PASS",
+      "summary": [
+        "smoke_state_projector: ok"
+      ],
+      "outputSha256": "29dd6c9c527f67feb8c8e443839a03cf6d41ba03d08501bb00758c761133191b"
+    },
+    {
+      "command": "./script/smoke_hook_signal_bridge.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 17423,
+      "status": "PASS",
+      "summary": [
+        "smoke_hook_signal_bridge: ok"
+      ],
+      "outputSha256": "fbd63ff4f5b9cce1e3a6abbeb0f378efe552d9de569782dd1a8de7335b93b80a"
+    },
+    {
+      "command": "./script/smoke_workspace_coverage.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2074,
+      "status": "PASS",
+      "summary": [
+        "smoke_workspace_coverage=ok"
+      ],
+      "outputSha256": "78bca90d7afa1160d1a5a392eb71a6e2629488775f207796cbca2f6208d7d9e7"
+    },
+    {
+      "command": "./script/smoke_self_review.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 4540,
+      "status": "PASS",
+      "summary": [
+        "smoke_self_review: ok"
+      ],
+      "outputSha256": "b193e714c38f775080a721b368e3e7a4cfffe99928a230befc2b749bf7cc83c6"
+    },
+    {
+      "command": "./script/smoke_self_review_scope.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 6241,
+      "status": "PASS",
+      "summary": [
+        "smoke_self_review_scope: ok"
+      ],
+      "outputSha256": "90377b6b860e2311226c56f1e8aa73039ebf66f178ac262f44f8cc520cb1f7fb"
+    },
+    {
+      "command": "./script/smoke_self_review_generate_scope.sh",
+      "exists": true,
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1520,
+      "status": "PASS",
+      "summary": [
+        "smoke_self_review_generate_scope: ok"
+      ],
+      "outputSha256": "99be3effeb4bbba964ff3f5b8652e8f41cf38a2fe3a37f2b3114932cedbe725c"
+    }
+  ],
+  "stateSummary": {
+    "ui_state": {
+      "exists": true,
+      "fields": {
+        "source": "state_projector",
+        "global_status": "running",
+        "lamp_status": "running",
+        "global_display_title": "RUNNING",
+        "projector_version": "M3.7",
+        "projector_pid": 51478,
+        "projector_code_hash": "sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e",
+        "projector_launch_label": "com.66tasklight.state-projector",
+        "projector_instance_id": "1781439446-51478",
+        "diagnostics.writer_status": "ok",
+        "diagnostics.workspace_coverage.status": null,
+        "counts.running": 2,
+        "counts.blocked": 0,
+        "counts.pending": null,
+        "counts.done": null,
+        "quota.status": "watch",
+        "quota.compact_label": null,
+        "quota.source": "codex_appserver"
+      },
+      "quotaPresent": true,
+      "taskCount": 1288,
+      "rawSha256": "8fc95efd80286d489646d9cd82e7426b389fb333c8e90394b24074e7b8d7cfe3"
+    },
+    "state_projector_health": {
+      "exists": true,
+      "fields": {
+        "global_status": "running",
+        "last_error": null,
+        "last_run_at": "2026-06-15T06:03:45Z",
+        "projector_code_hash": "sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e",
+        "projector_launch_label": "com.66tasklight.state-projector",
+        "projector_pid": 51478,
+        "projector_version": "M3.7",
+        "schema_version": "0.1",
+        "state_confidence": 0.95,
+        "status": "ok",
+        "ui_state_path": "/Users/macmini-simon66/.66tasklight/ui_state.json",
+        "updated_at": "2026-06-15T06:03:45Z"
+      },
+      "rawSha256": "b729e317b7c64f3abf3efa1da37460ba76ee69da4ff5415b253fb5d68229108b"
+    },
+    "hook_bridge_health": {
+      "exists": true,
+      "fields": {
+        "active_turn_bindings": 3,
+        "expired_count": 0,
+        "last_error": null,
+        "last_run_at": "2026-06-15T06:03:18Z",
+        "last_seen_at": "2026-06-15T06:02:55Z",
+        "late_stop_recovered_count": 90,
+        "latest_stop_decision": "stop_to_done_unverified",
+        "latest_stop_seen_at": "2026-06-15T05:59:37Z",
+        "processed_count": 13,
+        "schema_version": "0.1",
+        "soft_release_count": 840,
+        "status": "ok",
+        "stop_ignored_count": 0,
+        "superseded_count": 0,
+        "updated_at": "2026-06-15T06:03:18Z"
+      },
+      "rawSha256": "606bba49c2d1181ffc456c7ee6f8c9718d729623b23665e61012c92a3ba24c9a"
+    },
+    "quota_state": {
+      "exists": true,
+      "fields": {
+        "captured_at": "2026-06-15T14:03:35+08:00",
+        "effective_remaining_percent": 21,
+        "fresh": true,
+        "quota_status": "watch",
+        "recommendation": "watch_usage",
+        "schema_version": "0.2",
+        "source": "codex_appserver",
+        "source_confidence": 0.95
+      },
+      "rawSha256": "593176b300abe1de8a5a120aa194733e1f963a090d2521fc18ba901e2d03e200"
+    },
+    "workspace_coverage": {
+      "exists": true,
+      "counts": {
+        "workspace_count": 35,
+        "trusted": 6,
+        "missing_hooks": 29,
+        "invalid_hooks": 0,
+        "preferred_missing_hooks": 0
+      },
+      "summary": [
+        "- Status: `needs_hooks`",
+        "- Preferred missing hooks: `0`",
+        "- Trusted: `6`",
+        "- Missing hooks: `29`",
+        "- Invalid hooks: `0`",
+        "- Coverage: `trusted`",
+        "- Hook: `ok` / `ok`",
+        "- Coverage: `trusted`",
+        "- Hook: `ok` / `ok`",
+        "- Coverage: `trusted`",
+        "- Reason: 这个 workspace 还没安装 hooks",
+        "- Recommended action: `run install_hooks_for_workspaces`",
+        "- Coverage: `missing_hooks`",
+        "- Hook: `missing` / `hooks_json_missing`",
+        "- Reason: 这个 workspace 还没安装 hooks",
+        "- Recommended action: `run install_hooks_for_workspaces`",
+        "- Coverage: `missing_hooks`",
+        "- Hook: `missing` / `hooks_json_missing`",
+        "- Reason: 这个 workspace 还没安装 hooks",
+        "- Recommended action: `run install_hooks_for_workspaces`"
+      ],
+      "rawSha256": "94c7ee2534fc02c6c8969d3d56bbc119508b61144efcec12ec5fe465ac04e0c2"
+    },
+    "normalized_signals": {
+      "exists": true,
+      "totalLines": 5000,
+      "sourceCounts": {
+        "codex_appserver": 3779,
+        "process_observer": 433,
+        "codex_hook": 329,
+        "explicit": 176,
+        "hook_bridge": 172,
+        "codex_private_probe": 60,
+        "current_thread_watcher": 51
+      }
+    }
+  },
+  "stateAccuracyMatrix": [
+    {
+      "case": "hook running -> RUNNING",
+      "status": "PASS",
+      "evidence": "Covered by runtime arbiter/projector smoke."
+    },
+    {
+      "case": "process only -> not RUNNING",
+      "status": "PASS",
+      "evidence": "Weak process-only evidence must be suppressed by arbiter."
+    },
+    {
+      "case": "global private probe only -> not RUNNING",
+      "status": "PASS",
+      "evidence": "Global-only private probes are weak evidence."
+    },
+    {
+      "case": "appserver unknown/notLoaded -> not RUNNING",
+      "status": "PASS",
+      "evidence": "Unknown/notLoaded appserver state must not light main lamp."
+    },
+    {
+      "case": "appserver active-like -> may RUNNING",
+      "status": "PASS",
+      "evidence": "Active-like appserver evidence is allowed but needs field observation."
+    },
+    {
+      "case": "permission request -> BLOCKED",
+      "status": "PASS",
+      "evidence": "Permission requests are blocker evidence."
+    },
+    {
+      "case": "stop -> PENDING",
+      "status": "PASS",
+      "evidence": "Stop releases running and awaits verify."
+    },
+    {
+      "case": "verify -> DONE",
+      "status": "PASS",
+      "evidence": "Verify is the only green/DONE path."
+    },
+    {
+      "case": "old projector writer -> detected",
+      "status": "PASS",
+      "evidence": "writer_status=ok"
+    },
+    {
+      "case": "multiple projector -> detected",
+      "status": "PASS",
+      "evidence": "writer_status=ok"
+    }
+  ],
+  "acceptance": {
+    "scores": {
+      "functionality": 20,
+      "stateAccuracy": 25,
+      "stability": 15,
+      "testCoverage": 14,
+      "safetyBoundary": 10,
+      "explainability": 10,
+      "reportQuality": 5
+    },
+    "total": 99,
+    "decision": "REJECT",
+    "gates": [
+      "check_all failed"
+    ],
+    "commandPassRate": 0.9333333333333333,
+    "failedRequired": [
+      "./script/check_all.sh"
+    ],
+    "missingHooks": 29,
+    "quotaNoMainLampEvidence": true,
+    "blockingRisk": true
+  }
+}

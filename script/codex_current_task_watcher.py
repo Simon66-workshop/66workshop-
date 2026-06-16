@@ -33,6 +33,40 @@ def now_string() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def turn_id_from_identity(identity: object, thread_id: str) -> str | None:
+    if not identity:
+        return None
+    value = str(identity)
+    if value.startswith("turn:"):
+        suffix = value.split(":", 1)[1]
+        return suffix or None
+    if thread_id and value.startswith(f"{thread_id}:"):
+        suffix = value[len(thread_id) + 1 :]
+        if suffix and not suffix.startswith("epoch-"):
+            return suffix
+    return None
+
+
+def choose_task_identity(
+    existing_identity: object,
+    candidate_identity: object,
+    thread_id: str,
+) -> tuple[str | None, str | None]:
+    existing = str(existing_identity) if existing_identity else ""
+    candidate = str(candidate_identity) if candidate_identity else ""
+    existing_turn_id = turn_id_from_identity(existing, thread_id)
+    candidate_turn_id = turn_id_from_identity(candidate, thread_id)
+    if candidate_turn_id:
+        return candidate, candidate_turn_id
+    if existing_turn_id:
+        return existing, existing_turn_id
+    if candidate:
+        return candidate, None
+    if existing:
+        return existing, None
+    return None, None
+
+
 def write_payload(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -320,7 +354,15 @@ def main() -> int:
         payload["last_source_quality"] = decision.get("source_quality")
         payload["last_inferred_status"] = decision.get("inferred_status")
         payload["last_signal_count"] = len(signals)
-        payload["task_identity"] = decision.get("task_identity") or payload.get("task_identity")
+        chosen_identity, chosen_turn_id = choose_task_identity(
+            payload.get("task_identity"),
+            decision.get("task_identity"),
+            str(payload.get("thread_id") or thread_id or ""),
+        )
+        if chosen_identity:
+            payload["task_identity"] = chosen_identity
+        if chosen_turn_id:
+            payload["turn_id"] = chosen_turn_id
 
         if decision.get("decision") == "refresh_managed_heartbeat":
             record_watcher_heartbeat(payload, decision)

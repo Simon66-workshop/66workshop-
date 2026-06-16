@@ -1,0 +1,300 @@
+=== check_all ===
+..................
+----------------------------------------------------------------------
+Ran 18 tests in 0.060s
+
+OK
+[0/1] Planning build
+Building for debugging...
+[0/5] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.11s)
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'TaskLightChecks' complete! (0.08s)
+TaskLightChecks passed
+ui_refresh_latency_ms=0.10
+smoke_ui_refresh_latency: ok
+smoke_signal_bus: ok
+smoke_state_projector: ok
+smoke_codex_quota: ok
+smoke_codex_quota_watcher: ok
+smoke_codex_quota_watcher_launch_agent: ok
+smoke_turn_runtime_arbiter: ok
+smoke_multitask: ok
+smoke_verify_gate: ok
+smoke_ttl: ok
+smoke_invalid_task_json: ok
+smoke_observations: ok
+smoke_current_thread_binding: ok
+smoke_appserver_bridge: ok
+smoke_appserver_thread_watcher: ok
+smoke_codex_thread_coverage: ok
+smoke_status_reflection_cases: ok
+smoke_workspace_coverage=ok
+smoke_hooks_config: ok
+smoke_hook_signal_bridge: ok
+smoke_check_all_total_schema: ok
+smoke_stop_priority_guard: ok
+smoke_hook_bridge_launch_agent: ok
+smoke_signal_fusion: ok
+smoke_private_probe_confidence: ok
+smoke_current_thread_turn_identity: ok
+smoke_observer_health: ok
+smoke_self_review: ok
+smoke_self_review_scope: ok
+smoke_self_review_generate_scope: ok
+[0/1] Planning build
+Building for debugging...
+[0/5] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.11s)
+bundle_path=/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/dist/66TaskLight.app
+launch_bundle_path=/var/folders/vn/m0mvpbgn18q094vgnm2dgr6c0000gn/T//66tasklight-runtime/66TaskLight.app
+app_process_status=running
+state_dir=/Users/macmini-simon66/.66tasklight
+state_json_status=readable
+ui_state_status=readable
+state_projector_health_status=readable
+observations_state_status=readable
+observer_label=com.local.66tasklight.observer
+observer_match=observe-local --watch
+observer_watch_status=running
+state_dir=/Users/macmini-simon66/.66tasklight
+observations_state_path=/Users/macmini-simon66/.66tasklight/observations_state.json
+observations_state_status=readable
+observations_state_updated_at=2026-06-15T06:31:36Z
+observations_state_age_seconds=2
+observations_state_fresh=yes
+launchctl_status=running
+process_pid=51478
+process_count=1
+ui_state_path=/Users/macmini-simon66/.66tasklight/ui_state.json
+ui_state_status=readable
+projector_version=M3.7
+projector_pid=51478
+projector_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+expected_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+projector_launch_label=com.66tasklight.state-projector
+projector_instance_id=1781439446-51478
+writer_status=ok
+ui_state_global_status=running
+global_status=running
+display_title=RUNNING
+counts={"appserver_active":0,"blocked":0,"done_verified_visible":5,"managed_active":2,"observed_active":0,"pending_verify_count":0,"process_observed":0,"queued":0,"running":2,"stale":3}
+signal_bus_status=readable
+signal_bus_record_count=410
+signal_bus_source_counts={"codex_appserver":287,"codex_hook":25,"codex_private_probe":12,"current_thread_watcher":7,"explicit":20,"hook_bridge":20,"process_observer":39}
+latest_hook_signal_age_sec=2.44
+latest_hook_bridge_signal_age_sec=9.44
+latest_process_observer_signal_age_sec=7175.44
+latest_private_probe_signal_age_sec=0.44
+latest_private_probe_status=observed_active
+latest_private_probe_quality=global_private_metadata
+appserver_thread_signal_status=bus
+appserver_live_thread_count=0
+appserver_active_count=0
+process_observed_count=0
+weak_observed_count=0
+latest_appserver_thread_age_sec=None
+latest_appserver_state_cause=codex_private_probe:observed_active
+appserver_thread_watcher_status=ok
+runtime_candidate_count=18
+top_runtime_candidates=[{"age_sec":2.44,"appserver_activity_evidence":[],"base_confidence":0.95,"candidate_id":"turn:019ec9f6-c696-7e12-b181-f0b8d4b287fc","consistency_score":0.9,"display_scope":"active_execution","freshness_score":1.0,"identity_score":1.0,"kind":"codex_turn","last_event_type":"item_started","last_signal_at":1781505096,"message":null,"pid":null,"reason":null,"runtime_score":0.855,"source_set":["codex_hook","current_thread_watcher"],"state_cause":"codex_hook:item_started","task_id":null,"thread_id":null,"turn_id":"019ec9f6-c696-7e12-b181-f0b8d4b287fc","why_active":"runtime_score_threshold_met","why_ignored":null},{"age_sec":10.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-063006-codex-turn-019ec9f6-842e2d50","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.5,"identity_score":0.2,"kind":"codex_turn","last_event_type":"heartbeat","last_signal_at":"2026-06-15T06:31:28Z","message":null,"pid":null,"reason":null,"runtime_score":0.09,"source_set":["explicit"],"state_cause":"explicit:heartbeat","task_id":"20260615-063006-codex-turn-019ec9f6-842e2d50","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":0.44,"appserver_activity_evidence":[],"base_confidence":0.3,"candidate_id":"thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a","consistency_score":0.3,"display_scope":"ignored","freshness_score":1.0,"identity_score":0.8,"kind":"current_thread","last_event_type":"observed_active","last_signal_at":1781505098,"message":null,"pid":null,"reason":null,"runtime_score":0.072,"source_set":["codex_appserver","codex_private_probe"],"state_cause":"codex_private_probe:observed_active","task_id":null,"thread_id":"019ec9c9-866d-77b2-9532-6e1e609ecd4a","turn_id":null,"why_active":null,"why_ignored":"stale_appserver_signal"},{"age_sec":89.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062935-codex-turn-019ec9f8-61d51325","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"heartbeat","last_signal_at":"2026-06-15T06:30:09Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:heartbeat","task_id":"20260615-062935-codex-turn-019ec9f8-61d51325","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":118.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062940-mvp-auditor-rerun-after--f5cd9925","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"task_started","last_signal_at":"2026-06-15T06:29:40Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:task_started","task_id":"20260615-062940-mvp-auditor-rerun-after--f5cd9925","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"}]
+top_runtime_candidates_pretty=turn:019ec9f6-c696-7e12-b181-f0b8d4b287fc scope=active_execution score=0.855 fresh=1.0 identity=1.0 consistency=0.9 cause=codex_hook:item_started age=2.44 why_active=runtime_score_threshold_met why_ignored=None | task:20260615-063006-codex-turn-019ec9f6-842e2d50 scope=ignored score=0.09 fresh=0.5 identity=0.2 consistency=0.9 cause=explicit:heartbeat age=10.44 why_active=None why_ignored=runtime_score_below_threshold | thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a scope=ignored score=0.072 fresh=1.0 identity=0.8 consistency=0.3 cause=codex_private_probe:observed_active age=0.44 why_active=None why_ignored=stale_appserver_signal | task:20260615-062935-codex-turn-019ec9f8-61d51325 scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:heartbeat age=89.44 why_active=None why_ignored=runtime_score_below_threshold | task:20260615-062940-mvp-auditor-rerun-after--f5cd9925 scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:task_started age=118.44 why_active=None why_ignored=runtime_score_below_threshold
+pending_verify_count=0
+latest_pending_turn_id=none
+projector_reason=active_execution
+fallback_reason=none
+latest_turn_binding_canonical_identity=turn:019ec9f8-646e-7380-966e-3b262c20283e
+latest_turn_binding_aliases=[]
+binding_identity_count=340
+latest_bridge_decision=heartbeat
+current_thread_signal_source=current_thread_watcher
+current_thread_signal_status=running
+quota_status=watch
+quota_fresh=True
+quota_source=codex_appserver
+quota_effective_remaining_percent=20
+quota_probe_status=ok
+quota_probe_mode=poll_fallback
+quota_bucket_id=codex
+quota_raw_window_count=4
+quota_captured_at=2026-06-15T14:31:31+08:00
+quota_captured_age_sec=7.4358971118927
+quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json
+ui_state_generated_at=2026-06-15T06:31:38Z
+state_projector_health_path=/Users/macmini-simon66/.66tasklight/state_projector_health.json
+state_projector_health_status=readable
+state_projector_health_state=ok
+state_projector_age_sec=0
+ui_state_age_sec=0
+state_projector_fresh=yes
+coverage_hint=run ./script/check_codex_thread_coverage.sh when Codex UI and LuckyCat disagree
+STATUS=ok
+swift_build=success
+=== smoke_check_all_total_schema ===
+smoke_check_all_total_schema: ok
+=== check_state_projector ===
+launchctl_status=running
+process_pid=51478
+process_count=1
+ui_state_path=/Users/macmini-simon66/.66tasklight/ui_state.json
+ui_state_status=readable
+projector_version=M3.7
+projector_pid=51478
+projector_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+expected_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+projector_launch_label=com.66tasklight.state-projector
+projector_instance_id=1781439446-51478
+writer_status=ok
+ui_state_global_status=running
+global_status=running
+display_title=RUNNING
+counts={"appserver_active":0,"blocked":0,"done_verified_visible":5,"managed_active":2,"observed_active":0,"pending_verify_count":0,"process_observed":0,"queued":0,"running":2,"stale":3}
+signal_bus_status=readable
+signal_bus_record_count=410
+signal_bus_source_counts={"codex_appserver":287,"codex_hook":25,"codex_private_probe":12,"current_thread_watcher":7,"explicit":20,"hook_bridge":20,"process_observer":39}
+latest_hook_signal_age_sec=2.44
+latest_hook_bridge_signal_age_sec=9.44
+latest_process_observer_signal_age_sec=7175.44
+latest_private_probe_signal_age_sec=0.44
+latest_private_probe_status=observed_active
+latest_private_probe_quality=global_private_metadata
+appserver_thread_signal_status=bus
+appserver_live_thread_count=0
+appserver_active_count=0
+process_observed_count=0
+weak_observed_count=0
+latest_appserver_thread_age_sec=None
+latest_appserver_state_cause=codex_private_probe:observed_active
+appserver_thread_watcher_status=ok
+runtime_candidate_count=18
+top_runtime_candidates=[{"age_sec":2.44,"appserver_activity_evidence":[],"base_confidence":0.95,"candidate_id":"turn:019ec9f6-c696-7e12-b181-f0b8d4b287fc","consistency_score":0.9,"display_scope":"active_execution","freshness_score":1.0,"identity_score":1.0,"kind":"codex_turn","last_event_type":"item_started","last_signal_at":1781505096,"message":null,"pid":null,"reason":null,"runtime_score":0.855,"source_set":["codex_hook","current_thread_watcher"],"state_cause":"codex_hook:item_started","task_id":null,"thread_id":null,"turn_id":"019ec9f6-c696-7e12-b181-f0b8d4b287fc","why_active":"runtime_score_threshold_met","why_ignored":null},{"age_sec":10.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-063006-codex-turn-019ec9f6-842e2d50","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.5,"identity_score":0.2,"kind":"codex_turn","last_event_type":"heartbeat","last_signal_at":"2026-06-15T06:31:28Z","message":null,"pid":null,"reason":null,"runtime_score":0.09,"source_set":["explicit"],"state_cause":"explicit:heartbeat","task_id":"20260615-063006-codex-turn-019ec9f6-842e2d50","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":0.44,"appserver_activity_evidence":[],"base_confidence":0.3,"candidate_id":"thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a","consistency_score":0.3,"display_scope":"ignored","freshness_score":1.0,"identity_score":0.8,"kind":"current_thread","last_event_type":"observed_active","last_signal_at":1781505098,"message":null,"pid":null,"reason":null,"runtime_score":0.072,"source_set":["codex_appserver","codex_private_probe"],"state_cause":"codex_private_probe:observed_active","task_id":null,"thread_id":"019ec9c9-866d-77b2-9532-6e1e609ecd4a","turn_id":null,"why_active":null,"why_ignored":"stale_appserver_signal"},{"age_sec":89.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062935-codex-turn-019ec9f8-61d51325","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"heartbeat","last_signal_at":"2026-06-15T06:30:09Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:heartbeat","task_id":"20260615-062935-codex-turn-019ec9f8-61d51325","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":118.44,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062940-mvp-auditor-rerun-after--f5cd9925","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"task_started","last_signal_at":"2026-06-15T06:29:40Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:task_started","task_id":"20260615-062940-mvp-auditor-rerun-after--f5cd9925","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"}]
+top_runtime_candidates_pretty=turn:019ec9f6-c696-7e12-b181-f0b8d4b287fc scope=active_execution score=0.855 fresh=1.0 identity=1.0 consistency=0.9 cause=codex_hook:item_started age=2.44 why_active=runtime_score_threshold_met why_ignored=None | task:20260615-063006-codex-turn-019ec9f6-842e2d50 scope=ignored score=0.09 fresh=0.5 identity=0.2 consistency=0.9 cause=explicit:heartbeat age=10.44 why_active=None why_ignored=runtime_score_below_threshold | thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a scope=ignored score=0.072 fresh=1.0 identity=0.8 consistency=0.3 cause=codex_private_probe:observed_active age=0.44 why_active=None why_ignored=stale_appserver_signal | task:20260615-062935-codex-turn-019ec9f8-61d51325 scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:heartbeat age=89.44 why_active=None why_ignored=runtime_score_below_threshold | task:20260615-062940-mvp-auditor-rerun-after--f5cd9925 scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:task_started age=118.44 why_active=None why_ignored=runtime_score_below_threshold
+pending_verify_count=0
+latest_pending_turn_id=none
+projector_reason=active_execution
+fallback_reason=none
+latest_turn_binding_canonical_identity=turn:019ec9f8-646e-7380-966e-3b262c20283e
+latest_turn_binding_aliases=[]
+binding_identity_count=340
+latest_bridge_decision=heartbeat
+current_thread_signal_source=current_thread_watcher
+current_thread_signal_status=running
+quota_status=watch
+quota_fresh=True
+quota_source=codex_appserver
+quota_effective_remaining_percent=20
+quota_probe_status=ok
+quota_probe_mode=poll_fallback
+quota_bucket_id=codex
+quota_raw_window_count=4
+quota_captured_at=2026-06-15T14:31:31+08:00
+quota_captured_age_sec=7.4358971118927
+quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json
+ui_state_generated_at=2026-06-15T06:31:38Z
+state_projector_health_path=/Users/macmini-simon66/.66tasklight/state_projector_health.json
+state_projector_health_status=readable
+state_projector_health_state=ok
+state_projector_age_sec=1
+ui_state_age_sec=1
+state_projector_fresh=yes
+coverage_hint=run ./script/check_codex_thread_coverage.sh when Codex UI and LuckyCat disagree
+STATUS=ok
+=== check_hook_bridge_launch_agent ===
+plist_exists=yes
+launchctl_status=running
+process_pid=1273
+signal_dir=/Users/macmini-simon66/.66tasklight/signals
+latest_signal_age_sec=3
+active_turn_bindings=2
+hook_bridge_health_path=/Users/macmini-simon66/.66tasklight/hook_bridge_health.json
+hook_bridge_health_status=readable
+hook_bridge_health_state=ok
+latest_bridge_process_time=2026-06-15T06:31:25Z
+log_tail=none
+STATUS=ok
+=== check_ui_client ===
+running_app_pid=75515
+bundle_path=/private/var/folders/vn/m0mvpbgn18q094vgnm2dgr6c0000gn/T/66tasklight-runtime/66TaskLight.app
+executable_path=/private/var/folders/vn/m0mvpbgn18q094vgnm2dgr6c0000gn/T/66tasklight-runtime/66TaskLight.app/Contents/MacOS/66TaskLight
+state_dir=/Users/macmini-simon66/.66tasklight
+build_id=1781505098
+ui_client_updated_at=2026-06-15T06:31:39Z
+desktop_app_path=/Users/macmini-simon66/Desktop/66TaskLight.app
+desktop_alias_target=/Users/macmini-simon66/Desktop/66TaskLight.app
+ui_client_count=136
+STATUS=ok
+=== check_codex_workspaces_coverage --skip-appserver ===
+STATUS=needs_hooks
+workspace_count=35
+trusted=6
+installed_needs_trust=0
+missing_hooks=29
+invalid_hooks=0
+not_loaded=0
+diagnostic_only=0
+unknown=0
+preferred_workspace_count=6
+preferred_trusted=6
+preferred_installed_needs_trust=0
+preferred_missing_hooks=0
+preferred_invalid_hooks=0
+report=/Users/macmini-simon66/.66tasklight/workspace_coverage/latest.md
+workspace=/Users/macmini-simon66/Documents/66workshop网站设计 coverage_status=trusted hook_status=ok reason=状态入口正常
+workspace=/Users/macmini-simon66/Documents/AI机器人/k230-jarvis-bridge coverage_status=trusted hook_status=ok reason=状态入口正常
+workspace=/Users/macmini-simon66/Documents/Codex状态桌面栏提醒 coverage_status=trusted hook_status=ok reason=已有 fresh hook/appserver evidence，可以驱动状态灯
+workspace=/Users/macmini-simon66/Documents/淘宝电商分析 coverage_status=trusted hook_status=ok reason=状态入口正常
+workspace=/Volumes/2T扩展盘/66VI system coverage_status=trusted hook_status=ok reason=状态入口正常
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site coverage_status=trusted hook_status=ok reason=状态入口正常
+workspace=/Users/macmini-simon66/Documents/66gos-ci03-case-content-assets coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/66gos-ci03-case-content-assets/frontend coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/Arduino/libraries/AudioTools coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/Codex/2026-05-07/codex-user-profile-codex-1-66workshop coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/Codex/2026-05-09/new-chat/zeus-codex-bridge coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-business-trial-v02 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-business-trial-v02/frontend coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-intake-shell-wip coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-intake-shell-wip/frontend coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-integration-business-trial-v02 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Users/macmini-simon66/Documents/New project-integration-business-trial-v02/frontend coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/00_Codex_Package/66Workshop_White_66VS_Interaction_Codex_Package coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc10 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc11 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc2 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc3 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc4 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc5 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc6 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc7 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc8 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/66_PROJECTS/66Workshop_AI_Website_V1/10_Repo/66workshop-site-v0.47-rc9 coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-cleanwork coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-ui-clean coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/AI机器人/66-ai-perception-wf-ui-only coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+workspace=/Volumes/2T扩展盘/AI机器人/_local_tools/whisper.cpp coverage_status=missing_hooks hook_status=missing reason=这个 workspace 还没安装 hooks
+=== check_codex_quota ===
+quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json
+exists=yes
+source=codex_appserver
+captured_at=2026-06-15T14:31:31+08:00
+fresh=True
+quota_status=watch
+effective_remaining_percent=20
+raw_window_count=4
+display_window_count=2
+short_window=5小时 85 bucket_id=codex reset=17:34
+long_window=1周 20 bucket_id=codex reset=6月18日
+manual_resets=None
+recommendation=watch_usage
+warnings=duplicate_quota_buckets_collapsed_to_display_windows
+ui_state_quota_exists=yes
+ui_state_quota_probe_mode=poll_fallback
+ui_state_quota_bucket_id=codex
+ui_state_quota_raw_window_count=4
+compact_text="⚡85·20"
+STATUS=ok
+=== smoke_codex_quota ===
+smoke_codex_quota: ok

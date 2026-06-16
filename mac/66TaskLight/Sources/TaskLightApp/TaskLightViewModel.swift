@@ -32,6 +32,7 @@ final class TaskLightViewModel: ObservableObject {
     private var pendingStateFileRefresh: DispatchWorkItem?
     private var pendingWorkspaceCoverageRefreshes: [DispatchWorkItem] = []
     private var pendingWorkspaceCoverageHide: DispatchWorkItem?
+    private var pendingInitialRefresh: DispatchWorkItem?
     private var recentEventsModifiedAt: Date?
     private var lastUIEventFlowFingerprint: String?
     private var lastUIStateRefreshSignature: String?
@@ -54,7 +55,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func start() {
-        refresh()
+        pendingInitialRefresh?.cancel()
         startStateFileWatcher()
         timer?.invalidate()
         let timer = Timer(timeInterval: config.refreshSeconds, repeats: true) { [weak self] _ in
@@ -64,6 +65,11 @@ final class TaskLightViewModel: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.refresh()
+        }
+        pendingInitialRefresh = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: workItem)
     }
 
     func refresh() {
@@ -82,8 +88,25 @@ final class TaskLightViewModel: ObservableObject {
         persistUIState()
     }
 
+    func shutdown() {
+        timer?.invalidate()
+        timer = nil
+        pendingInitialRefresh?.cancel()
+        pendingInitialRefresh = nil
+        pendingStateFileRefresh?.cancel()
+        pendingStateFileRefresh = nil
+        pendingWorkspaceCoverageHide?.cancel()
+        pendingWorkspaceCoverageHide = nil
+        pendingWorkspaceCoverageRefreshes.forEach { $0.cancel() }
+        pendingWorkspaceCoverageRefreshes.removeAll()
+        stateDirectorySource?.cancel()
+        stateDirectorySource = nil
+        stateDirectoryFileDescriptor = nil
+    }
+
     deinit {
         timer?.invalidate()
+        pendingInitialRefresh?.cancel()
         pendingStateFileRefresh?.cancel()
         pendingWorkspaceCoverageHide?.cancel()
         pendingWorkspaceCoverageRefreshes.forEach { $0.cancel() }

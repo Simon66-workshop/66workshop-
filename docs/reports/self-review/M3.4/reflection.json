@@ -1,0 +1,19 @@
+{
+  "decision": "REJECT",
+  "items": [
+    {
+      "decision": "NEEDS_HUMAN_REVIEW",
+      "do_not_touch_next": "Do not touch Hook Bridge, State Projector precedence, or LuckyCat UI runtime semantics in this phase.",
+      "evidence": [
+        "script/check_codex_hooks_trust.py"
+      ],
+      "failure_type": "launch_agent_unhealthy",
+      "next_bounded_action": "keep human review on this task even if smoke evidence passes",
+      "root_cause": "resident process or trust surface changed",
+      "severity": "medium",
+      "summary": "LaunchAgent or trust surface is not healthy enough for clean acceptance."
+    }
+  ],
+  "reflected_at": "2026-06-12T17:17:07Z",
+  "schema_version": "0.1"
+}

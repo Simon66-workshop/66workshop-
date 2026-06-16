@@ -52,6 +52,27 @@ con.close()
 PY
 }
 
+write_global_only_state() {
+  local age="$1"
+  rm -rf "$CODEX_HOME_DIR/process_manager"
+  mkdir -p "$CODEX_HOME_DIR"
+  python3 - "$CODEX_HOME_DIR" "$age" <<'PY'
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+home = Path(sys.argv[1])
+age = int(sys.argv[2])
+con = sqlite3.connect(home / "logs_2.sqlite")
+con.execute("drop table if exists logs")
+con.execute("create table logs (id integer primary key autoincrement, ts integer not null, ts_nanos integer not null, level text not null, target text not null, feedback_log_body text, module_path text, file text, line integer, thread_id text, process_uuid text, estimated_bytes integer not null default 0)")
+con.execute("insert into logs (ts, ts_nanos, level, target, thread_id) values (?, 0, 'INFO', 'smoke', ?)", (int(time.time()) - age, "other-thread"))
+con.commit()
+con.close()
+PY
+}
+
 task_from_json() {
   python3 -c 'import json,sys; print(json.load(sys.stdin)["task"]["task_id"])'
 }
@@ -83,6 +104,22 @@ if [[ "$first_task" == "$second_task" || "$first_identity" == "$second_identity"
   echo "expected new turn to bind a new task identity" >&2
   exit 1
 fi
+
+write_global_only_state 0
+sleep 2.5
+
+python3 - "$STATE_DIR/thread_bindings/$THREAD_ID.json" "$second_identity" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+binding = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+expected_identity = sys.argv[2]
+assert binding["status"] == "active", binding
+assert binding["last_fusion_decision"] == "observed_only", binding
+assert binding["task_identity"] == expected_identity, binding
+assert binding["turn_id"] == "turn-2", binding
+PY
 
 python3 - "$STATE_DIR/tasks/$first_task.json" "$STATE_DIR/tasks/$second_task.json" <<'PY'
 import json

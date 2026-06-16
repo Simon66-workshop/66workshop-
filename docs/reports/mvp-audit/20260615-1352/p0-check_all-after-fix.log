@@ -1,0 +1,131 @@
+..................
+----------------------------------------------------------------------
+Ran 18 tests in 0.070s
+
+OK
+Building for debugging...
+[0/5] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.16s)
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'TaskLightChecks' complete! (0.08s)
+TaskLightChecks passed
+ui_refresh_latency_ms=0.15
+smoke_ui_refresh_latency: ok
+smoke_signal_bus: ok
+smoke_state_projector: ok
+smoke_codex_quota: ok
+smoke_codex_quota_watcher: ok
+smoke_codex_quota_watcher_launch_agent: ok
+smoke_turn_runtime_arbiter: ok
+smoke_multitask: ok
+smoke_verify_gate: ok
+smoke_ttl: ok
+smoke_invalid_task_json: ok
+smoke_observations: ok
+smoke_current_thread_binding: ok
+smoke_appserver_bridge: ok
+smoke_appserver_thread_watcher: ok
+smoke_codex_thread_coverage: ok
+smoke_status_reflection_cases: ok
+smoke_workspace_coverage=ok
+smoke_hooks_config: ok
+smoke_hook_signal_bridge: ok
+smoke_check_all_total_schema: ok
+smoke_stop_priority_guard: ok
+smoke_hook_bridge_launch_agent: ok
+smoke_signal_fusion: ok
+smoke_private_probe_confidence: ok
+smoke_current_thread_turn_identity: ok
+smoke_observer_health: ok
+smoke_self_review: ok
+smoke_self_review_scope: ok
+smoke_self_review_generate_scope: ok
+[0/1] Planning build
+Building for debugging...
+[0/5] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.11s)
+bundle_path=/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/dist/66TaskLight.app
+launch_bundle_path=/var/folders/vn/m0mvpbgn18q094vgnm2dgr6c0000gn/T//66tasklight-runtime/66TaskLight.app
+app_process_status=running
+state_dir=/Users/macmini-simon66/.66tasklight
+state_json_status=readable
+ui_state_status=readable
+state_projector_health_status=readable
+observations_state_status=readable
+observer_label=com.local.66tasklight.observer
+observer_match=observe-local --watch
+observer_watch_status=running
+state_dir=/Users/macmini-simon66/.66tasklight
+observations_state_path=/Users/macmini-simon66/.66tasklight/observations_state.json
+observations_state_status=readable
+observations_state_updated_at=2026-06-15T06:26:27Z
+observations_state_age_seconds=0
+observations_state_fresh=yes
+launchctl_status=running
+process_pid=51478
+process_count=1
+ui_state_path=/Users/macmini-simon66/.66tasklight/ui_state.json
+ui_state_status=readable
+projector_version=M3.7
+projector_pid=51478
+projector_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+expected_code_hash=sha256:f8a4ed42a3853341f6c4c1ac10e63da9e0efc5eede71f7ad72316be6e247b36e
+projector_launch_label=com.66tasklight.state-projector
+projector_instance_id=1781439446-51478
+writer_status=ok
+ui_state_global_status=running
+global_status=running
+display_title=RUNNING
+counts={"appserver_active":0,"blocked":0,"done_verified_visible":5,"managed_active":1,"observed_active":0,"pending_verify_count":0,"process_observed":0,"queued":0,"running":1,"stale":3}
+signal_bus_status=readable
+signal_bus_record_count=391
+signal_bus_source_counts={"codex_appserver":324,"codex_hook":7,"explicit":9,"hook_bridge":6,"process_observer":45}
+latest_hook_signal_age_sec=1.4
+latest_hook_bridge_signal_age_sec=19.4
+latest_process_observer_signal_age_sec=6864.4
+latest_private_probe_signal_age_sec=None
+latest_private_probe_status=None
+latest_private_probe_quality=None
+appserver_thread_signal_status=bus
+appserver_live_thread_count=0
+appserver_active_count=0
+process_observed_count=0
+weak_observed_count=0
+latest_appserver_thread_age_sec=None
+latest_appserver_state_cause=codex_appserver:unknown
+appserver_thread_watcher_status=ok
+runtime_candidate_count=17
+top_runtime_candidates=[{"age_sec":1.4,"appserver_activity_evidence":[],"base_confidence":0.95,"candidate_id":"turn:019ec9f5-70ec-7202-b836-fe61b1653840","consistency_score":0.9,"display_scope":"active_execution","freshness_score":1.0,"identity_score":1.0,"kind":"codex_turn","last_event_type":"item_started","last_signal_at":1781504786,"message":null,"pid":null,"reason":null,"runtime_score":0.855,"source_set":["codex_hook"],"state_cause":"codex_hook:item_started","task_id":null,"thread_id":null,"turn_id":"019ec9f5-70ec-7202-b836-fe61b1653840","why_active":"fresh_hook_turn_signal","why_ignored":null},{"age_sec":20.4,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062607-codex-turn-019ec9f5-6d8fce1b","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"task_started","last_signal_at":"2026-06-15T06:26:07Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:task_started","task_id":"20260615-062607-codex-turn-019ec9f5-6d8fce1b","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":90.4,"appserver_activity_evidence":[],"base_confidence":1.0,"candidate_id":"task:20260615-062424-codex-turn-019ec9ec-ea10380b","consistency_score":0.9,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.2,"kind":"codex_turn","last_event_type":"heartbeat","last_signal_at":"2026-06-15T06:24:57Z","message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["explicit"],"state_cause":"explicit:heartbeat","task_id":"20260615-062424-codex-turn-019ec9ec-ea10380b","thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":6864.4,"appserver_activity_evidence":[],"base_confidence":0.35,"candidate_id":"observation:5381-4760ad25-da39a3ee","consistency_score":0.6,"display_scope":"ignored","freshness_score":0.0,"identity_score":0.4,"kind":"process_observer","last_event_type":"observed_disappeared","last_signal_at":"2026-06-15T04:32:03Z","message":null,"pid":5381,"reason":null,"runtime_score":0.0,"source_set":["process_observer"],"state_cause":"process_observer:observed_disappeared","task_id":null,"thread_id":null,"turn_id":null,"why_active":null,"why_ignored":"runtime_score_below_threshold"},{"age_sec":6.4,"appserver_activity_evidence":[],"base_confidence":0.0,"candidate_id":"thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a","consistency_score":0.3,"display_scope":"ignored","freshness_score":1.0,"identity_score":0.8,"kind":"appserver_thread","last_event_type":"unknown","last_signal_at":1781504781,"message":null,"pid":null,"reason":null,"runtime_score":0.0,"source_set":["codex_appserver"],"state_cause":"codex_appserver:unknown","task_id":null,"thread_id":"019ec9c9-866d-77b2-9532-6e1e609ecd4a","turn_id":null,"why_active":null,"why_ignored":"stale_appserver_signal"}]
+top_runtime_candidates_pretty=turn:019ec9f5-70ec-7202-b836-fe61b1653840 scope=active_execution score=0.855 fresh=1.0 identity=1.0 consistency=0.9 cause=codex_hook:item_started age=1.4 why_active=fresh_hook_turn_signal why_ignored=None | task:20260615-062607-codex-turn-019ec9f5-6d8fce1b scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:task_started age=20.4 why_active=None why_ignored=runtime_score_below_threshold | task:20260615-062424-codex-turn-019ec9ec-ea10380b scope=ignored score=0.0 fresh=0.0 identity=0.2 consistency=0.9 cause=explicit:heartbeat age=90.4 why_active=None why_ignored=runtime_score_below_threshold | observation:5381-4760ad25-da39a3ee scope=ignored score=0.0 fresh=0.0 identity=0.4 consistency=0.6 cause=process_observer:observed_disappeared age=6864.4 why_active=None why_ignored=runtime_score_below_threshold | thread:019ec9c9-866d-77b2-9532-6e1e609ecd4a scope=ignored score=0.0 fresh=1.0 identity=0.8 consistency=0.3 cause=codex_appserver:unknown age=6.4 why_active=None why_ignored=stale_appserver_signal
+pending_verify_count=0
+latest_pending_turn_id=none
+projector_reason=active_execution
+fallback_reason=none
+latest_turn_binding_canonical_identity=turn:019ec9f5-70ec-7202-b836-fe61b1653840
+latest_turn_binding_aliases=[]
+binding_identity_count=338
+latest_bridge_decision=heartbeat
+current_thread_signal_source=None
+current_thread_signal_status=None
+quota_status=watch
+quota_fresh=True
+quota_source=codex_appserver
+quota_effective_remaining_percent=20
+quota_probe_status=ok
+quota_probe_mode=poll_fallback
+quota_bucket_id=codex
+quota_raw_window_count=4
+quota_captured_at=2026-06-15T14:26:02+08:00
+quota_captured_age_sec=25.402229070663452
+quota_state_path=/Users/macmini-simon66/.66tasklight/quota_state.json
+ui_state_generated_at=2026-06-15T06:26:27Z
+state_projector_health_path=/Users/macmini-simon66/.66tasklight/state_projector_health.json
+state_projector_health_status=readable
+state_projector_health_state=ok
+state_projector_age_sec=1
+ui_state_age_sec=1
+state_projector_fresh=yes
+coverage_hint=run ./script/check_codex_thread_coverage.sh when Codex UI and LuckyCat disagree
+STATUS=ok
+swift_build=success

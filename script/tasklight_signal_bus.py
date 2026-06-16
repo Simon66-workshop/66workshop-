@@ -70,6 +70,8 @@ def _stable_signal_id(payload: dict[str, Any]) -> str:
         "thread_id": payload.get("thread_id"),
         "turn_id": payload.get("turn_id"),
         "item_id": payload.get("item_id"),
+        "cwd": payload.get("cwd"),
+        "session_id": payload.get("session_id") or payload.get("sessionId"),
         "observation_id": payload.get("observation_id"),
         "pid": payload.get("pid"),
         "status_hint": payload.get("status_hint"),
@@ -93,6 +95,8 @@ def canonical_signal(payload: dict[str, Any]) -> dict[str, Any]:
     item_id = payload.get("item_id") or identity.get("item_id")
     pid = payload.get("pid") or identity.get("pid")
     observation_id = payload.get("observation_id") or identity.get("observation_id")
+    cwd = payload.get("cwd") or identity.get("cwd")
+    session_id = payload.get("session_id") or payload.get("sessionId")
     occurred_at = payload.get("occurred_at") or payload.get("event_time") or payload.get("checked_at") or now_iso()
     confidence = float(payload.get("confidence") or 0.0)
     signal = {
@@ -125,6 +129,8 @@ def canonical_signal(payload: dict[str, Any]) -> dict[str, Any]:
         "item_id": item_id,
         "pid": pid,
         "observation_id": observation_id,
+        "session_id": session_id,
+        "cwd": cwd,
         "status_hint": payload.get("status_hint"),
         "occurred_at": occurred_at,
         "confidence": round(confidence, 4),

@@ -1,0 +1,32 @@
+{
+  "exclude": [],
+  "include": [
+    "README.md",
+    "config/self-review/",
+    "docs/",
+    "mac/66TaskLight/Sources/TaskLightApp/",
+    "mac/66TaskLight/Sources/TaskLightChecks/",
+    "mac/66TaskLight/Sources/TaskLightCore/",
+    "script/check_all.sh",
+    "script/check_codex_hooks_trust.py",
+    "script/check_hook_bridge_launch_agent.sh",
+    "script/install_appserver_thread_watcher_launch_agent.sh",
+    "script/install_codex_hooks_status_bridge.sh",
+    "script/install_hook_bridge_launch_agent.sh",
+    "script/install_hooks_for_workspace.sh",
+    "script/install_hooks_for_workspaces.sh",
+    "script/install_observer_launch_agent.sh",
+    "script/install_state_projector_launch_agent.sh",
+    "script/self-review/",
+    "script/smoke_hook_bridge_launch_agent.sh",
+    "script/smoke_self_review.sh",
+    "script/smoke_self_review_generate_scope.sh",
+    "script/smoke_self_review_scope.sh",
+    "script/uninstall_appserver_thread_watcher_launch_agent.sh",
+    "script/uninstall_hook_bridge_launch_agent.sh",
+    "script/uninstall_observer_launch_agent.sh",
+    "script/uninstall_state_projector_launch_agent.sh"
+  ],
+  "reason": "Auto-generated scope candidate. Review manually before use.",
+  "task_id": "M3.5"
+}

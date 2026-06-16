@@ -36,15 +36,17 @@ struct LuckyCatCompactView: View {
                 progress: viewModel.compactProgressValue(),
                 highlightsBell: viewModel.compactShowsAlertBell(),
                 statusTitle: compactDisplayTitle,
-                elapsedLabel: viewModel.quotaCompactText(),
-                elapsedLabelColor: quotaTextColor,
+                elapsedLabel: quotaPresentation.fullLabel,
+                elapsedLeadingSymbol: quotaPresentation.leadingSymbol,
+                elapsedValueText: quotaPresentation.valueText,
+                elapsedLabelColor: quotaPresentation.textColor,
                 elapsedStatusDotColor: quotaFreshnessDotColor,
                 onNoseTripleTap: {
                     viewModel.runWorkspaceCoverageReport()
                 }
             ) {
                 ZStack {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         CompactPhasePaw(
                             label: "阻塞",
                             status: .blocked,
@@ -76,7 +78,7 @@ struct LuckyCatCompactView: View {
                             isPrimary: viewModel.compactActivePaw() == .recon
                         )
                     }
-                    .frame(width: 296, height: 108)
+                    .frame(width: 286, height: 106)
                     .position(x: 182, y: 176)
                 }
             }
@@ -97,19 +99,11 @@ struct LuckyCatCompactView: View {
         .animation(.easeInOut(duration: 0.18), value: viewModel.workspaceCoveragePresentation?.message)
     }
 
-    private var quotaTextColor: Color {
-        switch viewModel.uiState.quota?.status {
-        case "ok":
-            return LuckyCatTokens.Palette.green.opacity(0.92)
-        case "watch":
-            return LuckyCatTokens.Palette.amber
-        case "low":
-            return LuckyCatTokens.Palette.collarRed.opacity(0.94)
-        case "critical":
-            return LuckyCatTokens.Palette.red
-        default:
-            return LuckyCatTokens.Palette.textSecondary.opacity(0.88)
-        }
+    private var quotaPresentation: QuotaCompactPresentation {
+        QuotaCompactPresentation(
+            fullLabel: viewModel.quotaCompactText(),
+            isCritical: quotaIsCritical
+        )
     }
 
     private var quotaFreshnessDotColor: Color {
@@ -117,6 +111,41 @@ struct LuckyCatCompactView: View {
             return LuckyCatTokens.Palette.textSecondary.opacity(0.52)
         }
         return quota.fresh ? LuckyCatTokens.Palette.green.opacity(0.92) : LuckyCatTokens.Palette.textSecondary.opacity(0.52)
+    }
+
+    private var quotaIsCritical: Bool {
+        guard let quota = viewModel.uiState.quota else {
+            return false
+        }
+        let candidates = [
+            quota.short_percent,
+            quota.long_percent,
+            quota.effective_remaining_percent
+        ].compactMap { $0 }
+        guard let minimum = candidates.min() else {
+            return false
+        }
+        return minimum < 20
+    }
+}
+
+private struct QuotaCompactPresentation {
+    let fullLabel: String
+    let isCritical: Bool
+
+    var leadingSymbol: String {
+        fullLabel.hasPrefix("⚡") ? "⚡" : ""
+    }
+
+    var valueText: String {
+        guard fullLabel.hasPrefix("⚡") else {
+            return fullLabel
+        }
+        return String(fullLabel.dropFirst())
+    }
+
+    var textColor: Color {
+        isCritical ? LuckyCatTokens.Palette.red : LuckyCatTokens.Palette.quotaNumberLight
     }
 }
 

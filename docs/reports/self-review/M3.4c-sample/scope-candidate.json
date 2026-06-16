@@ -1,0 +1,96 @@
+{
+  "classification": {
+    "app_assets": [],
+    "build_artifacts": [],
+    "cache_artifacts": [],
+    "docs_assets": [],
+    "in_scope_candidates": [
+      "config/self-review/scoring-rubrics.json",
+      "script/self-review/run_self_review.py"
+    ],
+    "out_of_scope_candidates": [],
+    "risky_auth_secret": [],
+    "risky_launch_trust": [],
+    "unknown": []
+  },
+  "file_reasons": {},
+  "generated_at": "2026-06-16T08:46:20Z",
+  "git": {
+    "branch": "scope-smoke",
+    "head": "scope123",
+    "staged_files": [
+      "script/self-review/run_self_review.py"
+    ],
+    "unstaged_files": [
+      "config/self-review/scoring-rubrics.json"
+    ],
+    "untracked_files": []
+  },
+  "include_current_staged": false,
+  "include_unstaged": false,
+  "notes": [
+    {
+      "staged_files": [
+        "script/self-review/run_self_review.py"
+      ],
+      "type": "scope_sources",
+      "unstaged_files": [
+        "config/self-review/scoring-rubrics.json"
+      ],
+      "untracked_files": [],
+      "value": "default staged + unstaged diff"
+    }
+  ],
+  "outputs": {
+    "candidate_json_path": "/Users/macmini-simon66/Documents/Codex\u72b6\u6001\u684c\u9762\u680f\u63d0\u9192/docs/reports/self-review/M3.4c-sample/scope-candidate.json",
+    "candidate_md_path": "/Users/macmini-simon66/Documents/Codex\u72b6\u6001\u684c\u9762\u680f\u63d0\u9192/docs/reports/self-review/M3.4c-sample/scope-candidate.md",
+    "scope_file_path": "/Users/macmini-simon66/Documents/Codex\u72b6\u6001\u684c\u9762\u680f\u63d0\u9192/docs/reports/self-review/M3.4c-sample/self-review-scope.json"
+  },
+  "recommendation": {
+    "exclude": [],
+    "include": [
+      "README.md",
+      "config/self-review/",
+      "docs/HOOK_BRIDGE_LAUNCH_AGENT.md",
+      "docs/HOOK_SIGNAL_BRIDGE.md",
+      "docs/STATE_PROJECTOR.md",
+      "docs/STATUS_PROTOCOL.md",
+      "docs/self-review/",
+      "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+      "script/check_hook_bridge.sh",
+      "script/check_hook_bridge_launch_agent.sh",
+      "script/check_state_projector.sh",
+      "script/hook_signal_bridge.py",
+      "script/install_hook_bridge_launch_agent.sh",
+      "script/install_state_projector_launch_agent.sh",
+      "script/self-review/",
+      "script/smoke_hook_bridge_launch_agent.sh",
+      "script/smoke_hook_signal_bridge.sh",
+      "script/smoke_self_review.sh",
+      "script/smoke_self_review_generate_scope.sh",
+      "script/smoke_self_review_scope.sh",
+      "script/smoke_state_projector.sh",
+      "script/smoke_turn_runtime_arbiter.sh",
+      "script/state_projector.py",
+      "script/uninstall_hook_bridge_launch_agent.sh",
+      "script/uninstall_state_projector_launch_agent.sh"
+    ],
+    "reason": "Generated from current git diff and task types."
+  },
+  "risk_summary": {
+    "has_auth_secret": false,
+    "has_build_artifacts": false,
+    "has_launch_trust": false,
+    "recommended_decision": "PASS",
+    "requires_human_review": false
+  },
+  "schema_version": "0.1",
+  "source": "generate_scope.py",
+  "task_id": "M3.4c-sample",
+  "task_types": [
+    "hook_bridge",
+    "state_projector"
+  ]
+}

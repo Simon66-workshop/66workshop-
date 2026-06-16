@@ -1,0 +1,64 @@
+{
+  "decision": "NEEDS_HUMAN_REVIEW",
+  "items": [
+    {
+      "decision": "CONDITIONAL_PASS",
+      "do_not_touch_next": "Do not touch Hook Bridge, State Projector precedence, or LuckyCat UI runtime semantics in this phase.",
+      "evidence": [
+        ".codex",
+        "README.md",
+        "config",
+        "docs/CODEX_THREAD_COVERAGE.md",
+        "docs/CODEX_WORKSPACE_ONBOARDING.md",
+        "docs/STATUS_REFLECTION_LOOP.md",
+        "docs/reports",
+        "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "mac/66TaskLight/Sources/TaskLightApp/Screens/LuckyCatCompactView.swift",
+        "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "script/appserver_thread_watcher.py",
+        "script/capture_status_mismatch.sh",
+        "script/check_all.sh",
+        "script/check_codex_thread_coverage.py",
+        "script/check_codex_thread_coverage.sh",
+        "script/check_codex_workspaces_coverage.py",
+        "script/check_codex_workspaces_coverage.sh",
+        "script/check_state_projector.sh",
+        "script/discover_codex_workspaces.py",
+        "script/install_hooks_for_workspace.sh",
+        "script/install_hooks_for_workspaces.sh",
+        "script/smoke_appserver_bridge.sh",
+        "script/smoke_codex_thread_coverage.sh",
+        "script/smoke_hooks_config.sh",
+        "script/smoke_status_reflection_cases.sh",
+        "script/smoke_workspace_coverage.sh",
+        "script/state_projector.py",
+        "script/status_reflection_case.py",
+        "script/tasklight_signal_bus.py"
+      ],
+      "failure_type": "unrelated_dirty_worktree",
+      "next_bounded_action": "keep using a scope file or clean unrelated worktree drift before final acceptance",
+      "root_cause": "working tree contains unrelated dirty files outside the active review scope",
+      "scope": "out_of_scope",
+      "severity": "medium",
+      "summary": "out-of-scope dirty files exist"
+    },
+    {
+      "decision": "NEEDS_HUMAN_REVIEW",
+      "do_not_touch_next": "Do not touch Hook Bridge, State Projector precedence, or LuckyCat UI runtime semantics in this phase.",
+      "evidence": [
+        "script/check_codex_hooks_trust.py"
+      ],
+      "failure_type": "launch_agent_unhealthy",
+      "next_bounded_action": "route this task through human review even if in-scope evidence is clean",
+      "root_cause": "launch or trust changes exist outside the active review scope",
+      "scope": "out_of_scope",
+      "severity": "medium",
+      "summary": "LaunchAgent or trust surface is not healthy enough for clean acceptance."
+    }
+  ],
+  "reflected_at": "2026-06-13T01:14:09Z",
+  "schema_version": "0.1"
+}

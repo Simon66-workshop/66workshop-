@@ -1,0 +1,128 @@
+{
+  "build_artifacts_staged": [],
+  "checked_at": "2026-06-15T06:24:10Z",
+  "checks": [
+    {
+      "description": "Do not call external APIs from Self-Review Arbiter flows.",
+      "detail": "none",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "no_external_api"
+    },
+    {
+      "description": "Do not read ~/.codex/auth.json.",
+      "detail": "none",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "no_codex_auth_read"
+    },
+    {
+      "description": "Do not emit prompt, response, auth, or raw log body.",
+      "detail": "none",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "no_sensitive_output"
+    },
+    {
+      "description": "Do not auto commit or push.",
+      "detail": "none",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "no_auto_commit_push"
+    },
+    {
+      "description": "done_verified remains verify-only.",
+      "detail": "verify gate preserved",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "verify_only_done_green"
+    },
+    {
+      "description": "Stop must not map to done_verified.",
+      "detail": "stop did not map to done_verified",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "stop_never_done_verified"
+    },
+    {
+      "description": "Stop -> done_unverified must remain intact.",
+      "detail": "stop still maps to pending path",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "stop_preserves_done_unverified"
+    },
+    {
+      "description": "process_observer only cannot drive RUNNING.",
+      "detail": "process-only guard intact",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "process_observer_only_not_running"
+    },
+    {
+      "description": "global-only private probe cannot drive RUNNING.",
+      "detail": "global private guard intact",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "global_private_probe_not_running"
+    },
+    {
+      "description": "Swift UI must read ui_state first.",
+      "detail": "Swift UI reads ui_state first",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "swift_ui_reads_ui_state_first"
+    },
+    {
+      "description": "No build artifacts may be staged.",
+      "detail": "none",
+      "level": "hard_gate",
+      "passed": true,
+      "rule_id": "no_build_artifacts_staged"
+    }
+  ],
+  "hard_gate_failed": false,
+  "out_of_scope_auth_secret_files": [],
+  "out_of_scope_dirty_files": [
+    ".codex",
+    "cli/tasklight.py",
+    "cli/tests/test_tasklight.py",
+    "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+    "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+    "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+    "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+    "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+    "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+    "script/codex_current_task_watcher.py",
+    "script/codex_hook_event.py",
+    "script/hook_signal_bridge.py",
+    "script/onboard_workspace_for_monitoring.py",
+    "script/onboard_workspace_for_monitoring.sh",
+    "script/smoke_check_all_total_schema.sh",
+    "script/smoke_current_thread_turn_identity.sh",
+    "script/smoke_hook_signal_bridge.sh",
+    "script/smoke_hooks_config.sh",
+    "script/smoke_state_projector.sh",
+    "script/smoke_stop_priority_guard.sh",
+    "script/smoke_workspace_onboarding.sh",
+    "script/state_projector.py",
+    "script/tasklight_signal_bus.py"
+  ],
+  "out_of_scope_launch_trust_files": [],
+  "out_of_scope_unknown_files": [],
+  "required_command_failures": [],
+  "scan_hits": {
+    "no_auto_commit_push": [],
+    "no_codex_auth_read": [],
+    "no_external_api": [],
+    "no_sensitive_output": []
+  },
+  "schema_version": "0.1",
+  "summary": {
+    "check_all_passed": true,
+    "launch_human_review": false,
+    "required_evidence_complete": true,
+    "scope_decision": "CONDITIONAL_PASS",
+    "ui_state_first": true,
+    "visual_human_review": false
+  }
+}

@@ -247,7 +247,7 @@ def new_binding(signal: dict[str, Any], bindings_dir: Path) -> tuple[Path, dict[
         "session_id": signal_session_id(signal),
         "origin_signal_id": signal.get("_bridge_signal_id"),
         "title": title,
-        "cwd": str(PROJECT_ROOT),
+        "cwd": str(signal.get("cwd") or PROJECT_ROOT),
         "status": "active",
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -342,6 +342,8 @@ def emit_bridge_signal(
             "task_id": binding.get("task_id"),
             "thread_id": binding.get("thread_id"),
             "turn_id": binding.get("turn_id"),
+            "session_id": binding.get("session_id"),
+            "cwd": binding.get("cwd"),
             "occurred_at": now_iso(),
             "confidence": confidence,
             "thread_scoped": bool(binding.get("thread_id")),
@@ -521,6 +523,11 @@ def apply_signal(signal: dict[str, Any], bindings_dir: Path, offsets: dict[str, 
         if alias not in aliases:
             aliases.append(alias)
         binding["aliases"] = aliases
+    if signal.get("cwd"):
+        binding["cwd"] = str(signal.get("cwd"))
+    session_id = signal_session_id(signal)
+    if session_id and not binding.get("session_id"):
+        binding["session_id"] = session_id
 
     if current_status in TERMINAL_STATUSES:
         if event_type == "stop":

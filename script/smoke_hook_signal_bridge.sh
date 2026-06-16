@@ -22,7 +22,7 @@ append_signal() {
   local event_type="$1"
   local turn_id="$2"
   local thread_id="${3:-}"
-  local extra="${4:-{}}"
+  local extra="${4:-"{}"}"
   python3 - "$SIGNALS" "$event_type" "$turn_id" "$thread_id" "$extra" <<'PY'
 import json
 import sys
@@ -114,6 +114,23 @@ raise SystemExit(1)
 PY
 }
 
+binding_cwd() {
+  local turn_id="$1"
+  python3 - "$TASKLIGHT_TURN_BINDINGS_DIR" "$turn_id" <<'PY'
+import json
+import sys
+from pathlib import Path
+base = Path(sys.argv[1])
+turn_id = sys.argv[2]
+for path in base.glob("*.json"):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("turn_id") == turn_id:
+        print(payload.get("cwd") or "")
+        raise SystemExit
+raise SystemExit(1)
+PY
+}
+
 assert_binding_identity() {
   local turn_id="$1"
   local expected_alias="${2:-}"
@@ -191,6 +208,10 @@ append_signal "item_completed" "turn-a"
 run_bridge
 [[ "$(task_status "$task_a")" == "running" ]]
 [[ "$(task_phase "$task_a")" == "item_completed" ]]
+
+append_signal "item_started" "turn-a" "" '{"cwd":"/tmp/tasklight-workspace-a"}'
+run_bridge
+[[ "$(binding_cwd turn-a)" == "/tmp/tasklight-workspace-a" ]]
 
 append_signal "stop" "turn-a"
 run_bridge

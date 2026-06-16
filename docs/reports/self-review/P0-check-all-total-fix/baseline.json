@@ -1,0 +1,394 @@
+{
+  "collected_at": "2026-06-15T06:22:10Z",
+  "git": {
+    "all_changed_files": [
+      ".codex",
+      "cli/tasklight.py",
+      "cli/tests/test_tasklight.py",
+      "docs/CODEX_WORKSPACE_ONBOARDING.md",
+      "docs/reports",
+      "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+      "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+      "script/check_all.sh",
+      "script/codex_current_task_watcher.py",
+      "script/codex_hook_event.py",
+      "script/hook_signal_bridge.py",
+      "script/onboard_workspace_for_monitoring.py",
+      "script/onboard_workspace_for_monitoring.sh",
+      "script/smoke_check_all_total_schema.sh",
+      "script/smoke_current_thread_turn_identity.sh",
+      "script/smoke_hook_signal_bridge.sh",
+      "script/smoke_hooks_config.sh",
+      "script/smoke_state_projector.sh",
+      "script/smoke_stop_priority_guard.sh",
+      "script/smoke_workspace_onboarding.sh",
+      "script/state_projector.py",
+      "script/tasklight_signal_bus.py"
+    ],
+    "all_staged_files": [],
+    "all_status_entries": [
+      {
+        "path": "cli/tasklight.py",
+        "status": " M"
+      },
+      {
+        "path": "cli/tests/test_tasklight.py",
+        "status": " M"
+      },
+      {
+        "path": "docs/CODEX_WORKSPACE_ONBOARDING.md",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "status": " M"
+      },
+      {
+        "path": "script/check_all.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/codex_current_task_watcher.py",
+        "status": " M"
+      },
+      {
+        "path": "script/codex_hook_event.py",
+        "status": " M"
+      },
+      {
+        "path": "script/hook_signal_bridge.py",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_current_thread_turn_identity.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hook_signal_bridge.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hooks_config.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_state_projector.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_stop_priority_guard.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/state_projector.py",
+        "status": " M"
+      },
+      {
+        "path": "script/tasklight_signal_bus.py",
+        "status": " M"
+      },
+      {
+        "path": ".codex",
+        "status": "??"
+      },
+      {
+        "path": "docs/reports",
+        "status": "??"
+      },
+      {
+        "path": "script/onboard_workspace_for_monitoring.py",
+        "status": "??"
+      },
+      {
+        "path": "script/onboard_workspace_for_monitoring.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_check_all_total_schema.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_workspace_onboarding.sh",
+        "status": "??"
+      }
+    ],
+    "branch": "master",
+    "changed_files": [
+      "docs/CODEX_WORKSPACE_ONBOARDING.md",
+      "docs/reports",
+      "script/check_all.sh"
+    ],
+    "head": "10b51db",
+    "out_of_scope_dirty_files": [
+      ".codex",
+      "cli/tasklight.py",
+      "cli/tests/test_tasklight.py",
+      "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+      "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+      "script/codex_current_task_watcher.py",
+      "script/codex_hook_event.py",
+      "script/hook_signal_bridge.py",
+      "script/onboard_workspace_for_monitoring.py",
+      "script/onboard_workspace_for_monitoring.sh",
+      "script/smoke_check_all_total_schema.sh",
+      "script/smoke_current_thread_turn_identity.sh",
+      "script/smoke_hook_signal_bridge.sh",
+      "script/smoke_hooks_config.sh",
+      "script/smoke_state_projector.sh",
+      "script/smoke_stop_priority_guard.sh",
+      "script/smoke_workspace_onboarding.sh",
+      "script/state_projector.py",
+      "script/tasklight_signal_bus.py"
+    ],
+    "out_of_scope_staged_files": [],
+    "out_of_scope_status_entries": [
+      {
+        "path": "cli/tasklight.py",
+        "status": " M"
+      },
+      {
+        "path": "cli/tests/test_tasklight.py",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "status": " M"
+      },
+      {
+        "path": "script/codex_current_task_watcher.py",
+        "status": " M"
+      },
+      {
+        "path": "script/codex_hook_event.py",
+        "status": " M"
+      },
+      {
+        "path": "script/hook_signal_bridge.py",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_current_thread_turn_identity.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hook_signal_bridge.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hooks_config.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_state_projector.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_stop_priority_guard.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/state_projector.py",
+        "status": " M"
+      },
+      {
+        "path": "script/tasklight_signal_bus.py",
+        "status": " M"
+      },
+      {
+        "path": ".codex",
+        "status": "??"
+      },
+      {
+        "path": "script/onboard_workspace_for_monitoring.py",
+        "status": "??"
+      },
+      {
+        "path": "script/onboard_workspace_for_monitoring.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_check_all_total_schema.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_workspace_onboarding.sh",
+        "status": "??"
+      }
+    ],
+    "scope": {
+      "enabled": true,
+      "exclude": [],
+      "include": [
+        "README.md",
+        "config/self-review",
+        "docs",
+        "script/check_all.sh",
+        "script/self-review",
+        "script/smoke_self_review.sh",
+        "script/smoke_self_review_generate_scope.sh",
+        "script/smoke_self_review_scope.sh"
+      ],
+      "mode": "scoped",
+      "reason": "Auto-generated scope candidate. Review manually before use.",
+      "schema_version": "0.1",
+      "scope_file": "docs/reports/self-review/P0-check-all-total-fix/self-review-scope.json",
+      "source_task_id": "P0-check-all-total-fix",
+      "task_id": "P0-check-all-total-fix"
+    },
+    "staged_files": [],
+    "status_entries": [
+      {
+        "path": "docs/CODEX_WORKSPACE_ONBOARDING.md",
+        "status": " M"
+      },
+      {
+        "path": "script/check_all.sh",
+        "status": " M"
+      },
+      {
+        "path": "docs/reports",
+        "status": "??"
+      }
+    ]
+  },
+  "project_root": "/Users/macmini-simon66/Documents/Codex\u72b6\u6001\u684c\u9762\u680f\u63d0\u9192",
+  "review_scope": {
+    "enabled": true,
+    "exclude": [],
+    "include": [
+      "README.md",
+      "config/self-review",
+      "docs",
+      "script/check_all.sh",
+      "script/self-review",
+      "script/smoke_self_review.sh",
+      "script/smoke_self_review_generate_scope.sh",
+      "script/smoke_self_review_scope.sh"
+    ],
+    "mode": "scoped",
+    "reason": "Auto-generated scope candidate. Review manually before use.",
+    "schema_version": "0.1",
+    "scope_file": "docs/reports/self-review/P0-check-all-total-fix/self-review-scope.json",
+    "source_task_id": "P0-check-all-total-fix",
+    "task_id": "P0-check-all-total-fix"
+  },
+  "schema_version": "0.1",
+  "signal_bus_summary": {
+    "has_recent_stop_signal": false,
+    "has_recent_verified_signal": false,
+    "latest_private_probe_quality": "global_private_metadata",
+    "latest_private_probe_scope": "global",
+    "recent_event_set": [
+      "heartbeat",
+      "item_completed",
+      "item_started",
+      "observed_disappeared",
+      "unknown"
+    ],
+    "recent_source_set": [
+      "codex_appserver",
+      "codex_hook",
+      "explicit",
+      "process_observer"
+    ],
+    "record_count": 80,
+    "source_counts": {
+      "codex_appserver": 55,
+      "codex_hook": 10,
+      "codex_private_probe": 2,
+      "current_thread_watcher": 1,
+      "explicit": 3,
+      "hook_bridge": 2,
+      "process_observer": 7
+    }
+  },
+  "state_dir": "/Users/macmini-simon66/.66tasklight",
+  "task_id": "P0-check-all-total-fix",
+  "task_summary": {
+    "status_counts": {
+      "cancelled": 1248,
+      "done_unverified": 5,
+      "done_verified": 48,
+      "running": 2
+    },
+    "task_count": 1303
+  },
+  "task_types": [
+    "tooling",
+    "release_audit"
+  ],
+  "ui_state_summary": {
+    "counts": {
+      "appserver_active": 0,
+      "blocked": 0,
+      "done_verified_visible": 5,
+      "managed_active": 2,
+      "observed_active": 0,
+      "pending_verify_count": 1,
+      "process_observed": 0,
+      "queued": 0,
+      "running": 1,
+      "stale": 4
+    },
+    "exists": true,
+    "fallback_reason": null,
+    "global_display_title": "RUNNING",
+    "global_status": "running",
+    "lamp_status": "running",
+    "path": "/Users/macmini-simon66/.66tasklight/ui_state.json",
+    "projector_reason": [
+      "active_execution"
+    ],
+    "projector_version": "M3.7",
+    "source": "state_projector",
+    "writer_status": "ok"
+  }
+}

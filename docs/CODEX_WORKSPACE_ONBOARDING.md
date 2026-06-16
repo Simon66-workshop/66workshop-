@@ -7,6 +7,16 @@ projects.
 
 ## Commands
 
+Run one workspace through the full onboarding flow:
+
+```bash
+./script/onboard_workspace_for_monitoring.sh --workspace "/path/to/project"
+```
+
+This command installs local hook files, checks workspace coverage, and reports
+whether the workspace is already `visible_trusted`, still `visible_untrusted`,
+or not yet loaded by Codex UI.
+
 Run a read-only batch report:
 
 ```bash
@@ -37,6 +47,10 @@ Install one workspace:
 ./script/install_hooks_for_workspaces.sh --workspace "/path/to/project"
 ```
 
+For automation, prefer the single-workspace onboarding command above. Use the
+batch install commands only when you intentionally want multi-project coverage
+work.
+
 ## LuckyCat Nose Shortcut
 
 Triple-click the LuckyCat nose to run the read-only batch report and open the
@@ -55,10 +69,12 @@ The bubble is not part of the main lamp state. It never changes
 
 ## Workflow
 
-1. Triple-click the cat nose to generate a report.
-2. Run batch install for preferred `missing_hooks` or `invalid_hooks` workspaces.
-3. Open each affected Codex workspace and approve hooks in the Codex UI.
-4. Triple-click the cat nose again to confirm coverage.
+1. Tell Codex which new project path should be monitored.
+2. Run `./script/onboard_workspace_for_monitoring.sh --workspace "/path/to/project"`.
+3. If the result is `ONBOARDING_STATUS: needs_trust`, open that workspace in Codex UI and click Trust.
+4. If the result is `ONBOARDING_STATUS: needs_reload_then_trust`, open the workspace in Codex UI first, then trust hooks if prompted.
+5. Start one fresh turn in that workspace so 66TaskLight can consume real hook signals.
+6. Use the cat-nose batch report only for broad audits or cleanup.
 
 ## Preferred vs Discovered
 

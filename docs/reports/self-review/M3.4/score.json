@@ -1,0 +1,58 @@
+{
+  "buckets": {
+    "diagnostic_quality": {
+      "passed": 1,
+      "score": 5.0,
+      "total": 1,
+      "weight": 5
+    },
+    "launch_health": {
+      "passed": 1,
+      "score": 5.0,
+      "total": 2,
+      "weight": 10
+    },
+    "maintainability": {
+      "passed": 1,
+      "score": 5.0,
+      "total": 1,
+      "weight": 5
+    },
+    "regression_safety": {
+      "passed": 8,
+      "score": 15.0,
+      "total": 8,
+      "weight": 15
+    },
+    "signal_arbitration": {
+      "passed": 2,
+      "score": 20.0,
+      "total": 2,
+      "weight": 20
+    },
+    "state_accuracy": {
+      "passed": 10,
+      "score": 35.0,
+      "total": 10,
+      "weight": 35
+    },
+    "ui_consistency": {
+      "passed": 2,
+      "score": 10.0,
+      "total": 2,
+      "weight": 10
+    }
+  },
+  "decision": "REJECT",
+  "schema_version": "0.1",
+  "scored_at": "2026-06-12T17:17:07Z",
+  "summary": {
+    "failure_kinds": [
+      "launch_agent_unhealthy"
+    ],
+    "hard_gate_failed": true,
+    "launch_human_review": true,
+    "visual_human_review": false
+  },
+  "total_score": 95.0
+}

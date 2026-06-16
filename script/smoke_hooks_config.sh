@@ -76,13 +76,16 @@ assert payload["turn_id"] == "turn-a", payload
 assert payload["confidence"] == 0.85, payload
 PY
 
-nested_signal="$(printf '%s\n' '{"run":{"eventName":"postToolUse"},"threadId":"thread-a","turnId":"turn-a","exitCode":1}' | python3 "$HANDLER" --event-json -)"
+nested_signal="$(printf '%s\n' '{"run":{"eventName":"postToolUse","threadId":"thread-a","turnId":"turn-a","cwd":"/tmp/tasklight-workspace"},"exitCode":1}' | python3 "$HANDLER" --event-json -)"
 python3 - "$nested_signal" <<'PY'
 import json
 import sys
 
 payload = json.loads(sys.argv[1])
 assert payload["event_type"] == "tool_failed", payload
+assert payload["thread_id"] == "thread-a", payload
+assert payload["turn_id"] == "turn-a", payload
+assert payload["cwd"] == "/tmp/tasklight-workspace", payload
 assert payload["reason"] == "codex_exit_failed", payload
 PY
 

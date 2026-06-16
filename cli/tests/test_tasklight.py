@@ -138,6 +138,17 @@ class TaskLightTests(unittest.TestCase):
         self.assertEqual(loaded.global_status, "blocked")
         self.assertEqual(loaded.tasks[0].last_error, "acceptance gate expired")
 
+    def test_terminal_heartbeat_does_not_convert_done_unverified_to_blocked(self) -> None:
+        record, _ = self.store.start_task("Late heartbeat")
+        done_record, _ = self.store.done_task(record.task_id, "awaiting acceptance")
+        self.assertEqual(done_record.status, "done_unverified")
+
+        heartbeat_record, heartbeat_state = self.store.heartbeat_task(record.task_id, "inspect", 0.4)
+        self.assertEqual(heartbeat_record.status, "done_unverified")
+        self.assertEqual(self.store.load_task(record.task_id).status, "done_unverified")
+        self.assertEqual(heartbeat_state.global_status, "running")
+        self.assertEqual(heartbeat_state.counts.blocked, 0)
+
     def test_cli_parser_covers_required_subcommands(self) -> None:
         parser = build_parser()
         self.assertIsNotNone(parser.parse_args(["start", "--title", "Demo", "--print-id"]))
@@ -214,6 +225,44 @@ class TaskLightTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         payload = json.loads(stdout.getvalue())
         self.assertIn("global_status", payload)
+
+    def test_status_prefers_projected_ui_state(self) -> None:
+        record, _ = self.store.start_task("Legacy stale")
+        data = self.read_json(self.config.tasks_dir / f"{record.task_id}.json")
+        data["heartbeat_at"] = "2000-01-01T00:00:00Z"
+        data["status"] = "running"
+        (self.config.tasks_dir / f"{record.task_id}.json").write_text(json.dumps(data), encoding="utf-8")
+        self.config.ui_state_path.write_text(
+            json.dumps(
+                {
+                    "source": "state_projector",
+                    "projector_version": "M3.7",
+                    "global_status": "running",
+                    "lamp_status": "running",
+                    "counts": {"blocked": 0, "stale": 0, "running": 1},
+                    "tasks": [],
+                    "diagnostics": {"writer_status": "ok"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        stdout = io.StringIO()
+        old_env = os.environ.get("TASKLIGHT_STATE_DIR")
+        try:
+            os.environ["TASKLIGHT_STATE_DIR"] = str(self.state_dir)
+            with redirect_stdout(stdout):
+                rc = main(["status"])
+        finally:
+            if old_env is None:
+                os.environ.pop("TASKLIGHT_STATE_DIR", None)
+            else:
+                os.environ["TASKLIGHT_STATE_DIR"] = old_env
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["source"], "state_projector")
+        self.assertEqual(payload["global_status"], "running")
+        self.assertEqual(payload["counts"]["blocked"], 0)
 
     def test_observe_local_scans_and_clears_observations(self) -> None:
         live_rows = [

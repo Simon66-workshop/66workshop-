@@ -1,0 +1,497 @@
+{
+  "collected_at": "2026-06-13T01:11:59Z",
+  "git": {
+    "all_changed_files": [
+      ".codex",
+      "README.md",
+      "config",
+      "docs/CODEX_THREAD_COVERAGE.md",
+      "docs/CODEX_WORKSPACE_ONBOARDING.md",
+      "docs/STATUS_REFLECTION_LOOP.md",
+      "docs/reports",
+      "docs/self-review",
+      "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/Screens/LuckyCatCompactView.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+      "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+      "script/appserver_thread_watcher.py",
+      "script/capture_status_mismatch.sh",
+      "script/check_all.sh",
+      "script/check_codex_hooks_trust.py",
+      "script/check_codex_thread_coverage.py",
+      "script/check_codex_thread_coverage.sh",
+      "script/check_codex_workspaces_coverage.py",
+      "script/check_codex_workspaces_coverage.sh",
+      "script/check_state_projector.sh",
+      "script/discover_codex_workspaces.py",
+      "script/install_hooks_for_workspace.sh",
+      "script/install_hooks_for_workspaces.sh",
+      "script/self-review",
+      "script/smoke_appserver_bridge.sh",
+      "script/smoke_codex_thread_coverage.sh",
+      "script/smoke_hooks_config.sh",
+      "script/smoke_self_review.sh",
+      "script/smoke_self_review_scope.sh",
+      "script/smoke_status_reflection_cases.sh",
+      "script/smoke_workspace_coverage.sh",
+      "script/state_projector.py",
+      "script/status_reflection_case.py",
+      "script/tasklight_signal_bus.py"
+    ],
+    "all_staged_files": [],
+    "all_status_entries": [
+      {
+        "path": "README.md",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Screens/LuckyCatCompactView.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "status": " M"
+      },
+      {
+        "path": "script/appserver_thread_watcher.py",
+        "status": " M"
+      },
+      {
+        "path": "script/check_all.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/check_codex_hooks_trust.py",
+        "status": " M"
+      },
+      {
+        "path": "script/check_state_projector.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_appserver_bridge.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hooks_config.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/state_projector.py",
+        "status": " M"
+      },
+      {
+        "path": "script/tasklight_signal_bus.py",
+        "status": " M"
+      },
+      {
+        "path": ".codex",
+        "status": "??"
+      },
+      {
+        "path": "config",
+        "status": "??"
+      },
+      {
+        "path": "docs/CODEX_THREAD_COVERAGE.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/CODEX_WORKSPACE_ONBOARDING.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/STATUS_REFLECTION_LOOP.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/reports",
+        "status": "??"
+      },
+      {
+        "path": "docs/self-review",
+        "status": "??"
+      },
+      {
+        "path": "script/capture_status_mismatch.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_thread_coverage.py",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_thread_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_workspaces_coverage.py",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_workspaces_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/discover_codex_workspaces.py",
+        "status": "??"
+      },
+      {
+        "path": "script/install_hooks_for_workspace.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/install_hooks_for_workspaces.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/self-review",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_codex_thread_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_self_review.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_self_review_scope.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_status_reflection_cases.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_workspace_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/status_reflection_case.py",
+        "status": "??"
+      }
+    ],
+    "branch": "master",
+    "changed_files": [
+      "docs/self-review",
+      "script/self-review",
+      "script/smoke_self_review.sh",
+      "script/smoke_self_review_scope.sh"
+    ],
+    "head": "7a8be8b",
+    "out_of_scope_dirty_files": [
+      ".codex",
+      "README.md",
+      "config",
+      "docs/CODEX_THREAD_COVERAGE.md",
+      "docs/CODEX_WORKSPACE_ONBOARDING.md",
+      "docs/STATUS_REFLECTION_LOOP.md",
+      "docs/reports",
+      "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/Screens/LuckyCatCompactView.swift",
+      "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+      "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+      "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+      "script/appserver_thread_watcher.py",
+      "script/capture_status_mismatch.sh",
+      "script/check_all.sh",
+      "script/check_codex_hooks_trust.py",
+      "script/check_codex_thread_coverage.py",
+      "script/check_codex_thread_coverage.sh",
+      "script/check_codex_workspaces_coverage.py",
+      "script/check_codex_workspaces_coverage.sh",
+      "script/check_state_projector.sh",
+      "script/discover_codex_workspaces.py",
+      "script/install_hooks_for_workspace.sh",
+      "script/install_hooks_for_workspaces.sh",
+      "script/smoke_appserver_bridge.sh",
+      "script/smoke_codex_thread_coverage.sh",
+      "script/smoke_hooks_config.sh",
+      "script/smoke_status_reflection_cases.sh",
+      "script/smoke_workspace_coverage.sh",
+      "script/state_projector.py",
+      "script/status_reflection_case.py",
+      "script/tasklight_signal_bus.py"
+    ],
+    "out_of_scope_staged_files": [],
+    "out_of_scope_status_entries": [
+      {
+        "path": "README.md",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/Screens/LuckyCatCompactView.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "status": " M"
+      },
+      {
+        "path": "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "status": " M"
+      },
+      {
+        "path": "script/appserver_thread_watcher.py",
+        "status": " M"
+      },
+      {
+        "path": "script/check_all.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/check_codex_hooks_trust.py",
+        "status": " M"
+      },
+      {
+        "path": "script/check_state_projector.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_appserver_bridge.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/smoke_hooks_config.sh",
+        "status": " M"
+      },
+      {
+        "path": "script/state_projector.py",
+        "status": " M"
+      },
+      {
+        "path": "script/tasklight_signal_bus.py",
+        "status": " M"
+      },
+      {
+        "path": ".codex",
+        "status": "??"
+      },
+      {
+        "path": "config",
+        "status": "??"
+      },
+      {
+        "path": "docs/CODEX_THREAD_COVERAGE.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/CODEX_WORKSPACE_ONBOARDING.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/STATUS_REFLECTION_LOOP.md",
+        "status": "??"
+      },
+      {
+        "path": "docs/reports",
+        "status": "??"
+      },
+      {
+        "path": "script/capture_status_mismatch.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_thread_coverage.py",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_thread_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_workspaces_coverage.py",
+        "status": "??"
+      },
+      {
+        "path": "script/check_codex_workspaces_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/discover_codex_workspaces.py",
+        "status": "??"
+      },
+      {
+        "path": "script/install_hooks_for_workspace.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/install_hooks_for_workspaces.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_codex_thread_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_status_reflection_cases.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_workspace_coverage.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/status_reflection_case.py",
+        "status": "??"
+      }
+    ],
+    "scope": {
+      "enabled": true,
+      "exclude": [
+        "__pycache__",
+        "dist",
+        "mac/66TaskLight/.build"
+      ],
+      "include": [
+        "config/self-review",
+        "docs/self-review",
+        "script/self-review",
+        "script/smoke_self_review.sh",
+        "script/smoke_self_review_scope.sh"
+      ],
+      "mode": "scoped",
+      "reason": "Limit review to Self-Review Arbiter Phase 1 files.",
+      "schema_version": "0.1",
+      "scope_file": "/tmp/m3.4b-sample-scope.json",
+      "source_task_id": "M3.4b-sample",
+      "task_id": "M3.4b-sample"
+    },
+    "staged_files": [],
+    "status_entries": [
+      {
+        "path": "docs/self-review",
+        "status": "??"
+      },
+      {
+        "path": "script/self-review",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_self_review.sh",
+        "status": "??"
+      },
+      {
+        "path": "script/smoke_self_review_scope.sh",
+        "status": "??"
+      }
+    ]
+  },
+  "project_root": "/Users/macmini-simon66/Documents/Codex\u72b6\u6001\u684c\u9762\u680f\u63d0\u9192",
+  "review_scope": {
+    "enabled": true,
+    "exclude": [
+      "__pycache__",
+      "dist",
+      "mac/66TaskLight/.build"
+    ],
+    "include": [
+      "config/self-review",
+      "docs/self-review",
+      "script/self-review",
+      "script/smoke_self_review.sh",
+      "script/smoke_self_review_scope.sh"
+    ],
+    "mode": "scoped",
+    "reason": "Limit review to Self-Review Arbiter Phase 1 files.",
+    "schema_version": "0.1",
+    "scope_file": "/tmp/m3.4b-sample-scope.json",
+    "source_task_id": "M3.4b-sample",
+    "task_id": "M3.4b-sample"
+  },
+  "schema_version": "0.1",
+  "signal_bus_summary": {
+    "has_recent_stop_signal": false,
+    "has_recent_verified_signal": false,
+    "latest_private_probe_quality": null,
+    "latest_private_probe_scope": null,
+    "recent_event_set": [
+      "item_started",
+      "unknown"
+    ],
+    "recent_source_set": [
+      "codex_appserver",
+      "codex_hook"
+    ],
+    "record_count": 80,
+    "source_counts": {
+      "codex_appserver": 74,
+      "codex_hook": 4,
+      "explicit": 2
+    }
+  },
+  "state_dir": "/Users/macmini-simon66/.66tasklight",
+  "task_id": "M3.4b-sample",
+  "task_summary": {
+    "status_counts": {
+      "cancelled": 287,
+      "done_unverified": 1,
+      "done_verified": 25,
+      "running": 2
+    },
+    "task_count": 315
+  },
+  "task_types": [
+    "state_projector",
+    "hook_bridge"
+  ],
+  "ui_state_summary": {
+    "counts": {
+      "appserver_active": 0,
+      "blocked": 0,
+      "done_verified_visible": 9,
+      "managed_active": 1,
+      "observed_active": 0,
+      "pending_verify_count": 0,
+      "process_observed": 0,
+      "queued": 0,
+      "running": 1,
+      "stale": 0
+    },
+    "exists": true,
+    "fallback_reason": null,
+    "global_display_title": "RUNNING",
+    "global_status": "running",
+    "lamp_status": "running",
+    "path": "/Users/macmini-simon66/.66tasklight/ui_state.json",
+    "projector_reason": [
+      "active_execution"
+    ],
+    "projector_version": "M3.3",
+    "source": "state_projector",
+    "writer_status": "ok"
+  }
+}

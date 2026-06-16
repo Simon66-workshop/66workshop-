@@ -1,0 +1,39 @@
+..................
+----------------------------------------------------------------------
+Ran 18 tests in 0.131s
+
+OK
+[0/1] Planning build
+Building for debugging...
+[0/5] Write swift-version--1AB21518FC5DEDBE.txt
+Build complete! (0.17s)
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'TaskLightChecks' complete! (0.11s)
+TaskLightChecks passed
+ui_refresh_latency_ms=0.10
+smoke_ui_refresh_latency: ok
+smoke_signal_bus: ok
+smoke_state_projector: ok
+smoke_codex_quota: ok
+smoke_codex_quota_watcher: ok
+smoke_codex_quota_watcher_launch_agent: ok
+smoke_turn_runtime_arbiter: ok
+smoke_multitask: ok
+smoke_verify_gate: ok
+smoke_ttl: ok
+smoke_invalid_task_json: ok
+smoke_observations: ok
+smoke_current_thread_binding: ok
+smoke_appserver_bridge: ok
+smoke_appserver_thread_watcher: ok
+smoke_codex_thread_coverage: ok
+smoke_status_reflection_cases: ok
+smoke_workspace_coverage=ok
+smoke_hooks_config: ok
+smoke_hook_signal_bridge: ok
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import json,sys; print(json.load(sys.stdin)["counts"]["total"])
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: 'total'

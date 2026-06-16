@@ -121,6 +121,10 @@ def runtime_ttl_config() -> dict[str, float]:
     }
 
 
+def verification_ttl_seconds() -> float:
+    return max(0.0, float(os.environ.get("TASKLIGHT_VERIFICATION_TTL_SECONDS", "900")))
+
+
 def projector_code_hash() -> str:
     try:
         digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -692,6 +696,34 @@ def unique_signals(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ordered
 
 
+def turn_id_from_identity(identity: Any, *, thread_id: str = "") -> str | None:
+    if not identity:
+        return None
+    value = str(identity)
+    if value.startswith("turn:"):
+        suffix = value.split(":", 1)[1]
+        return suffix or None
+    if thread_id and value.startswith(f"{thread_id}:"):
+        suffix = value[len(thread_id) + 1 :]
+        if suffix and not suffix.startswith("epoch-"):
+            return suffix
+    return None
+
+
+def binding_turn_id(binding: dict[str, Any] | None) -> str | None:
+    if not isinstance(binding, dict):
+        return None
+    raw_turn_id = binding.get("turn_id")
+    if raw_turn_id:
+        return str(raw_turn_id)
+    thread_id = str(binding.get("thread_id") or "")
+    for key in ("canonical_identity", "task_identity"):
+        turn_id = turn_id_from_identity(binding.get(key), thread_id=thread_id)
+        if turn_id:
+            return turn_id
+    return None
+
+
 def relevant_task_signals(
     task: dict[str, Any],
     binding: dict[str, Any] | None,
@@ -702,7 +734,7 @@ def relevant_task_signals(
     signals_by_thread: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     task_id = str(task.get("task_id") or "")
-    turn_id = str((binding or {}).get("turn_id") or "")
+    turn_id = str(binding_turn_id(binding) or binding_turn_id(thread_binding) or "")
     thread_id = str((thread_binding or {}).get("thread_id") or "")
     matches: list[dict[str, Any]] = []
     if task_id:
@@ -726,7 +758,7 @@ def task_binding_identity(task: dict[str, Any], binding: dict[str, Any] | None) 
         if isinstance(raw_aliases, list):
             aliases = [str(alias) for alias in raw_aliases if alias]
     if canonical is None:
-        turn_id = (binding or {}).get("turn_id") or task.get("turn_id")
+        turn_id = binding_turn_id(binding) or task.get("turn_id")
         if turn_id:
             canonical = f"turn:{turn_id}"
     return canonical, aliases
@@ -859,6 +891,7 @@ def classify_task(
     current_thread_active_ttl: float,
     completed_idle_seconds: float,
     hook_turn_lease_seconds: float,
+    verification_ttl: float,
     done_visible_hours: float,
     signals_by_task: dict[str, list[dict[str, Any]]],
     signals_by_turn: dict[str, list[dict[str, Any]]],
@@ -867,6 +900,10 @@ def classify_task(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     raw_status = str(task.get("raw_status") or task.get("status") or task.get("effective_status") or "idle")
     effective_status = str(task.get("effective_status") or task.get("status") or raw_status)
+    if effective_status == "done_unverified":
+        done_age = age_seconds(done_timestamp(task), now_ts)
+        if done_age is not None and done_age > verification_ttl:
+            effective_status = "stale"
     source = "codex_hook" if is_hook_projected_task(task, binding) else str(task.get("source") or "tasklight")
     last_signal_event = (binding or {}).get("last_signal_event")
     task_signals = relevant_task_signals(
@@ -940,6 +977,7 @@ def classify_task(
     elif source == "current_thread" and raw_status in {"running", "queued", "stale"}:
         confidence = 0.88
         binding_fresh = binding_is_fresh(thread_binding, now_ts, current_thread_active_ttl)
+        thread_binding_turn_id = binding_turn_id(thread_binding)
         latest_release_age = signal_age(latest_release, now_ts)
         private_probe_fresh = (
             latest_private_thread_probe is not None
@@ -954,11 +992,15 @@ def classify_task(
             and latest_current_thread_age is not None
             and latest_current_thread_age <= current_thread_active_ttl
             and binding_fresh
-            and private_probe_fresh
+            and (private_probe_fresh or bool(thread_binding_turn_id))
         ):
             fresh = True
             display_scope = "active_execution"
-            state_cause = f"current_thread:{str(latest_current_thread_signal.get('event_type') or 'heartbeat')}"
+            signal_event = str(latest_current_thread_signal.get("event_type") or "heartbeat")
+            if private_probe_fresh:
+                state_cause = f"current_thread:{signal_event}"
+            else:
+                state_cause = f"current_thread:turn_anchored_{signal_event}"
         elif latest_release is not None and latest_release_age is not None:
             display_scope = "released"
             state_cause = f"current_thread:{str(latest_release.get('reason') or 'released')}"
@@ -1020,7 +1062,7 @@ def classify_task(
         "task_id": task_id,
         "short_task_id": task.get("short_task_id") or task_id[-8:],
         "title": task.get("title") or task_id,
-        "turn_id": (binding or {}).get("turn_id"),
+        "turn_id": binding_turn_id(binding) or binding_turn_id(thread_binding),
         "source": source,
         "raw_status": raw_status,
         "effective_status": effective_status,
@@ -1669,6 +1711,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     completed_idle_seconds = float(args.completed_idle_seconds)
     hook_turn_lease_seconds = float(args.hook_turn_lease_seconds)
     observed_ttl = float(args.observed_active_ttl)
+    verification_ttl = float(args.verification_ttl_seconds)
     done_visible_hours = float(args.done_visible_hours)
 
     bus_signals, signal_bus_status = load_signal_bus(root, int(args.normalized_signal_limit))
@@ -1724,6 +1767,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
             current_thread_active_ttl=current_thread_active_ttl,
             completed_idle_seconds=completed_idle_seconds,
             hook_turn_lease_seconds=hook_turn_lease_seconds,
+            verification_ttl=verification_ttl,
             done_visible_hours=done_visible_hours,
             signals_by_task=signals_by_task,
             signals_by_turn=signals_by_turn,
@@ -1935,6 +1979,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--completed-idle-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "20")))
     parser.add_argument("--hook-turn-lease-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "60")))
     parser.add_argument("--observed-active-ttl", type=float, default=float(os.environ.get("TASKLIGHT_OBSERVED_ACTIVE_TTL_SECONDS", "8")))
+    parser.add_argument("--verification-ttl-seconds", type=float, default=verification_ttl_seconds())
     parser.add_argument("--done-visible-hours", type=float, default=float(os.environ.get("TASKLIGHT_DONE_VISIBLE_HOURS", "24")))
     parser.add_argument("--normalized-signal-limit", type=int, default=int(os.environ.get("TASKLIGHT_NORMALIZED_SIGNAL_LIMIT", "500")))
     return parser

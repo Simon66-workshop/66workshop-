@@ -126,7 +126,11 @@ write_thread_binding() {
   local task_id="$2"
   local status="$3"
   local age="$4"
-  python3 - "$STATE_DIR/thread_bindings/thread_${thread_id}.json" "$thread_id" "$task_id" "$status" "$age" <<'PY'
+  local extra="${5-}"
+  if [[ -z "$extra" ]]; then
+    extra="{}"
+  fi
+  python3 - "$STATE_DIR/thread_bindings/thread_${thread_id}.json" "$thread_id" "$task_id" "$status" "$age" "$extra" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone, timedelta
@@ -137,6 +141,7 @@ thread_id = sys.argv[2]
 task_id = sys.argv[3]
 status = sys.argv[4]
 age = float(sys.argv[5])
+extra = json.loads(sys.argv[6])
 updated = datetime.now(timezone.utc) - timedelta(seconds=age)
 stamp = updated.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 payload = {
@@ -148,6 +153,7 @@ payload = {
     "created_at": stamp,
     "updated_at": stamp,
 }
+payload.update(extra)
 path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 PY
 }
@@ -223,6 +229,13 @@ write_signals '[{"signal_id":"sig-hook-verify","source":"explicit","event_type":
 run_projector
 assert_ui 'payload["global_status"] == "done_verified" and payload["counts"]["done_verified_visible"] >= 1'
 
+rm -f "$STATE_DIR/tasks/legacy-running.json"
+write_task "old-pending" "done_unverified" "Old pending should expire" '{"done_at": "2020-01-01T00:00:00Z", "updated_at": "2020-01-01T00:00:00Z", "heartbeat_at": "2020-01-01T00:00:00Z"}'
+write_signals '[]'
+run_projector
+assert_ui 'payload["global_status"] == "done_verified" and payload["counts"]["pending_verify_count"] == 0 and payload["counts"]["stale"] >= 1'
+assert_ui 'any(t["task_id"] == "old-pending" and t["effective_status"] == "stale" and t["display_scope"] == "stale_blocker" for t in payload["tasks"])'
+
 write_task "hook-block-old" "blocked" "Codex turn old block" '{"reason": "needs_human_review", "message": "old hook block"}'
 write_binding "turn-block-old" "hook-block-old" "released" 120 "approval_pending"
 write_signals '[{"signal_id":"sig-hook-block-old","source":"hook_bridge","event_type":"bridge_blocked","task_id":"hook-block-old","turn_id":"turn-block-old","occurred_at":"2020-01-01T00:00:00Z","confidence":0.95,"thread_scoped":false,"turn_scoped":true,"source_quality":"smoke","reason":"needs_human_review","evidence":["old-block"],"conflicts":[]}]'
@@ -295,6 +308,16 @@ write_signals '[
 ]'
 run_projector
 assert_ui 'payload["global_status"] == "running" and any(t["task_id"] == "thread-only" and t["display_scope"] == "active_execution" and t["state_cause"] == "current_thread:heartbeat" for t in payload["tasks"])'
+
+write_task "thread-turn-anchor" "running" "Current thread turn anchor"
+write_thread_binding "thread-turn-anchor" "thread-turn-anchor" "active" 0 '{"task_identity":"turn:turn-thread-anchor","turn_id":"turn-thread-anchor","title":"Current thread turn anchor"}'
+write_signals '[
+  {"signal_id":"sig-thread-anchor-heartbeat","source":"current_thread_watcher","event_type":"heartbeat","task_id":"thread-turn-anchor","thread_id":"thread-turn-anchor","turn_id":"turn-thread-anchor","occurred_at":"2099-01-01T00:00:00Z","confidence":0.88,"thread_scoped":true,"turn_scoped":true,"source_quality":"thread_private_metadata","status_hint":"running","evidence":["current-thread-turn-anchor"],"conflicts":[]},
+  {"signal_id":"sig-thread-anchor-hook","source":"codex_hook","event_type":"item_started","task_id":"hook-thread-turn-anchor","turn_id":"turn-thread-anchor","occurred_at":"2099-01-01T00:00:00Z","confidence":0.95,"thread_scoped":false,"turn_scoped":true,"source_quality":"smoke","evidence":["thread-anchor-hook"],"conflicts":[]}
+]'
+run_projector
+assert_ui 'payload["global_status"] == "running" and any(t["task_id"] == "thread-turn-anchor" and t["display_scope"] == "active_execution" and t["state_cause"] == "current_thread:turn_anchored_heartbeat" for t in payload["tasks"])'
+assert_ui 'payload["diagnostics"]["current_thread_task_identity"] == "turn:turn-thread-anchor" and any(t["task_id"] == "thread-turn-anchor" and t["turn_id"] == "turn-thread-anchor" for t in payload["tasks"])'
 
 write_task "cross-thread-idle" "cancelled" "Cross thread idle"
 write_signals '[

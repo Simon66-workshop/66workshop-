@@ -91,8 +91,18 @@ def hook_name(event: dict[str, Any]) -> str:
     return normalize_hook_name(first_value(event, EVENT_NAME_KEYS))
 
 
-def scoped_value(event: dict[str, Any], snake: str, camel: str) -> Any:
-    return event.get(snake) or event.get(camel)
+def scoped_value(event: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = event.get(key)
+        if value not in (None, ""):
+            return value
+    nested = event.get("run")
+    if isinstance(nested, dict):
+        for key in keys:
+            value = nested.get(key)
+            if value not in (None, ""):
+                return value
+    return None
 
 
 def event_failed(event: dict[str, Any]) -> bool:
@@ -125,8 +135,14 @@ def to_signal(event: dict[str, Any]) -> dict[str, Any]:
         event_type = "stop"
 
     thread_id = scoped_value(event, "thread_id", "threadId") or os.environ.get("CODEX_THREAD_ID")
-    turn_id = scoped_value(event, "turn_id", "turnId")
+    turn_id = scoped_value(event, "turn_id", "turnId") or os.environ.get("CODEX_TURN_ID")
     item_id = scoped_value(event, "item_id", "itemId")
+    session_id = scoped_value(event, "session_id", "sessionId")
+    cwd = (
+        scoped_value(event, "cwd", "workspaceRoot", "workspace_root", "projectRoot", "project_root")
+        or os.environ.get("PWD")
+        or os.getcwd()
+    )
 
     return {
         "source": "codex_hook",
@@ -134,6 +150,8 @@ def to_signal(event: dict[str, Any]) -> dict[str, Any]:
         "thread_id": thread_id,
         "turn_id": turn_id,
         "item_id": item_id,
+        "session_id": session_id,
+        "cwd": cwd,
         "event_time": event.get("event_time") or int(time.time()),
         "confidence": 0.85 if event_type != "unknown" else 0.0,
         "thread_scoped": bool(thread_id),

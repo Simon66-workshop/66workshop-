@@ -1,0 +1,207 @@
+[
+  {
+    "auditor_id": "git_diff_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [
+      {
+        "decision": "CONDITIONAL_PASS",
+        "evidence": [
+          ".codex",
+          "cli/tasklight.py",
+          "cli/tests/test_tasklight.py",
+          "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+          "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+          "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+          "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+          "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+          "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+          "script/codex_current_task_watcher.py",
+          "script/codex_hook_event.py",
+          "script/hook_signal_bridge.py",
+          "script/onboard_workspace_for_monitoring.py",
+          "script/onboard_workspace_for_monitoring.sh",
+          "script/smoke_check_all_total_schema.sh",
+          "script/smoke_current_thread_turn_identity.sh",
+          "script/smoke_hook_signal_bridge.sh",
+          "script/smoke_hooks_config.sh",
+          "script/smoke_state_projector.sh",
+          "script/smoke_stop_priority_guard.sh",
+          "script/smoke_workspace_onboarding.sh",
+          "script/state_projector.py",
+          "script/tasklight_signal_bus.py"
+        ],
+        "failure_type": "unrelated_dirty_worktree",
+        "message": "out-of-scope dirty files exist",
+        "next_bounded_action": "keep using a scope file or clean unrelated worktree drift before final acceptance",
+        "root_cause": "working tree contains unrelated dirty files outside the active review scope",
+        "scope": "out_of_scope"
+      }
+    ],
+    "summary": {
+      "build_artifacts_staged": [],
+      "changed_file_count": 3,
+      "launch_or_trust_changed": false,
+      "out_of_scope_auth_secret_files": [],
+      "out_of_scope_dirty_files": [
+        ".codex",
+        "cli/tasklight.py",
+        "cli/tests/test_tasklight.py",
+        "mac/66TaskLight/Sources/TaskLightApp/Components/LuckyCatCompactShell.swift",
+        "mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift",
+        "mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift",
+        "mac/66TaskLight/Sources/TaskLightChecks/main.swift",
+        "mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift",
+        "mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift",
+        "script/codex_current_task_watcher.py",
+        "script/codex_hook_event.py",
+        "script/hook_signal_bridge.py",
+        "script/onboard_workspace_for_monitoring.py",
+        "script/onboard_workspace_for_monitoring.sh",
+        "script/smoke_check_all_total_schema.sh",
+        "script/smoke_current_thread_turn_identity.sh",
+        "script/smoke_hook_signal_bridge.sh",
+        "script/smoke_hooks_config.sh",
+        "script/smoke_state_projector.sh",
+        "script/smoke_stop_priority_guard.sh",
+        "script/smoke_workspace_onboarding.sh",
+        "script/state_projector.py",
+        "script/tasklight_signal_bus.py"
+      ],
+      "out_of_scope_launch_trust_files": [],
+      "out_of_scope_unknown_files": [],
+      "scope_decision": "CONDITIONAL_PASS",
+      "staged_file_count": 0,
+      "visual_ui_changed": false
+    }
+  },
+  {
+    "auditor_id": "state_projector_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "matrix": {
+      "appserver_active_like_running": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "appserver_unknown_not_running": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "hook_running_is_running": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter",
+          "smoke_state_projector"
+        ],
+        "judgment": "pass"
+      },
+      "multiple_projector_detected": {
+        "evidence": [
+          "check_state_projector",
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "old_projector_writer_detected": {
+        "evidence": [
+          "check_state_projector",
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "permission_request_blocked": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "private_global_only_not_running": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "process_only_not_running": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter"
+        ],
+        "judgment": "pass"
+      },
+      "stop_is_pending": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter",
+          "smoke_state_projector"
+        ],
+        "judgment": "pass"
+      },
+      "verify_is_done": {
+        "evidence": [
+          "smoke_turn_runtime_arbiter",
+          "smoke_state_projector"
+        ],
+        "judgment": "pass"
+      }
+    },
+    "summary": {
+      "global_private_probe_not_running": true,
+      "no_weak_signal_promotion": true,
+      "process_observer_only_not_running": true,
+      "stop_never_done_verified": true,
+      "stop_preserves_done_unverified": true,
+      "verify_only_done_green": true
+    }
+  },
+  {
+    "auditor_id": "hook_bridge_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "summary": {
+      "launch_status": "ok",
+      "launch_status_ok": true
+    }
+  },
+  {
+    "auditor_id": "launch_agent_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "summary": {
+      "changed_files": [],
+      "needs_human_review": false
+    }
+  },
+  {
+    "auditor_id": "swift_ui_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "summary": {
+      "ui_state_first": true
+    }
+  },
+  {
+    "auditor_id": "signal_bus_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "summary": {
+      "good_signal_hygiene": true,
+      "recent_source_set": [
+        "codex_appserver",
+        "codex_hook",
+        "explicit",
+        "process_observer"
+      ],
+      "record_count": 80
+    }
+  },
+  {
+    "auditor_id": "docs_consistency_auditor",
+    "checked_at": "2026-06-15T06:24:10Z",
+    "findings": [],
+    "summary": {
+      "config_present": true,
+      "docs_present": true
+    }
+  }
+]

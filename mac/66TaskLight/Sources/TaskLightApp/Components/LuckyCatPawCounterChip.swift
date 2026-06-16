@@ -17,18 +17,19 @@ struct LuckyCatPawCounterChip: View {
             LuckyCatPawIcon(tint: status.tint)
                 .frame(width: 32, height: 28)
                 .padding(.top, 10)
-                .opacity(active ? 1 : 0.48)
+                .opacity(active ? 0.92 : 0.48)
 
             Text("\(count)")
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .font(.system(size: 17, weight: .heavy, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(active ? status.tint : LuckyCatTokens.Palette.textSecondary.opacity(0.52))
-                .shadow(color: active ? status.tint.opacity(0.22) : Color.clear, radius: 3, x: 0, y: 1)
+                .foregroundStyle(active ? LuckyCatTokens.Palette.quotaNumberLight : LuckyCatTokens.Palette.textSecondary.opacity(0.56))
+                .shadow(color: active ? LuckyCatTokens.Palette.glassRoseDepth.opacity(0.34) : Color.clear, radius: 4, x: 0, y: 1)
+                .shadow(color: active ? Color.white.opacity(0.22) : Color.clear, radius: 1.4, x: 0, y: -0.4)
 
             if showsLabel {
                 Text(label)
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(active ? status.tint.opacity(0.94) : LuckyCatTokens.Palette.textSecondary.opacity(0.58))
+                    .foregroundStyle(active ? LuckyCatTokens.Palette.quotaNumberLight.opacity(0.84) : LuckyCatTokens.Palette.textSecondary.opacity(0.58))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                     .padding(.top, 1)
@@ -40,7 +41,7 @@ struct LuckyCatPawCounterChip: View {
                 .padding(.top, 1)
             }
         }
-        .frame(width: 48, height: 92)
+        .frame(width: 46, height: 90)
         .background(
             PawTileShape()
                 .fill(.ultraThinMaterial)
@@ -51,9 +52,9 @@ struct LuckyCatPawCounterChip: View {
                     LinearGradient(
                         colors: [
                             Color.white.opacity(0.96),
-                            LuckyCatTokens.Palette.glassPrismBlue.opacity(active ? 0.24 : 0.10),
-                            LuckyCatTokens.Palette.cream.opacity(0.82),
-                            LuckyCatTokens.Palette.creamDeep.opacity(0.56)
+                            LuckyCatTokens.Palette.glassPrismRose.opacity(active ? 0.18 : 0.08),
+                            LuckyCatTokens.Palette.glassRoseTint.opacity(0.74),
+                            LuckyCatTokens.Palette.glassRoseDepth.opacity(0.28)
                         ],
                         startPoint: shimmer ? .topLeading : .topTrailing,
                         endPoint: .bottomTrailing
@@ -61,7 +62,7 @@ struct LuckyCatPawCounterChip: View {
                 )
                 .overlay(
                     PawTileShape()
-                        .fill(status.tint.opacity(active ? 0.16 : 0.045))
+                        .fill(status.tint.opacity(active ? 0.10 : 0.04))
                 )
                 .overlay(
                     PawTileShape()
@@ -90,8 +91,8 @@ struct LuckyCatPawCounterChip: View {
                 .stroke(status.tint.opacity(active ? 0.28 : 0.10), lineWidth: active ? 1.4 : 1)
         )
         .scaleEffect(active ? 1.03 : 1.0)
-        .shadow(color: LuckyCatTokens.Palette.glassDeepShadow.opacity(0.72), radius: 12, x: 0, y: 8)
-        .shadow(color: status.tint.opacity(active ? 0.18 : 0), radius: 8, x: 0, y: 2)
+        .shadow(color: LuckyCatTokens.Palette.glassDeepShadow.opacity(0.64), radius: 10, x: 0, y: 7)
+        .shadow(color: status.tint.opacity(active ? 0.12 : 0), radius: 6, x: 0, y: 2)
         .overlay(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.white.opacity(0.08))
