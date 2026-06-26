@@ -79,6 +79,19 @@ assert q["raw_window_count"] == 4, q
 assert q["display_windows"][0]["bucket_id"] == "codex", q
 PY
 
+python3 "$ROOT_DIR/script/codex_quota_import.py" --text $'5小时 97% 11:44\n1周 97% 6月18日' >/dev/null
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+python3 - "$TASKLIGHT_UI_STATE_PATH" <<'PY'
+import json, sys
+p=json.load(open(sys.argv[1], encoding="utf-8"))
+q=p.get("quota")
+assert q and q["fresh"] is True, p
+assert q["short_percent"] == 97 and q["long_percent"] == 97, q
+assert q["effective_remaining_percent"] == 97, q
+assert len(q["display_windows"]) == 2, q
+assert p["global_status"] == "idle", p
+PY
+
 python3 "$ROOT_DIR/script/codex_quota_import.py" --text "5小时 3% 11:44" >/dev/null
 python3 - "$TASKLIGHT_QUOTA_STATE_PATH" <<'PY'
 import json, sys

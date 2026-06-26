@@ -404,14 +404,10 @@ final class TaskLightViewModel: ObservableObject {
             return "⚡Q?"
         }
         var parts: [String] = []
-        if let short = quota.short_percent {
-            parts.append("\(short)")
-        }
-        if let long = quota.long_percent, long != quota.short_percent {
-            parts.append("\(long)")
-        }
-        if parts.isEmpty, let effective = quota.effective_remaining_percent {
-            parts.append("\(effective)%")
+        var seenValues = Set<Int>()
+        for value in [quota.short_percent, quota.long_percent, quota.effective_remaining_percent].compactMap({ $0 }) {
+            guard seenValues.insert(value).inserted else { continue }
+            parts.append("\(value)")
         }
         if let resets = quota.manual_resets_available {
             parts.append("R\(resets)")
