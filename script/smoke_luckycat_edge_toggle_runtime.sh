@@ -51,6 +51,12 @@ if ! grep -q '^collapsed_alpha_pass=True$' <<<"$output"; then
   exit 1
 fi
 
+if ! grep -q '^collapsed_anchored_from_compact_pass=True$' <<<"$output"; then
+  echo "STATUS=fail"
+  echo "reason=edge toggle runtime self-test did not prove capsule anchors from the current cat frame"
+  exit 1
+fi
+
 if ! grep -q '^edge_drag_pass=True$' <<<"$output"; then
   echo "STATUS=fail"
   echo "reason=edge toggle runtime self-test did not prove rail drag stays rail"

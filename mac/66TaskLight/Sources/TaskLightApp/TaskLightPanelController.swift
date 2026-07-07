@@ -336,8 +336,9 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             let compactFrame = compactPanelIsVisuallyEdgeCollapsed(compactPanel)
                 ? restoredCompactFrameFromEdgeRail(compactPanel.frame)
                 : compactFrame(from: compactPanel.frame)
-            let targetFrame = storedEdgeRailFrame() ?? edgeRailFrame(from: compactFrame)
+            let targetFrame = edgeRailFrame(from: compactFrame)
             saveCompactFrame(compactFrame)
+            rememberEdgeRailFrame(targetFrame, source: "transition.collapse.anchor")
             expandedPanel?.orderOut(nil)
             preExpandedCompactFrame = nil
             viewModel.setContentExpanded(false)
@@ -461,6 +462,14 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             && compactPanel?.isVisible == true
 
         let compactStart = CACurrentMediaTime()
+        let staleStoredEdgeFrame = NSRect(
+            x: compactDragEndFrame.midX - edgeRailSize.width / 2,
+            y: compactDragEndFrame.midY - edgeRailSize.height / 2,
+            width: edgeRailSize.width,
+            height: edgeRailSize.height
+        )
+        saveEdgeRailFrame(staleStoredEdgeFrame)
+        let expectedCollapsedEdgeFrame = edgeRailFrame(from: compactDragEndFrame)
         let clickPathCollapsed = handleCompactPanelMouseDown(
             at: compactStatusOrbCenter(panelSize: compactSize),
             panelSize: compactSize,
@@ -472,6 +481,10 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             && edgePanel.map { panelSizeMatches($0, edgeRailSize) } == true
             && compactPanel?.isVisible != true
         let collapsedAlphaPass = (edgePanel?.alphaValue ?? 0) >= 0.99
+        let collapsedAnchoredFromCompactPass = edgePanel.map {
+            abs($0.frame.minX - expectedCollapsedEdgeFrame.minX) <= 2
+                && abs($0.frame.minY - expectedCollapsedEdgeFrame.minY) <= 2
+        } == true
 
         if let edgePanel {
             let visibleFrame = activeVisibleFrame() ?? visibleFrames().first ?? edgePanel.frame
@@ -521,6 +534,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             && clickPathCollapsed
             && collapsedPass
             && collapsedAlphaPass
+            && collapsedAnchoredFromCompactPass
             && edgeDragPass
             && restoredPass
             && restoredAlphaPass
@@ -535,6 +549,9 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             "click_path_collapsed": clickPathCollapsed,
             "collapsed_pass": collapsedPass,
             "collapsed_alpha_pass": collapsedAlphaPass,
+            "collapsed_anchored_from_compact_pass": collapsedAnchoredFromCompactPass,
+            "stale_stored_edge_frame": framePayload(staleStoredEdgeFrame),
+            "expected_collapsed_edge_frame": framePayload(expectedCollapsedEdgeFrame),
             "edge_drag_pass": edgeDragPass,
             "restored_pass": restoredPass,
             "restored_alpha_pass": restoredAlphaPass,

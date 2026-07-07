@@ -132,6 +132,7 @@ emit("body_click_pass", payload.get("body_click_pass", "missing"))
 emit("click_path_collapsed", payload.get("click_path_collapsed", "missing"))
 emit("collapsed_pass", payload.get("collapsed_pass", "missing"))
 emit("collapsed_alpha_pass", payload.get("collapsed_alpha_pass", "missing"))
+emit("collapsed_anchored_from_compact_pass", payload.get("collapsed_anchored_from_compact_pass", "missing"))
 emit("edge_drag_pass", payload.get("edge_drag_pass", "missing"))
 emit("restored_pass", payload.get("restored_pass", "missing"))
 emit("restored_alpha_pass", payload.get("restored_alpha_pass", "missing"))
@@ -156,6 +157,9 @@ if payload.get("body_click_pass") is not True:
 
 if payload.get("edge_drag_pass") is not True:
     raise SystemExit("edge_drag_pass was not true")
+
+if payload.get("collapsed_anchored_from_compact_pass") is not True:
+    raise SystemExit("collapsed_anchored_from_compact_pass was not true")
 
 if payload.get("restored_from_moved_edge_pass") is not True:
     raise SystemExit("restored_from_moved_edge_pass was not true")

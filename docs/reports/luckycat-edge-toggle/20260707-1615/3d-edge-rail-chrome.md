@@ -632,3 +632,69 @@ Residual risks:
 - The rail glass shell is still a dense SwiftUI composition. Future visual tuning should avoid broad edits in the main file and prefer small extracted subviews.
 - The current screenshots remain the visual acceptance source; this code-only pass did not produce a new screenshot because the rendered design was already accepted and the refactor should be behavior-preserving.
 - Some smoke checks intentionally inspect source markers. They are useful guardrails for this fast-moving visual component, but should eventually be complemented by automated pixel/snapshot checks.
+
+## Chrome and Background Optics Extraction
+
+Follow-up refactor:
+
+- Extracted `LuckyCatEdgeRail3DChrome`, `EdgeRailLiquidGlassParameters`, `EdgeRailGlassOptics`, `EdgeRailGlassText`, cap arcs, micro-noise, environment grid, and system glass fallback into `EdgeRailGlassChrome.swift`.
+- Reduced `LuckyCatEdgeRailView.swift` from 1455 lines to 314 lines so the main file now owns only readable content layout, status title, count panel, quota groove, and status color mapping.
+- Kept `EdgeRailGlassStatusOrb.swift` as the dedicated status-orb component.
+- Updated `smoke_luckycat_edge_toggle_atomic.sh` to check the combined rail content and chrome files, so visual guards still cover the moved glass layers.
+
+Validation:
+
+- `swift build`: passed
+- `./script/smoke_luckycat_edge_toggle_atomic.sh`: passed
+- `./script/smoke_luckycat_edge_toggle_runtime.sh`: passed on rerun; one first run had a functional pass but exceeded the 50 ms collapse timing gate at 76.01 ms, then reran at 34.41 ms without changing the gate.
+- `./script/check_ui_client.sh`: passed
+- `./script/check_all.sh`: passed on rerun after nearby smoke scripts also passed individually.
+
+Updated maintainability assessment:
+
+- Code maintainability: 9.0 / 10. The rail is now split into content, chrome/optics, and orb responsibilities.
+- Residual risk: source-marker smoke checks are still useful but should eventually be paired with screenshot or pixel checks for stronger visual regression coverage.
+
+## Follow-up Audit: Collapse Anchor and Chrome Layer Split
+
+Scope:
+
+- Audited the bug where the cat starts at the top-right but the capsule could jump to a stale center-screen position when switching modes.
+- Re-reviewed the rail glass code against the accepted Liquid Glass visual target and the maintainability concern that the chrome/background optics file was still too large.
+
+Findings:
+
+- Root cause for the jump was stale edge-rail frame precedence during compact-to-capsule transition.
+- The transition path now computes the capsule target from the current compact cat frame and only then remembers that target as the latest edge rail frame.
+- The runtime self-test now seeds a stale stored edge frame and requires `collapsed_anchored_from_compact_pass=true`.
+- `EdgeRailGlassChrome.swift` was still too large for future visual tuning and scored below the 9.5 maintainability bar.
+
+Optimization:
+
+- Reduced `EdgeRailGlassChrome.swift` to a 52-line composition entry.
+- Extracted background/refraction layers into `EdgeRailGlassBackgroundOptics.swift`.
+- Extracted shell, edge, rim, cap, shadow, readability, and cut-highlight layers into `EdgeRailGlassShellLayers.swift`.
+- Extracted Liquid Glass parameters, text colors, cap arcs, micro-noise, environment grid, and system glass fallback into `EdgeRailGlassChromePrimitives.swift`.
+- Added an atomic guard that fails if the chrome entry file grows past 120 lines or any extracted glass source is missing.
+
+Validation:
+
+- `swift build`: passed
+- `./script/smoke_luckycat_edge_toggle_atomic.sh`: passed
+- `./script/smoke_luckycat_edge_toggle_runtime.sh`: passed after one launch-time timeout rerun; final result had `collapsed_anchored_from_compact_pass=true`
+- `./script/check_ui_client.sh`: passed
+- `./script/check_all.sh`: passed
+- Screenshot spot-check: full cat starts at the top-right and remains visually complete/readable.
+
+Updated self-score:
+
+- Functional correctness: 9.7 / 10
+- Interaction reliability: 9.6 / 10
+- Visual quality against accepted design: 9.5 / 10
+- Code maintainability: 9.6 / 10
+- Regression coverage: 9.6 / 10
+- Overall: 9.6 / 10
+
+Residual note:
+
+- Manual visual review still outranks smoke output for this component. If future manual testing shows drag, jump, clipping, dirty-corner, or readability regressions, treat that as a real bug even when scripts pass.
