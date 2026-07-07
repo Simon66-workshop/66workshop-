@@ -431,6 +431,13 @@ def classify_thread(item: dict[str, Any], workspace_hook: dict[str, Any], *, now
         reason = "no_recent_authoritative_signal" if latest_age is not None else "no_thread_signal"
 
     source_set_list = sorted(source_set)
+    post_trust_state = post_trust_thread_state(
+        decision=decision,
+        reason=reason,
+        hook_status=workspace_hook.get("hook_status", "unknown_manual_required"),
+        latest_hook_age=latest_hook_age,
+    )
+    next_action = next_action_for_thread(post_trust_state=post_trust_state, workspace=item.get("workspace") or "unknown")
     explanation = explain_decision(
         decision=decision,
         reason=reason,
@@ -463,10 +470,30 @@ def classify_thread(item: dict[str, Any], workspace_hook: dict[str, Any], *, now
         "ui_effect": ui_effect,
         "decision": decision,
         "reason": reason,
+        "post_trust_state": post_trust_state,
+        "next_action": next_action,
         "explanation": explanation,
         "source_set": source_set_list,
         "recommended_fixture": fixture,
     }
+
+
+def post_trust_thread_state(*, decision: str, reason: str, hook_status: str, latest_hook_age: float | None) -> str:
+    if hook_status != "ok":
+        return "hooks_not_ready"
+    if decision in {"covered_running", "covered_pending"}:
+        return "covered_by_fresh_hook_or_active_evidence"
+    if latest_hook_age is None:
+        return "awaiting_next_hook_event"
+    if reason in {"stale_signal", "no_recent_authoritative_signal", "no_thread_signal", "diagnostic_source_only"}:
+        return "awaiting_next_hook_event"
+    return "diagnostic_only"
+
+
+def next_action_for_thread(*, post_trust_state: str, workspace: str) -> str | None:
+    if post_trust_state == "awaiting_next_hook_event":
+        return f"hooks are trusted for {workspace}; trigger a new Codex turn in that workspace to verify fresh hook events"
+    return None
 
 
 def explain_decision(*, decision: str, reason: str, source_set: list[str], hook_status: str, appserver_status: str) -> str:
@@ -551,6 +578,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "diagnostic_only": sum(1 for item in classified if item["decision"] == "diagnostic_only"),
         "uncovered_active_suspects": sum(1 for item in classified if item["decision"] == "uncovered_active_suspect"),
         "stale": sum(1 for item in classified if item["decision"] == "stale"),
+        "awaiting_next_hook_event": sum(1 for item in classified if item.get("post_trust_state") == "awaiting_next_hook_event"),
     }
     if summary["uncovered_active_suspects"]:
         status = "needs_workspace_hooks"
@@ -558,6 +586,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     elif summary["covered_running"] or summary["covered_pending"]:
         status = "ok"
         recommended = "state inputs are covered"
+    elif summary["awaiting_next_hook_event"]:
+        status = "awaiting_next_hook_event"
+        recommended = "hooks are trusted; trigger a new Codex turn in the workspace to verify fresh hook events"
     elif classified:
         status = "no_authoritative_signal"
         recommended = "wait for hook/appserver activity or install workspace hooks"
@@ -623,6 +654,7 @@ def print_human(report: dict[str, Any]) -> None:
     print(f"diagnostic_only={summary['diagnostic_only']}")
     print(f"uncovered_active_suspects={summary['uncovered_active_suspects']}")
     print(f"stale={summary['stale']}")
+    print(f"awaiting_next_hook_event={summary['awaiting_next_hook_event']}")
     print(f"recommended_action={report['recommended_action']}")
     if report.get("recommended_fixture"):
         fixture = report["recommended_fixture"]
@@ -638,7 +670,8 @@ def print_human(report: dict[str, Any]) -> None:
         print(
             "thread thread_id={thread_id} turn_id={turn_id} decision={decision} ui_effect={ui_effect} "
             "workspace={workspace} hook_status={hook_status} appserver_status={appserver_status} "
-            "projector_scope={projector_scope} reason={reason} explanation={explanation}".format(**{key: item.get(key, "none") for key in item})
+            "projector_scope={projector_scope} reason={reason} post_trust_state={post_trust_state} "
+            "explanation={explanation}".format(**{key: item.get(key, "none") for key in item})
         )
 
 

@@ -13,6 +13,7 @@ struct LuckyCatCompactShell<Content: View>: View {
     let elapsedValueText: String
     let elapsedLabelColor: Color
     let elapsedStatusDotColor: Color?
+    let weakRuntimeHint: String?
     let onNoseTripleTap: (() -> Void)?
     let content: Content
 
@@ -29,6 +30,7 @@ struct LuckyCatCompactShell<Content: View>: View {
         elapsedValueText: String = "",
         elapsedLabelColor: Color = LuckyCatTokens.Palette.textPrimary.opacity(0.9),
         elapsedStatusDotColor: Color? = nil,
+        weakRuntimeHint: String? = nil,
         onNoseTripleTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -41,6 +43,7 @@ struct LuckyCatCompactShell<Content: View>: View {
         self.elapsedValueText = elapsedValueText
         self.elapsedLabelColor = elapsedLabelColor
         self.elapsedStatusDotColor = elapsedStatusDotColor
+        self.weakRuntimeHint = weakRuntimeHint
         self.onNoseTripleTap = onNoseTripleTap
         self.content = content()
     }
@@ -66,6 +69,7 @@ struct LuckyCatCompactShell<Content: View>: View {
             .mask(panelMask)
 
             floatingSideBell
+            weakRuntimeHintBadge
             noseTripleTapTarget
         }
         .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
@@ -73,6 +77,35 @@ struct LuckyCatCompactShell<Content: View>: View {
         .animation(.easeInOut(duration: 3.8).repeatForever(autoreverses: true), value: ambientPhase)
         .onAppear {
             ambientPhase = true
+        }
+    }
+
+    @ViewBuilder
+    private var weakRuntimeHintBadge: some View {
+        if let weakRuntimeHint, !weakRuntimeHint.isEmpty {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(LuckyCatTokens.Palette.amber)
+                    .frame(width: 5, height: 5)
+                Text(weakRuntimeHint)
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(LuckyCatTokens.Palette.quotaNumberLight)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(LuckyCatTokens.Palette.quotaChipFill)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(LuckyCatTokens.Palette.amber.opacity(0.42), lineWidth: 1)
+            )
+            .shadow(color: LuckyCatTokens.Palette.shadow.opacity(0.16), radius: 4, x: 0, y: 2)
+            .position(x: 270, y: 214)
+            .allowsHitTesting(false)
         }
     }
 

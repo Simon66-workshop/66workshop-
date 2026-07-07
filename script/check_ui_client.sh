@@ -34,8 +34,11 @@ def load_clients():
     return sorted(clients, key=lambda item: parse_ts(item.get("updated_at") or item.get("started_at")), reverse=True)
 
 def pids():
-    proc = subprocess.run(["/usr/bin/pgrep", "-x", "66TaskLight"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    values = []
+    for process_name in ("66TaskLight", "TaskLightApp"):
+        proc = subprocess.run(["/usr/bin/pgrep", "-x", process_name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        values.extend(line.strip() for line in proc.stdout.splitlines() if line.strip())
+    return values
 
 running_pids = pids()
 clients = load_clients()

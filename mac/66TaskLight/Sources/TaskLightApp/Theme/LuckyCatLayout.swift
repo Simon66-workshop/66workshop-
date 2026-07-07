@@ -3,7 +3,7 @@ import CoreGraphics
 enum LuckyCatLayout {
     static let compactCanvasWidth: CGFloat = 360
     static let compactCanvasHeight: CGFloat = 278
-    static let compactScale: CGFloat = 0.6525
+    static let compactScale: CGFloat = 0.58725
     static let compactWidth: CGFloat = compactCanvasWidth * compactScale
     static let compactHeight: CGFloat = compactCanvasHeight * compactScale
     static let compactBottomBandWidth: CGFloat = 276
@@ -24,6 +24,13 @@ enum LuckyCatLayout {
     static let compactBottomOrbSize: CGFloat = 46
     static let compactBottomOrbFrameSize: CGFloat = 46
     static let compactBottomOrbInset: CGFloat = 4
+    static let edgeRailWidth: CGFloat = 78
+    static let edgeRailHeight: CGFloat = 190
+    static let edgeRailPanelWidth: CGFloat = 96
+    static let edgeRailPanelHeight: CGFloat = 212
+    static let edgeRailRightMargin: CGFloat = 4
+    static let edgeRailVerticalMargin: CGFloat = 10
+    static let edgeRailCornerRadius: CGFloat = 32
     static let expandedWidth: CGFloat = 800
     static let expandedHeight: CGFloat = 680
     static let cornerRadius: CGFloat = 34

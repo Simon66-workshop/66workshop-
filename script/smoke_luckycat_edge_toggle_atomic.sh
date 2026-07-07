@@ -12,6 +12,7 @@ fail() {
 
 controller="$APP_DIR/TaskLightPanelController.swift"
 rail_view="$APP_DIR/Screens/LuckyCatEdgeRailView.swift"
+orb_view="$APP_DIR/Screens/EdgeRailGlassStatusOrb.swift"
 compact_shell="$APP_DIR/Components/LuckyCatCompactShell.swift"
 view_model="$APP_DIR/TaskLightViewModel.swift"
 
@@ -148,8 +149,256 @@ rg -q "persistImmediately: false" "$controller" \
 rg -q "shouldRasterize = true" "$controller" \
   || fail "edge rail hosting layer should be rasterized for smoother dragging"
 
+rg -q "hosting\\.view\\.layer\\?\\.backgroundColor = NSColor\\.clear\\.cgColor" "$controller" \
+  || fail "hosting view background must be clear to avoid rectangular backing"
+
+rg -q "panel\\.contentView\\?\\.layer\\?\\.backgroundColor = NSColor\\.clear\\.cgColor" "$controller" \
+  || fail "panel content view background must be clear to avoid rectangular backing"
+
 rg -q "transaction.animation = nil" "$rail_view" \
   || fail "edge rail should disable implicit SwiftUI animations"
+
+rg -q "edgeRailPanelWidth" "$ROOT_DIR/mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift" "$controller" "$rail_view" \
+  || fail "edge rail should use a larger transparent panel canvas so 3D glass is not clipped"
+
+rg -q "edgeRailPanelHeight" "$ROOT_DIR/mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift" "$controller" "$rail_view" \
+  || fail "edge rail should use a taller transparent panel canvas so top/bottom glass is not clipped"
+
+rg -q "NSSize\\(width: LuckyCatLayout\\.edgeRailPanelWidth, height: LuckyCatLayout\\.edgeRailPanelHeight\\)" "$controller" \
+  || fail "edge rail panel size must be decoupled from the visible glass card size"
+
+rg -q "edgeRailCornerRadius: CGFloat = 32" "$ROOT_DIR/mac/66TaskLight/Sources/TaskLightApp/Theme/LuckyCatLayout.swift" \
+  || fail "edge rail visible card should use a true capsule radius for clean top and bottom arcs"
+
+rg -q "\\.padding\\(\\.vertical, LuckyCatLayout\\.edgeRailCornerRadius \\+ 9\\)" "$rail_view" \
+  || fail "left cut highlight must stay well out of the top and bottom arc zones"
+
+rg -q "center: \\.top" "$rail_view" \
+  || fail "top rail glow should use a curved cap highlight, not a flat strip"
+
+rg -q "center: \\.bottom" "$rail_view" \
+  || fail "bottom rail glow should use a curved cap highlight, not a flat strip"
+
+rg -q "static let orbSize: CGFloat = 45" "$rail_view" \
+  || fail "edge rail status orb should keep the larger glass-ball size"
+
+rg -q "fullBodyRefractionVeil" "$rail_view" \
+  || fail "edge rail V0.20 should carry the bottom glass refraction language through the full capsule body"
+
+rg -q "topArcRim" "$rail_view" \
+  || fail "edge rail V0.20 should explicitly draw the top capsule arc rim"
+
+rg -q "bottomArcRim" "$rail_view" \
+  || fail "edge rail V0.20 should explicitly draw the bottom capsule arc rim"
+
+rg -q "capContourRim" "$rail_view" \
+  || fail "edge rail V0.21 should include explicit top and bottom cap contour rims"
+
+rg -q "EdgeRailCapArc" "$rail_view" \
+  || fail "edge rail V0.22 should use explicit vector cap arcs for cleaner top and bottom curvature"
+
+rg -q "semanticAccent" "$orb_view" \
+  || fail "edge rail status orb should use semantic accent as rim/glow, not recolor the whole glass ball"
+
+rg -q "semanticWashOpacity" "$orb_view" \
+  || fail "edge rail V0.22 should make non-running status colors visible through an inner glass refraction wash"
+
+rg -q "#B87916" "$rail_view" \
+  || fail "edge rail pending title should use a readable deep glass amber, not a pale yellow"
+
+rg -q "orbBodyColors" "$orb_view" \
+  || fail "edge rail V0.24 should keep semantic glass body palettes for every status"
+
+rg -q "#44C779" "$orb_view" \
+  || fail "edge rail V0.24 should keep Done as a green glass orb, not gray idle"
+
+rg -q "#F05B6C" "$orb_view" \
+  || fail "edge rail V0.24 should keep Blocked as a red glass orb"
+
+rg -q "#35C5DD" "$orb_view" \
+  || fail "edge rail V0.24 should keep Observed as a cyan glass orb"
+
+rg -q "TaskLightStatus\\.done_verified\\.rawValue" "$view_model" \
+  || fail "edge rail V0.24 Done fixture must use the real done_verified status protocol"
+
+if rg -q "status\\.tint\\.opacity\\(0\\.86\\)" "$rail_view"; then
+  fail "edge rail pending orb must not tint the whole glass ball yellow"
+fi
+
+rg -q "LuckyCatEdgeRail3DChrome" "$rail_view" \
+  || fail "edge rail 2.5D chrome wrapper is missing"
+
+rg -q "rotation3DEffect" "$rail_view" \
+  || fail "edge rail 2.5D chrome should use native SwiftUI perspective"
+
+rg -q "perspective: EdgeRail3D\\.perspective" "$rail_view" \
+  || fail "edge rail 2.5D chrome should keep a fixed perspective constant"
+
+rg -q "sideThickness" "$rail_view" \
+  || fail "edge rail 2.5D chrome should include a side thickness layer"
+
+rg -q "contentReadabilityPlate" "$rail_view" \
+  || fail "edge rail 2.5D chrome should keep readable front content"
+
+rg -q "glassEffect" "$rail_view" \
+  || fail "edge rail should prefer native Liquid Glass when available"
+
+rg -Fq "#available(macOS 26.0" "$rail_view" \
+  || fail "edge rail native glass path must be availability-gated"
+
+rg -q "EdgeRailSystemGlass" "$rail_view" \
+  || fail "edge rail should isolate system glass and fallback behavior"
+
+if rg -q "ultraThinMaterial" "$rail_view"; then
+  fail "edge rail fallback should not use heavy material that turns the glass into a white plastic capsule"
+fi
+
+rg -q "Color\\.white\\.opacity\\(0\\.020\\)" "$rail_view" \
+  || fail "edge rail fallback should keep a very light transparent base"
+
+rg -q "subsurfaceDiffusionLayer" "$rail_view" \
+  || fail "edge rail V0.11 should include a controlled internal diffusion layer"
+
+if rg -q "NSVisualEffectView" "$rail_view"; then
+  fail "edge rail V0.11 should not keep the ineffective AppKit backdrop experiment"
+fi
+
+rg -q "contentPerspectiveLayer" "$rail_view" \
+  || fail "edge rail content should follow the capsule perspective"
+
+rg -q "contentPitch" "$rail_view" \
+  || fail "edge rail content perspective should use a fixed mild angle"
+
+rg -q "quotaGlassGroove" "$rail_view" \
+  || fail "edge rail quota should render as a glass groove"
+
+rg -q "backgroundLiftPlate" "$rail_view" \
+  || fail "edge rail should include a lifted clean glass background layer"
+
+rg -q "environmentBackgroundLayer" "$rail_view" \
+  || fail "edge rail should include a weak environment layer for refraction"
+
+rg -q "blurredBackgroundTexture" "$rail_view" \
+  || fail "edge rail should include a blurred background texture layer"
+
+rg -q "EdgeRailEnvironmentGrid" "$rail_view" \
+  || fail "edge rail should include a subtle environment grid texture"
+
+rg -q "glassCardBase" "$rail_view" \
+  || fail "edge rail should include a translucent glass card base"
+
+rg -q "centerLuminosityField" "$rail_view" \
+  || fail "edge rail should keep the card center bright and transparent, not uniformly gray"
+
+rg -q "edgeThicknessBand" "$rail_view" \
+  || fail "edge rail should include an inner thickness band, not only a hairline"
+
+rg -q "normalRefractionLayer" "$rail_view" \
+  || fail "edge rail should include a normal-based refraction approximation"
+
+rg -q "sdfEdgeCutHighlight" "$rail_view" \
+  || fail "edge rail should include a directionally lit SDF-style cut edge"
+
+rg -q "fresnelRimLight" "$rail_view" \
+  || fail "edge rail should include a Fresnel rim light layer"
+
+rg -q "bottomRefractionEdge" "$rail_view" \
+  || fail "edge rail should include a bottom refraction edge"
+
+rg -q "diagonalLightBand" "$rail_view" \
+  || fail "edge rail should include a directional light band"
+
+if rg -n "cornerSweepHighlight|rearShade" "$rail_view" "$orb_view" >/tmp/66tasklight-edge-toggle-dead-glass-layers.txt; then
+  cat /tmp/66tasklight-edge-toggle-dead-glass-layers.txt
+  fail "edge rail should not keep unused legacy glass experiment layers"
+fi
+
+rg -q "floatingShadowLayer" "$rail_view" \
+  || fail "edge rail should include a floating shadow layer"
+
+rg -q "contactShadowLayer" "$rail_view" \
+  || fail "edge rail should include a contact shadow layer"
+
+rg -q "Ellipse()" "$rail_view" \
+  || fail "edge rail shadows should be bottom ellipse layers, not whole-card shadows"
+
+rg -q "straightEdgeMask" "$rail_view" \
+  || fail "edge rail bevel/rim should use straight-edge masking to keep corners clean"
+
+rg -q "straightEdgeHighlightLayer" "$rail_view" \
+  || fail "edge rail should split straight-edge highlights from corner bevel"
+
+rg -q "straightEdgeDimLayer" "$rail_view" \
+  || fail "edge rail should keep bottom/right dimming on straight edges only"
+
+rg -q "silhouetteOutline" "$rail_view" \
+  || fail "edge rail should keep a light blue-white fallback outline on white backgrounds"
+
+rg -q "glassAlpha: Double = 0\\.10" "$rail_view" \
+  || fail "edge rail V0.23 should make the center genuinely transparent instead of white plastic"
+
+rg -q "infoPanelAlpha: Double = 0\\.22" "$rail_view" \
+  || fail "edge rail V0.12 should keep the info panel readable while still glassy"
+
+rg -q "quotaNumber = .*opacity\\(0\\.74\\)" "$rail_view" \
+  || fail "edge rail V0.22 should keep quota text readable on transparent glass"
+
+rg -q "statusTextColor\\.opacity\\(0\\.095\\)" "$rail_view" \
+  || fail "edge rail V0.22 should tint the status title glass with a readable semantic status color"
+
+rg -q "statusTextColor\\.opacity\\(0\\.22\\)" "$rail_view" \
+  || fail "edge rail V0.22 should tint the status title rim with a readable semantic status color"
+
+if rg -q "glassPrismRose\\.opacity\\(0\\.(0[2-9][0-9]|[1-9][0-9][0-9])\\)" "$rail_view"; then
+  fail "edge rail V0.10 should not reintroduce visible pink/purple glass contamination"
+fi
+
+rg -q "centerAlpha: Double = 0\\.45" "$rail_view" \
+  || fail "edge rail V0.6 should expose the lowered center alpha parameter"
+
+rg -q "edgeAlpha: Double = 0\\.94" "$rail_view" \
+  || fail "edge rail V0.5 should keep a stronger edge glass shell"
+
+rg -q "rimIntensity: Double = 0\\.96" "$rail_view" \
+  || fail "edge rail V0.5 should restore cut-edge highlight intensity"
+
+rg -q "saturate: Double = 1\\.12" "$rail_view" \
+  || fail "edge rail V0.5 should reduce saturation to avoid color pollution"
+
+rg -q "#72DB93" "$rail_view" \
+  || fail "edge rail done status title should use the readable liquid-glass green"
+
+if rg -n "bottomDepthShade" "$rail_view" >/tmp/66tasklight-edge-toggle-bottom-depth-shade.txt; then
+  cat /tmp/66tasklight-edge-toggle-bottom-depth-shade.txt
+  fail "edge rail should not use a full-width bottom depth shade that dirties corners"
+fi
+
+rg -q "microNoiseLayer" "$rail_view" \
+  || fail "edge rail should include a subtle micro-noise layer"
+
+rg -q "EdgeRailGlassStatusOrb" "$rail_view" \
+  || fail "edge rail should use a dedicated glass status orb"
+
+rg -q "countGlassAirLayer" "$rail_view" \
+  || fail "edge rail info panel should be a light glass label, not a heavy gray insert"
+
+rg -q "EdgeRailLiquidGlassV04" "$rail_view" \
+  || fail "edge rail should expose the V0.4 Liquid Glass parameter model"
+
+for param in glassAlpha blur saturate brightness edgeThickness rimIntensity refractionStrength bottomShadow floatShadow contactShadow orbSize orbRimOpacity infoPanelAlpha; do
+  rg -q "$param" "$rail_view" \
+    || fail "edge rail Liquid Glass parameter is missing: $param"
+done
+
+for v04_param in centerAlpha edgeAlpha centerStrength edgeStrength cornerStrength outerHighlight innerHighlight rightShadow sweepOpacity; do
+  rg -q "$v04_param" "$rail_view" \
+    || fail "edge rail V0.4 parameter is missing: $v04_param"
+done
+
+if rg -n "Image\\(|NSImage|resizable\\(" "$rail_view" >/tmp/66tasklight-edge-toggle-rail-static-art.txt; then
+  cat /tmp/66tasklight-edge-toggle-rail-static-art.txt
+  fail "edge rail should not fake the glass card with static art"
+fi
 
 if rg -n "snapEdgePanelToRightEdge|snapRightEdge" "$controller" >/tmp/66tasklight-edge-toggle-snap.txt; then
   cat /tmp/66tasklight-edge-toggle-snap.txt
@@ -275,6 +524,12 @@ rg -q "edgeCollapseRequestID" "$view_model" \
 rg -q "edgeRestoreRequestID" "$view_model" \
   || fail "view model restore request command channel is missing"
 
+rg -q "self\\.edgeCollapsed = false" "$view_model" \
+  || fail "app launch should default to the full compact cat instead of restoring the edge rail"
+
+rg -q "defaults\\.set\\(false, forKey: TaskLightLedgerKeys\\.edgeCollapsed\\)" "$view_model" \
+  || fail "app launch should clear stale edge rail persistence before showing the compact cat"
+
 rg -q "statusOrbClickCatcher.collapse" "$controller" \
   || fail "panel controller does not observe status orb collapse requests"
 
@@ -289,6 +544,12 @@ rg -q "storedCompactFrame\\.recoveredFromEdgeRail" "$controller" \
 
 rg -q "storedCompactFrame\\.ignoredInvalid" "$controller" \
   || fail "invalid stored compact frame diagnostic is missing"
+
+rg -q "startupTopRightCompactFrame" "$controller" \
+  || fail "compact startup placement should use an explicit top-right frame helper"
+
+rg -q "preferredStartupCompactFrame\\.topRightLaunch" "$controller" \
+  || fail "compact startup placement should trace the top-right launch policy"
 
 rg -q "edgeTransitionLockedUntil" "$controller" \
   || fail "edge transition repeat-click lock is missing"
@@ -371,6 +632,27 @@ echo "mouse_event_tap_fallback=present"
 echo "controlled_mouse_polling=present"
 echo "coordinate_normalization=present"
 echo "edge_rectangular_shadow=absent"
+echo "edge_3d_chrome=present"
+echo "edge_liquid_glass_path=present"
+echo "edge_content_perspective=present"
+echo "edge_static_art=absent"
+echo "edge_five_layer_glass=present"
+echo "edge_liquid_glass_v2=present"
+echo "edge_liquid_glass_v04_chain=present"
+echo "edge_corner_shadow_split=present"
+echo "edge_liquid_glass_v05_solidity=present"
+echo "edge_liquid_glass_v06_corner_attenuation=present"
+echo "edge_liquid_glass_v10_transparent_body=present"
+echo "edge_liquid_glass_v11_internal_diffusion=present"
+echo "edge_liquid_glass_v12_content_clarity=present"
+echo "edge_liquid_glass_v13_status_semantic_glass=present"
+echo "edge_liquid_glass_v14_panel_safe_canvas=present"
+echo "edge_liquid_glass_v15_capsule_arc_clean=present"
+echo "edge_liquid_glass_v19_curved_cap_glow=present"
+echo "edge_liquid_glass_v20_full_body_refraction=present"
+echo "edge_liquid_glass_v20_semantic_orb_accent=present"
+echo "edge_liquid_glass_v21_cap_contour_rim=present"
+echo "edge_liquid_glass_v21_left_feather_suppressed=present"
 echo "click_diagnostics=present"
 echo "edge_runtime_click_path_self_test=present"
 echo "swiftui_click_catchers=absent"

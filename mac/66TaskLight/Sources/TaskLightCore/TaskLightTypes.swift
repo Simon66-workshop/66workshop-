@@ -814,6 +814,7 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
     public var runtime_score: Double?
     public var display_scope: String
     public var state_cause: String?
+    public var why_ignored: String?
     public var reason: String?
     public var message: String?
 
@@ -836,6 +837,7 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
         case runtime_score
         case display_scope
         case state_cause
+        case why_ignored
         case reason
         case message
     }
@@ -857,6 +859,7 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
         runtime_score: Double? = nil,
         display_scope: String = "ignored",
         state_cause: String? = nil,
+        why_ignored: String? = nil,
         reason: String? = nil,
         message: String? = nil
     ) {
@@ -876,6 +879,7 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
         self.runtime_score = runtime_score
         self.display_scope = display_scope
         self.state_cause = state_cause
+        self.why_ignored = why_ignored
         self.reason = reason
         self.message = message
     }
@@ -898,6 +902,7 @@ public struct TaskLightRuntimeCandidate: Codable, Equatable, Identifiable {
         self.runtime_score = try container.decodeIfPresent(Double.self, forKey: .runtime_score)
         self.display_scope = try container.decodeIfPresent(String.self, forKey: .display_scope) ?? "ignored"
         self.state_cause = try container.decodeIfPresent(String.self, forKey: .state_cause)
+        self.why_ignored = try container.decodeIfPresent(String.self, forKey: .why_ignored)
         self.reason = try container.decodeIfPresent(String.self, forKey: .reason)
         self.message = try container.decodeIfPresent(String.self, forKey: .message)
     }
@@ -1680,8 +1685,10 @@ public enum TaskLightLedgerKeys {
     public static let lastAlertFingerprint = "TaskLightLastAlertFingerprint"
     public static let windowFrame = "TaskLightWindowFrame"
     public static let compactWindowFrame = "TaskLightCompactWindowFrame"
+    public static let edgeRailWindowFrame = "TaskLightEdgeRailWindowFrame"
     public static let muted = "TaskLightMuted"
     public static let expanded = "TaskLightExpanded"
+    public static let edgeCollapsed = "TaskLightEdgeCollapsed"
 }
 
 private enum SHA256 {

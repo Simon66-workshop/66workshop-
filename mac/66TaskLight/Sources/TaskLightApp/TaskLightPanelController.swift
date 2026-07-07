@@ -359,7 +359,9 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             if restoringFromEdge {
                 rememberEdgeRailFrame(edgeFrame, source: "transition.restore.edgeFrame")
             }
-            refreshCompactRootView()
+            if compactPanel.contentViewController == nil {
+                refreshCompactRootView()
+            }
             applyPanelFrame(targetFrame, to: compactPanel, animated: false)
             compactPanel.alphaValue = 1
             compactPanel.makeKeyAndOrderFront(nil)
@@ -426,6 +428,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             )
             applyPanelFrame(testFrame, to: compactPanel)
         }
+        let warmedEdgePanel = ensureEdgePanel()
+        applyPanelFrame(edgeRailFrame(from: compactPanel?.frame ?? .zero), to: warmedEdgePanel, animated: false)
+        warmedEdgePanel.alphaValue = 1
+        warmedEdgePanel.ignoresMouseEvents = true
+        warmedEdgePanel.orderOut(nil)
+        appendStartupTrace("edgeToggleSelfTest.warmedEdgePanel")
 
         let compactDragStartFrame = compactPanel?.frame ?? .zero
         if let compactPanel {
@@ -1128,6 +1136,8 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         appendStartupTrace("createPanel.\(displayMode.traceName).createdRootView")
         let hosting = NSHostingController(rootView: rootView)
         appendStartupTrace("createPanel.\(displayMode.traceName).createdHosting")
+        hosting.view.wantsLayer = true
+        hosting.view.layer?.backgroundColor = NSColor.clear.cgColor
         let styleMask: NSWindow.StyleMask = [.borderless, .fullSizeContentView]
         let panel = TaskLightPanel(
             contentRect: NSRect(x: 120, y: 120, width: size.width, height: size.height),
@@ -1149,13 +1159,14 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false
         panel.roundedHitTestRadius = displayMode == .expanded ? LuckyCatLayout.cornerRadius : 0
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
         if displayMode == .edgeRail {
             panel.roundedHitTestRadius = 0
             panel.isMovableByWindowBackground = false
             panel.becomesKeyOnlyIfNeeded = false
             panel.worksWhenModal = true
             panel.ignoresMouseEvents = false
-            hosting.view.wantsLayer = true
             hosting.view.layer?.shouldRasterize = true
             hosting.view.layer?.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 2
         }
@@ -1472,6 +1483,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     }
 
     private func preferredStartupCompactFrame(fallback: NSRect) -> NSRect {
+        let anchoredFrame = startupTopRightCompactFrame(fallback: fallback)
+        appendStartupTrace("preferredStartupCompactFrame.topRightLaunch")
+        return anchoredFrame
+    }
+
+    private func startupTopRightCompactFrame(fallback: NSRect) -> NSRect {
         let anchorFrame = activeVisibleFrame() ?? visibleFrames().first ?? fallback
         let anchoredFrame = NSRect(
             x: anchorFrame.maxX - compactSize.width - 18,
@@ -1479,15 +1496,6 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             width: compactSize.width,
             height: compactSize.height
         )
-
-        if let storedFrame = storedCompactFrame() {
-            return TaskLightPanelGeometry.restoredCompactFrame(
-                storedFrame: storedFrame,
-                fallbackFrame: anchoredFrame,
-                compactSize: compactSize,
-                visibleFrames: [anchorFrame]
-            )
-        }
 
         return TaskLightPanelGeometry.clampedFrame(anchoredFrame, visibleFrame: anchorFrame)
     }
@@ -1527,7 +1535,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     }
 
     private var edgeRailSize: NSSize {
-        NSSize(width: LuckyCatLayout.edgeRailWidth, height: LuckyCatLayout.edgeRailHeight)
+        NSSize(width: LuckyCatLayout.edgeRailPanelWidth, height: LuckyCatLayout.edgeRailPanelHeight)
     }
 
     private var expandedSize: NSSize {

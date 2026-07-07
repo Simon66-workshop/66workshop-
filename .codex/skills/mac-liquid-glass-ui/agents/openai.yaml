@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mac Liquid Glass UI"
+  short_description: "Design and implement macOS Liquid Glass visual components."
+  default_prompt: "Use this skill to design or refine a macOS Liquid Glass component with transparent glass, edge thickness, readable status content, and screenshot-backed validation."

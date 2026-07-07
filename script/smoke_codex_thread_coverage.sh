@@ -106,6 +106,11 @@ import json, sys
 payload = json.load(open(sys.argv[1]))
 workspace = next(iter(payload["workspaces"].values()))
 assert workspace["hook_status"] == "ok", payload
+assert payload["status"] == "awaiting_next_hook_event", payload
+assert payload["summary"]["awaiting_next_hook_event"] >= 1, payload
+assert payload["threads"][0]["post_trust_state"] == "awaiting_next_hook_event", payload
+assert payload["threads"][0]["ui_effect"] == "none", payload
+assert payload["threads"][0]["next_action"], payload
 PY
 
 echo "smoke_codex_thread_coverage: ok"

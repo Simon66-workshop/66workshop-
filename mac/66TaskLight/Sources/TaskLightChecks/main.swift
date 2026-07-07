@@ -156,7 +156,8 @@ do {
 	                consistency_score: 1,
 	                runtime_score: 0.95,
 	                display_scope: "active_execution",
-	                state_cause: "codex_hook:item_started"
+	                state_cause: "codex_hook:item_started",
+	                why_ignored: nil
 	            )
 	        ],
 	        quota: CodexQuotaUIState(
@@ -245,7 +246,8 @@ do {
 	                    candidate_id: "turn:turn-1",
 	                    source_set: ["codex_hook", "codex_appserver"],
 	                    runtime_score: 0.95,
-	                    display_scope: "active_execution"
+	                    display_scope: "ignored",
+	                    why_ignored: "runtime_score_below_threshold"
 	                )
 	            ],
 	            appserver_active_count: 1,
@@ -269,6 +271,7 @@ do {
 	    check(loadedUIState.counts.appserver_active == 1, "ui_state appserver count decodes")
 	    check(loadedUIState.counts.process_observed == 1, "ui_state process observed count decodes")
 	    check(loadedUIState.runtime_candidates?.first?.display_scope == "active_execution", "ui_state runtime candidates decode")
+	    check(loadedUIState.runtime_candidates?.first?.why_ignored == nil, "ui_state runtime candidates decode ignored reason")
 	    check(loadedUIState.diagnostics.writer_status == "ok", "ui_state writer status decodes")
 	    check(loadedUIState.quota?.status == "watch", "ui_state quota status decodes")
 	    check(loadedUIState.quota?.short_percent == 93, "ui_state quota short percent decodes")
@@ -292,6 +295,7 @@ do {
 	    check(loadedUIState.diagnostics.latest_turn_binding_aliases?.contains("appserver:thread-1:turn-1") == true, "ui_state diagnostics decode binding aliases")
 	    check(loadedUIState.diagnostics.binding_identity_count == 3, "ui_state diagnostics decode binding identity count")
 	    check(loadedUIState.diagnostics.runtime_candidate_count == 1, "ui_state diagnostics decode runtime candidate count")
+	    check(loadedUIState.diagnostics.top_runtime_candidates?.first?.why_ignored == "runtime_score_below_threshold", "ui_state diagnostics decode runtime ignored reason")
 
     var mismatchedTitleUIState = projectedUIState
     mismatchedTitleUIState.global_status = "running"

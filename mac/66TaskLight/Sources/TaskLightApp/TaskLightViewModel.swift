@@ -16,6 +16,9 @@ final class TaskLightViewModel: ObservableObject {
 
     @Published var uiState: TaskLightUIState
     @Published var expanded: Bool
+    @Published var edgeCollapsed: Bool
+    @Published private(set) var edgeCollapseRequestID: Int
+    @Published private(set) var edgeRestoreRequestID: Int
     @Published var contentExpanded: Bool
     @Published var muted: Bool
     @Published var workspaceCoveragePresentation: TaskLightWorkspaceCoveragePresentation?
@@ -36,17 +39,21 @@ final class TaskLightViewModel: ObservableObject {
     private var recentEventsModifiedAt: Date?
     private var lastUIEventFlowFingerprint: String?
     private var lastUIStateRefreshSignature: String?
+    private var suppressCompactTapUntil: Date?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
         self.store = store ?? TaskLightStore(config: config)
         self.store.ensureLayout()
         let initialUIState = self.store.loadProjectedUIState()
-        self.uiState = initialUIState
         let defaults = UserDefaults.standard
-        let restoredExpanded = defaults.object(forKey: TaskLightLedgerKeys.expanded) as? Bool ?? false
-        self.expanded = restoredExpanded
-        self.contentExpanded = restoredExpanded
+        self.uiState = initialUIState
+        self.expanded = false
+        self.edgeCollapsed = false
+        defaults.set(false, forKey: TaskLightLedgerKeys.edgeCollapsed)
+        self.edgeCollapseRequestID = 0
+        self.edgeRestoreRequestID = 0
+        self.contentExpanded = false
         self.ledger = self.store.loadPlayedLedger()
         self.muted = self.ledger.muted
         self.recentEventSnapshot = []
@@ -114,6 +121,13 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func toggleExpanded() {
+        if let suppressCompactTapUntil, Date() < suppressCompactTapUntil {
+            return
+        }
+        if edgeCollapsed {
+            setEdgeCollapsed(false)
+            return
+        }
         expanded.toggle()
         persistUIState()
     }
@@ -121,6 +135,34 @@ final class TaskLightViewModel: ObservableObject {
     func collapseExpanded() {
         guard expanded else { return }
         expanded = false
+        persistUIState()
+    }
+
+    func toggleEdgeCollapsed() {
+        setEdgeCollapsed(!edgeCollapsed)
+    }
+
+    func requestEdgeCollapseFromStatusOrb() {
+        suppressCompactTapUntil = Date().addingTimeInterval(0.42)
+        edgeCollapseRequestID += 1
+    }
+
+    func requestEdgeRestoreFromRail() {
+        suppressCompactTapUntil = Date().addingTimeInterval(0.42)
+        edgeRestoreRequestID += 1
+    }
+
+    func setEdgeCollapsed(_ value: Bool) {
+        suppressCompactTapUntil = Date().addingTimeInterval(0.42)
+        guard edgeCollapsed != value else {
+            expanded = false
+            contentExpanded = false
+            persistUIState()
+            return
+        }
+        expanded = false
+        contentExpanded = false
+        edgeCollapsed = value
         persistUIState()
     }
 
@@ -239,6 +281,43 @@ final class TaskLightViewModel: ObservableObject {
         uiState.counts.pending_verify_count
     }
 
+    func compactStatusTitle() -> String {
+        let displayTitle = luckyCatPresentationTitle()
+        switch displayTitle.uppercased() {
+        case "RUNNING":
+            return "Running"
+        case "BLOCKED":
+            return "Blocked"
+        case "PENDING":
+            return "Pending"
+        case "DONE":
+            return "Done"
+        case "IDLE":
+            return "Idle"
+        default:
+            return displayTitle.prefix(1).uppercased() + displayTitle.dropFirst().lowercased()
+        }
+    }
+
+    func edgeRailThreadSummary() -> String {
+        "运行 \(runningDisplayCount()) · 待验 \(pendingDisplayCount()) · 观察 \(observedDisplayCount())"
+    }
+
+    func quotaIsCritical() -> Bool {
+        guard let quota = uiState.quota else {
+            return false
+        }
+        let candidates = [
+            quota.short_percent,
+            quota.long_percent,
+            quota.effective_remaining_percent
+        ].compactMap { $0 }
+        guard let minimum = candidates.min() else {
+            return false
+        }
+        return minimum < 20
+    }
+
     func managedCount() -> Int {
         uiState.tasks.count
     }
@@ -324,6 +403,35 @@ final class TaskLightViewModel: ObservableObject {
         default:
             return observedDisplayCount() > 0 ? .observed : .idle
         }
+    }
+
+    func weakRuntimeHintText() -> String? {
+        guard projectedPrimaryStatus() == TaskLightStatus.idle.rawValue else {
+            return nil
+        }
+        let candidates = uiState.runtime_candidates ?? []
+        let liveSuspectCount = candidates.filter { candidate in
+            guard candidate.display_scope == "ignored" else { return false }
+            let sources = Set(candidate.source_set)
+            let hasWeakRuntimeSource = sources.contains("codex_appserver") || sources.contains("codex_private_probe")
+            let cause = candidate.state_cause ?? ""
+            let ignoredReason = candidate.why_ignored ?? ""
+            let isUnknownRuntime = cause.contains("codex_appserver:unknown")
+                || cause.contains("private_active")
+                || ignoredReason == "runtime_score_below_threshold"
+            let freshness = candidate.freshness_score ?? 0
+            return hasWeakRuntimeSource && isUnknownRuntime && freshness >= 0.5
+        }.count
+        if liveSuspectCount > 0 {
+            return "疑似\(liveSuspectCount)"
+        }
+        let awaitingHookCount = candidates.filter { candidate in
+            guard candidate.display_scope == "ignored" else { return false }
+            let sources = Set(candidate.source_set)
+            return sources.contains("codex_appserver") && candidate.why_ignored == "stale_appserver_signal"
+        }.count
+        guard awaitingHookCount > 0 else { return nil }
+        return "待触发\(awaitingHookCount)"
     }
 
     func signalDiagnosticLabel() -> String {
@@ -547,9 +655,11 @@ final class TaskLightViewModel: ObservableObject {
         }
 
         var ledgerChanged = false
+        var playedEventIDs = Set(ledger.played_event_ids)
         for event in sortedEvents {
-            guard !ledger.played_event_ids.contains(event.event_id) else { continue }
+            guard !playedEventIDs.contains(event.event_id) else { continue }
             ledger.played_event_ids.append(event.event_id)
+            playedEventIDs.insert(event.event_id)
             ledgerChanged = true
 
             guard event.sound_type == TaskLightStatus.blocked.rawValue || event.sound_type == TaskLightStatus.done_verified.rawValue else {
@@ -670,6 +780,7 @@ final class TaskLightViewModel: ObservableObject {
     private func persistUIState() {
         let defaults = UserDefaults.standard
         defaults.set(expanded, forKey: TaskLightLedgerKeys.expanded)
+        defaults.set(edgeCollapsed, forKey: TaskLightLedgerKeys.edgeCollapsed)
         defaults.set(muted, forKey: TaskLightLedgerKeys.muted)
     }
 

@@ -3,30 +3,10 @@ import TaskLightCore
 
 struct LuckyCatCompactView: View {
     @ObservedObject var viewModel: TaskLightViewModel
+    @State private var entranceVisible = false
 
     private var status: LuckyCatVisualStatus {
         viewModel.luckyCatPresentationStatus()
-    }
-
-    private var displayTitle: String {
-        viewModel.luckyCatPresentationTitle()
-    }
-
-    private var compactDisplayTitle: String {
-        switch displayTitle.uppercased() {
-        case "RUNNING":
-            return "Running"
-        case "BLOCKED":
-            return "Blocked"
-        case "PENDING":
-            return "Pending"
-        case "DONE":
-            return "Done"
-        case "IDLE":
-            return "Idle"
-        default:
-            return displayTitle.prefix(1).uppercased() + displayTitle.dropFirst().lowercased()
-        }
     }
 
     var body: some View {
@@ -35,12 +15,13 @@ struct LuckyCatCompactView: View {
                 status: status,
                 progress: viewModel.compactProgressValue(),
                 highlightsBell: viewModel.compactShowsAlertBell(),
-                statusTitle: compactDisplayTitle,
+                statusTitle: viewModel.compactStatusTitle(),
                 elapsedLabel: quotaPresentation.fullLabel,
                 elapsedLeadingSymbol: quotaPresentation.leadingSymbol,
                 elapsedValueText: quotaPresentation.valueText,
                 elapsedLabelColor: quotaPresentation.textColor,
                 elapsedStatusDotColor: quotaFreshnessDotColor,
+                weakRuntimeHint: viewModel.weakRuntimeHintText(),
                 onNoseTripleTap: {
                     viewModel.runWorkspaceCoverageReport()
                 }
@@ -96,13 +77,23 @@ struct LuckyCatCompactView: View {
             }
         }
         .frame(width: LuckyCatLayout.compactWidth, height: LuckyCatLayout.compactHeight)
+        .opacity(entranceVisible ? 1 : 0.96)
+        .scaleEffect(entranceVisible ? 1 : 0.985, anchor: .center)
         .animation(.easeInOut(duration: 0.18), value: viewModel.workspaceCoveragePresentation?.message)
+        .onAppear {
+            entranceVisible = false
+            DispatchQueue.main.async {
+                withAnimation(.easeOut(duration: 0.10)) {
+                    entranceVisible = true
+                }
+            }
+        }
     }
 
     private var quotaPresentation: QuotaCompactPresentation {
         QuotaCompactPresentation(
             fullLabel: viewModel.quotaCompactText(),
-            isCritical: quotaIsCritical
+            isCritical: viewModel.quotaIsCritical()
         )
     }
 
@@ -113,20 +104,6 @@ struct LuckyCatCompactView: View {
         return quota.fresh ? LuckyCatTokens.Palette.green.opacity(0.92) : LuckyCatTokens.Palette.textSecondary.opacity(0.52)
     }
 
-    private var quotaIsCritical: Bool {
-        guard let quota = viewModel.uiState.quota else {
-            return false
-        }
-        let candidates = [
-            quota.short_percent,
-            quota.long_percent,
-            quota.effective_remaining_percent
-        ].compactMap { $0 }
-        guard let minimum = candidates.min() else {
-            return false
-        }
-        return minimum < 20
-    }
 }
 
 private struct QuotaCompactPresentation {
