@@ -6,6 +6,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = TaskLightViewModel()
     private var panelController: TaskLightPanelController?
     private var initialPanelPresented = false
+    private var edgeToggleSelfTestScheduled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appendStartupTrace("applicationDidFinishLaunching.begin")
@@ -28,6 +29,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         appendStartupTrace("applicationDidBecomeActive")
         presentInitialPanelIfNeeded(trigger: "didBecomeActive")
         panelController?.recoverVisibility(reason: "didBecomeActive")
+        panelController?.handleActivationClickIfInsidePanel(reason: "applicationDidBecomeActive")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -47,7 +49,24 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         appendStartupTrace("presentInitialPanelIfNeeded.\(trigger).begin")
         initialPanelPresented = true
         panelController.showPanel()
+        scheduleEdgeToggleSelfTestIfNeeded()
         appendStartupTrace("presentInitialPanelIfNeeded.\(trigger).end")
+    }
+
+    private func scheduleEdgeToggleSelfTestIfNeeded() {
+        guard !edgeToggleSelfTestScheduled else { return }
+        guard ProcessInfo.processInfo.arguments.contains("--tasklight-edge-self-test") else { return }
+        edgeToggleSelfTestScheduled = true
+        appendStartupTrace("edgeToggleSelfTest.scheduled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            guard let self, let panelController = self.panelController else { return }
+            panelController.runEdgeToggleSelfTest { passed in
+                self.appendStartupTrace("edgeToggleSelfTest.completed.\(passed ? "ok" : "fail")")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     private func appendStartupTrace(_ event: String) {
@@ -58,7 +77,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         if let data = line.data(using: .utf8) {
             if FileManager.default.fileExists(atPath: url.path),
                let handle = try? FileHandle(forWritingTo: url) {
-                try? handle.seekToEnd()
+                _ = try? handle.seekToEnd()
                 try? handle.write(contentsOf: data)
                 try? handle.close()
             } else {
