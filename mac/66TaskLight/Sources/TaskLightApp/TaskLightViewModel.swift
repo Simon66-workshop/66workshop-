@@ -4,6 +4,27 @@ import Darwin
 import Foundation
 import TaskLightCore
 
+enum TaskRadarDiagnosticSeverity: String {
+    case ok
+    case warning
+    case attention
+    case unknown
+}
+
+struct TaskRadarDiagnosticRow: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let value: String
+    let severity: TaskRadarDiagnosticSeverity
+
+    init(label: String, value: String, severity: TaskRadarDiagnosticSeverity) {
+        self.id = label
+        self.label = label
+        self.value = value
+        self.severity = severity
+    }
+}
+
 @MainActor
 final class TaskLightViewModel: ObservableObject {
     enum CompactActivePaw {
@@ -59,6 +80,23 @@ final class TaskLightViewModel: ObservableObject {
         self.recentEventSnapshot = []
         self.uiStateRevision = 0
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: initialUIState, config: config)
+    }
+
+    init(previewUIState: TaskLightUIState) {
+        let config = TaskLightConfig.fromEnvironment()
+        self.config = config
+        self.store = TaskLightStore(config: config)
+        self.uiState = previewUIState
+        self.expanded = false
+        self.edgeCollapsed = false
+        self.edgeCollapseRequestID = 0
+        self.edgeRestoreRequestID = 0
+        self.contentExpanded = false
+        self.ledger = TaskLightPlayedEventsLedger()
+        self.muted = false
+        self.recentEventSnapshot = []
+        self.uiStateRevision = 0
+        self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: previewUIState, config: config)
     }
 
     func start() {
@@ -530,6 +568,47 @@ final class TaskLightViewModel: ObservableObject {
         uiState.quota?.status.uppercased() ?? "UNKNOWN"
     }
 
+    func menuBarStatusTitle() -> String {
+        let activeCount = runningDisplayCount() + pendingDisplayCount() + observedDisplayCount()
+        return "● \(menuBarShortStatusTitle()) \(activeCount)  \(quotaCompactText())"
+    }
+
+    func menuBarStatusAccessibilityLabel() -> String {
+        "\(compactStatusTitle()), \(edgeRailThreadSummary()), quota \(quotaCompactText())"
+    }
+
+    func taskRadarActiveTasks() -> [TaskLightTaskSummary] {
+        let activeScopes = Set(["open_blocker", "stale_blocker", "active_execution", "pending_verify"])
+        let activeStatuses = Set([
+            TaskLightStatus.blocked.rawValue,
+            TaskLightStatus.stale.rawValue,
+            TaskLightStatus.running.rawValue,
+            TaskLightStatus.queued.rawValue,
+            TaskLightStatus.done_unverified.rawValue,
+            TaskLightStatus.invalid_json.rawValue
+        ])
+        return sortedManagedTasks().filter { task in
+            let scope = uiDisplayScope(for: task.task_id, fallback: task.effective_status)
+            return activeScopes.contains(scope) || activeStatuses.contains(task.effective_status)
+        }
+    }
+
+    func taskRadarObservedThreads() -> [TaskLightObservationRecord] {
+        visibleObservedThreads()
+    }
+
+    func taskRadarDiagnosticRows() -> [TaskRadarDiagnosticRow] {
+        let diagnostics = uiState.diagnostics
+        return [
+            TaskRadarDiagnosticRow(label: "Writer", value: diagnostics.writer_status ?? "unknown", severity: severityForHealthStatus(diagnostics.writer_status)),
+            TaskRadarDiagnosticRow(label: "Hook Bridge", value: diagnostics.hook_bridge_status ?? "unknown", severity: severityForHealthStatus(diagnostics.hook_bridge_status)),
+            TaskRadarDiagnosticRow(label: "Signal Bus", value: diagnostics.signal_bus_status ?? "unknown", severity: severityForHealthStatus(diagnostics.signal_bus_status)),
+            TaskRadarDiagnosticRow(label: "Latest Signal", value: secondsLabel(diagnostics.latest_signal_age_sec), severity: severityForSignalAge(diagnostics.latest_signal_age_sec)),
+            TaskRadarDiagnosticRow(label: "Candidates", value: "\(diagnostics.runtime_candidate_count ?? uiState.runtime_candidates?.count ?? 0)", severity: .unknown),
+            TaskRadarDiagnosticRow(label: "Quota Probe", value: diagnostics.quota_probe_status ?? "unknown", severity: severityForHealthStatus(diagnostics.quota_probe_status))
+        ]
+    }
+
     func compactProgressValue() -> CGFloat {
         if let task = compactReferenceTask() {
             let fallback: CGFloat
@@ -896,6 +975,41 @@ final class TaskLightViewModel: ObservableObject {
         visibleObservedThreads().contains {
             $0.status == TaskLightObservationStatus.observed_attention.rawValue && $0.confidence >= 0.75
         }
+    }
+
+    private func menuBarShortStatusTitle() -> String {
+        switch compactStatusTitle() {
+        case "Running":
+            return "Run"
+        case "Blocked":
+            return "Block"
+        case "Pending":
+            return "Pend"
+        case "Observed":
+            return "Obs"
+        default:
+            return compactStatusTitle()
+        }
+    }
+
+    private func severityForHealthStatus(_ status: String?) -> TaskRadarDiagnosticSeverity {
+        switch status?.lowercased() {
+        case "ok", "running", "readable", "healthy":
+            return .ok
+        case "stale", "warning", "watch":
+            return .warning
+        case "failed", "fail", "error", "blocked", "unreadable":
+            return .attention
+        default:
+            return .unknown
+        }
+    }
+
+    private func severityForSignalAge(_ value: Double?) -> TaskRadarDiagnosticSeverity {
+        guard let value else { return .unknown }
+        if value <= 15 { return .ok }
+        if value <= 60 { return .warning }
+        return .attention
     }
 
     private static func uiStateRefreshSignature(for state: TaskLightUIState, config: TaskLightConfig) -> String {

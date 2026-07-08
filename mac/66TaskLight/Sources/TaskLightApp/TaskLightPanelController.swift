@@ -287,6 +287,54 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         scheduleStartupVisibilityRecovery()
     }
 
+    var anyTaskLightPanelVisible: Bool {
+        compactPanel?.isVisible == true || edgePanel?.isVisible == true || expandedPanel?.isVisible == true
+    }
+
+    func togglePanelVisibilityFromMenuBar() {
+        if anyTaskLightPanelVisible {
+            compactPanel?.orderOut(nil)
+            edgePanel?.orderOut(nil)
+            expandedPanel?.orderOut(nil)
+            appendStartupTrace("menuBar.toggleVisibility.hidden")
+            return
+        }
+        showCurrentModeFromMenuBar(source: "menuBar.toggleVisibility.show")
+    }
+
+    func showCompactFromMenuBar() {
+        if compactPanel == nil {
+            viewModel.setEdgeCollapsed(false)
+            viewModel.expanded = false
+            showPanel()
+            return
+        }
+        viewModel.setEdgeCollapsed(false)
+        viewModel.expanded = false
+        showCurrentModeFromMenuBar(source: "menuBar.showCompact")
+    }
+
+    func toggleEdgeRailFromMenuBar() {
+        if compactPanel == nil {
+            showPanel()
+        }
+        viewModel.setEdgeCollapsed(!viewModel.edgeCollapsed)
+    }
+
+    func openExpandedFromMenuBar() {
+        if compactPanel == nil {
+            showPanel()
+        }
+        if viewModel.edgeCollapsed {
+            viewModel.setEdgeCollapsed(false)
+        }
+        if viewModel.expanded {
+            showCurrentModeFromMenuBar(source: "menuBar.openExpanded.alreadyExpanded")
+        } else {
+            viewModel.expanded = true
+        }
+    }
+
     func transition(expanded: Bool) {
         guard let compactPanel else { return }
         guard !viewModel.edgeCollapsed else {
@@ -377,6 +425,45 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     func recoverVisibility(reason: String = "manual") {
         ensureVisibleOnActiveSpace()
         appendStartupTrace("recoverVisibility.\(reason)")
+    }
+
+    private func showCurrentModeFromMenuBar(source: String) {
+        appendStartupTrace("\(source).begin")
+        if compactPanel == nil {
+            showPanel()
+            return
+        }
+        if viewModel.edgeCollapsed {
+            let panel = ensureEdgePanel()
+            if let compactPanel {
+                applyPanelFrame(storedEdgeRailFrame() ?? edgeRailFrame(from: compactPanel.frame), to: panel)
+            }
+            compactPanel?.orderOut(nil)
+            expandedPanel?.orderOut(nil)
+            panel.ignoresMouseEvents = false
+            panel.makeKeyAndOrderFront(nil)
+            panel.orderFrontRegardless()
+        } else if viewModel.expanded {
+            guard let compactPanel else { return }
+            let panel = ensureExpandedPanel()
+            applyPanelFrame(expandedFrame(from: compactPanel.frame), to: panel)
+            compactPanel.orderOut(nil)
+            edgePanel?.orderOut(nil)
+            panel.makeKeyAndOrderFront(nil)
+            panel.orderFrontRegardless()
+        } else {
+            guard let compactPanel else { return }
+            edgePanel?.orderOut(nil)
+            expandedPanel?.orderOut(nil)
+            compactPanel.ignoresMouseEvents = false
+            compactPanel.makeKeyAndOrderFront(nil)
+            compactPanel.orderFrontRegardless()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        viewModel.start()
+        installMouseEventTap()
+        startMouseButtonPollingFallback()
+        appendStartupTrace("\(source).end")
     }
 
     func handleActivationClickIfInsidePanel(reason: String) {

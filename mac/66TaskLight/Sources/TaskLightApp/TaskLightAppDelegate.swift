@@ -5,6 +5,7 @@ import SwiftUI
 final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = TaskLightViewModel()
     private var panelController: TaskLightPanelController?
+    private var menuBarController: TaskLightMenuBarController?
     private var initialPanelPresented = false
     private var edgeToggleSelfTestScheduled = false
 
@@ -13,6 +14,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         let controller = TaskLightPanelController(viewModel: viewModel)
         panelController = controller
+        menuBarController = TaskLightMenuBarController(viewModel: viewModel, panelController: controller)
         NSApp.activate(ignoringOtherApps: true)
         appendStartupTrace("applicationDidFinishLaunching.activate")
         DispatchQueue.main.async { [weak self] in
@@ -34,6 +36,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         appendStartupTrace("applicationWillTerminate.begin")
+        menuBarController?.shutdown()
         panelController?.shutdown()
         viewModel.shutdown()
         appendStartupTrace("applicationWillTerminate.end")
