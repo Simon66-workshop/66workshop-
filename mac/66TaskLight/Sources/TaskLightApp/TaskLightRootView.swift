@@ -19,7 +19,7 @@ struct TaskLightRootView: View {
         case .edgeRail:
             LuckyCatEdgeRailView(viewModel: viewModel)
         case .expanded:
-            LuckyCatExpandedDashboardView(viewModel: viewModel)
+            LuckyCatExpandedDashboardHostView(viewModel: viewModel)
                 .contentShape(Rectangle())
                 .overlay {
                     ExpandedCollapseGestureLayer {
@@ -32,6 +32,50 @@ struct TaskLightRootView: View {
     private var compactRoot: some View {
         LuckyCatCompactView(viewModel: viewModel)
             .contentShape(Rectangle())
+    }
+}
+
+private struct LuckyCatExpandedDashboardHostView: View {
+    @ObservedObject var viewModel: TaskLightViewModel
+    @State private var showsDashboard = false
+
+    var body: some View {
+        ZStack {
+            if showsDashboard {
+                LuckyCatExpandedDashboardView(viewModel: viewModel)
+                    .transition(.opacity)
+            } else {
+                LuckyCatExpandedLoadingView(viewModel: viewModel)
+            }
+        }
+        .frame(width: LuckyCatLayout.expandedWidth, height: LuckyCatLayout.expandedHeight)
+        .onAppear {
+            guard !showsDashboard else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                showsDashboard = true
+            }
+        }
+    }
+}
+
+private struct LuckyCatExpandedLoadingView: View {
+    @ObservedObject var viewModel: TaskLightViewModel
+
+    var body: some View {
+        LuckyCatGlassPanel(status: viewModel.luckyCatPresentationStatus()) {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .controlSize(.large)
+                Text("任务面板")
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                Text("正在整理任务、事件和诊断信息")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: LuckyCatLayout.expandedWidth, height: LuckyCatLayout.expandedHeight)
     }
 }
 

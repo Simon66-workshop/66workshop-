@@ -9,6 +9,8 @@ public enum TaskLightUIPerformanceBudget {
     public static let expandedOverviewManagedTaskRenderLimit = 16
     public static let expandedTaskInitialRenderLimit = 10
     public static let expandedManagedTaskRenderLimit = 80
+    public static let expandedManagedTaskCachePageSize = 80
+    public static let expandedManagedTaskCacheHardLimit = 480
     public static let expandedTaskRenderBatchSize = 12
     public static let expandedInvalidTaskRenderLimit = 40
     public static let expandedObservedThreadRenderLimit = 40

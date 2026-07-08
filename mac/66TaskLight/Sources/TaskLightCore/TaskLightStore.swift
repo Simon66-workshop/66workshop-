@@ -223,6 +223,69 @@ public final class TaskLightStore {
         fsync(fd)
     }
 
+    public func appendQuotaHistorySample(from quota: CodexQuotaUIState?) {
+        ensureLayout()
+        guard let quota, quota.fresh else { return }
+        let capturedAt = quota.captured_at ?? TaskLightTaskRecord.nowString()
+        let windows = quotaHistoryWindows(from: quota)
+        guard !windows.isEmpty else { return }
+        for sample in windows {
+            appendQuotaHistorySample(sample, capturedAt: capturedAt, source: quota.source, fresh: quota.fresh)
+        }
+    }
+
+    public func loadQuotaHistory(limit: Int = 400) -> [QuotaHistorySample] {
+        ensureLayout()
+        guard limit > 0,
+              let raw = try? String(contentsOf: config.quotaHistoryURL, encoding: .utf8),
+              !raw.isEmpty else {
+            return []
+        }
+        return raw
+            .split(whereSeparator: \.isNewline)
+            .suffix(limit)
+            .compactMap { line in
+                guard let data = String(line).data(using: .utf8) else { return nil }
+                return try? decoder.decode(QuotaHistorySample.self, from: data)
+            }
+    }
+
+    public func loadWorkspaceDoctorRows(limit: Int = 12) -> [WorkspaceDoctorRow] {
+        ensureLayout()
+        guard limit > 0,
+              let raw = try? Data(contentsOf: config.workspaceCoverageLatestJSONURL),
+              let payload = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+              let items = payload["workspaces"] as? [[String: Any]] else {
+            return []
+        }
+        return items
+            .compactMap(workspaceDoctorRow)
+            .sorted(by: workspaceDoctorSort)
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    public func loadStatusReplayRecords(since: Date, limit: Int = 80) -> [StatusReplayRecord] {
+        ensureLayout()
+        guard limit > 0,
+              let raw = try? String(contentsOf: config.uiEventFlowURL, encoding: .utf8),
+              !raw.isEmpty else {
+            return []
+        }
+        var records: [StatusReplayRecord] = []
+        for line in raw.split(whereSeparator: \.isNewline).suffix(800) {
+            guard let data = String(line).data(using: .utf8),
+                  let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let record = statusReplayRecord(from: payload),
+                  let recordedAt = TaskLightTaskRecord.parseTimestamp(record.recorded_at),
+                  recordedAt >= since else {
+                continue
+            }
+            records.append(record)
+        }
+        return Array(records.sorted { $0.recorded_at > $1.recorded_at }.prefix(limit))
+    }
+
     public func clear(taskID: String) {
         runCLI(arguments: ["clear", "--task-id", taskID])
     }
@@ -347,6 +410,203 @@ public final class TaskLightStore {
     private struct ScanResult {
         var valid: [TaskLightTaskSummary]
         var invalid: [TaskLightTaskSummary]
+    }
+
+    private func quotaHistoryWindows(from quota: CodexQuotaUIState) -> [QuotaHistorySample] {
+        let capturedAt = quota.captured_at ?? TaskLightTaskRecord.nowString()
+        if let displayWindows = quota.display_windows, !displayWindows.isEmpty {
+            return displayWindows.compactMap { window in
+                guard let remaining = window.remaining_percent else { return nil }
+                let windowID = [
+                    window.bucket_id ?? quota.bucket_id ?? "quota",
+                    window.window_duration_mins.map(String.init) ?? window.label ?? window.id ?? "window"
+                ].joined(separator: ":")
+                return QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: windowID,
+                    label: window.label,
+                    bucket_id: window.bucket_id ?? quota.bucket_id,
+                    remaining_percent: remaining,
+                    reset_label: window.reset_label,
+                    window_duration_mins: window.window_duration_mins
+                )
+            }
+        }
+        var samples: [QuotaHistorySample] = []
+        if let short = quota.short_percent {
+            samples.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: [quota.short_bucket_id ?? quota.bucket_id ?? "quota", quota.short_label ?? "short"].joined(separator: ":"),
+                    label: quota.short_label ?? "short",
+                    bucket_id: quota.short_bucket_id ?? quota.bucket_id,
+                    remaining_percent: short,
+                    reset_label: quota.short_reset_label
+                )
+            )
+        }
+        if let long = quota.long_percent {
+            samples.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: [quota.long_bucket_id ?? quota.bucket_id ?? "quota", quota.long_label ?? "long"].joined(separator: ":"),
+                    label: quota.long_label ?? "long",
+                    bucket_id: quota.long_bucket_id ?? quota.bucket_id,
+                    remaining_percent: long,
+                    reset_label: quota.long_reset_label
+                )
+            )
+        }
+        if samples.isEmpty, let effective = quota.effective_remaining_percent {
+            samples.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: quota.bucket_id ?? "quota:effective",
+                    label: "effective",
+                    bucket_id: quota.bucket_id,
+                    remaining_percent: effective
+                )
+            )
+        }
+        return samples
+    }
+
+    private func appendQuotaHistorySample(_ sample: QuotaHistorySample, capturedAt: String, source: String?, fresh: Bool) {
+        var normalized = sample
+        normalized.captured_at = capturedAt
+        normalized.source = source
+        normalized.fresh = fresh
+        guard let data = try? encoder.encode(normalized),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return
+        }
+        let line = encoded + "\n"
+        let fd = open(config.quotaHistoryURL.path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.withCString { pointer in
+            write(fd, pointer, strlen(pointer))
+        }
+        fsync(fd)
+    }
+
+    private func workspaceDoctorRow(from item: [String: Any]) -> WorkspaceDoctorRow? {
+        guard let workspace = item["workspace"] as? String, !workspace.isEmpty else { return nil }
+        let status = item["coverage_status"] as? String ?? "unknown"
+        return WorkspaceDoctorRow(
+            workspace: workspace,
+            name: item["name"] as? String ?? URL(fileURLWithPath: workspace).lastPathComponent,
+            group: item["workspace_group"] as? String ?? "unknown",
+            coverage_status: status,
+            hook_status: item["hook_status"] as? String,
+            hook_detail: item["hook_detail"] as? String,
+            hook_visibility: item["hook_visibility"] as? String,
+            reason: item["reason"] as? String ?? "暂无诊断",
+            recommended_action: item["recommended_action"] as? String ?? "run coverage check",
+            severity: workspaceDoctorSeverity(for: status),
+            preferred: item["preferred"] as? Bool ?? false
+        )
+    }
+
+    private func workspaceDoctorSeverity(for status: String) -> String {
+        switch status {
+        case "invalid_hooks":
+            return "attention"
+        case "missing_hooks":
+            return "warning"
+        case "installed_needs_trust", "not_loaded", "diagnostic_only":
+            return "needs_review"
+        case "trusted":
+            return "ok"
+        default:
+            return "unknown"
+        }
+    }
+
+    private func workspaceDoctorSort(_ lhs: WorkspaceDoctorRow, _ rhs: WorkspaceDoctorRow) -> Bool {
+        let rank: [String: Int] = [
+            "attention": 0,
+            "warning": 1,
+            "needs_review": 2,
+            "unknown": 3,
+            "ok": 4
+        ]
+        let lhsRank = rank[lhs.severity] ?? 5
+        let rhsRank = rank[rhs.severity] ?? 5
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        if lhs.preferred != rhs.preferred { return lhs.preferred && !rhs.preferred }
+        return lhs.workspace < rhs.workspace
+    }
+
+    private func statusReplayRecord(from payload: [String: Any]) -> StatusReplayRecord? {
+        guard let recordedAt = payload["recorded_at"] as? String else { return nil }
+        let previous = payload["previous_global_status"] as? String ?? "unknown"
+        let current = payload["global_status"] as? String ?? "unknown"
+        let lamp = payload["lamp_status"] as? String ?? current
+        let counts = payload["counts"] as? [String: Any] ?? [:]
+        let markers = statusReplayMarkers(from: payload)
+        let reason = (payload["projector_reason"] as? [String])?.joined(separator: ",") ?? "none"
+        let signal = payload["current_thread_signal_status"] as? String ?? "unknown"
+        let decision = payload["current_thread_fusion_decision"] as? String ?? "unknown"
+        let id = [
+            recordedAt,
+            previous,
+            current,
+            lamp,
+            String(describing: counts["running"] ?? 0),
+            String(describing: counts["observed_active"] ?? 0)
+        ].joined(separator: "|")
+        return StatusReplayRecord(
+            id: id,
+            recorded_at: recordedAt,
+            from_status: previous,
+            to_status: current,
+            lamp_status: lamp,
+            evidence: "reason \(reason) · signal \(signal) · decision \(decision)",
+            markers: markers,
+            counts_summary: "R \(counts["running"] ?? 0) · P \(counts["pending_verify_count"] ?? 0) · B \(counts["blocked"] ?? 0) · O \(counts["observed_active"] ?? 0)",
+            writer_status: payload["writer_status"] as? String ?? "unknown",
+            hook_bridge_status: payload["hook_bridge_status"] as? String ?? "unknown"
+        )
+    }
+
+    private func statusReplayMarkers(from payload: [String: Any]) -> [String] {
+        var markers: [String] = []
+        let writer = payload["writer_status"] as? String ?? ""
+        if writer == "old_writer" {
+            markers.append("old_writer")
+        }
+        if writer == "multiple_writers" {
+            markers.append("multiple_projector")
+        }
+        let fallback = payload["fallback_reason"] as? String ?? ""
+        if !fallback.isEmpty, fallback != "none" {
+            markers.append("fallback_reason")
+        }
+        let evidence = [
+            payload["current_thread_signal_status"] as? String,
+            payload["current_thread_fusion_decision"] as? String,
+            (payload["projector_reason"] as? [String])?.joined(separator: ","),
+            (payload["reference_task"] as? [String: Any])?["state_cause"] as? String
+        ].compactMap { $0 }.joined(separator: " ")
+        if evidence.contains("process_only_not_authoritative") || evidence.contains("process_observer") {
+            markers.append("process_only")
+        }
+        if evidence.contains("runtime_score_below_threshold") {
+            markers.append("runtime_score_below_threshold")
+        }
+        if evidence.contains("stale_launch_agent") || evidence.contains("launch_agent") && evidence.contains("stale") {
+            markers.append("stale_launch_agent")
+        }
+        return Array(Set(markers)).sorted()
     }
 
     private struct StateReadResult {

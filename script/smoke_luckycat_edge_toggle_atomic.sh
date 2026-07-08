@@ -70,8 +70,10 @@ rg -q "scheduleNativePressRecovery" "$controller" \
 rg -Fq "taskLightNativePressRecoveryDelays: [TimeInterval] = [0.045, 0.12, 0.28]" "$controller" \
   || fail "transparent-panel mouse-up recovery should stay below perceptible latency"
 
-rg -q "instantStatusOrbDown" "$controller" \
-  || fail "compact status orb should collapse on mouse-down for millisecond response"
+if rg -n "instantStatusOrbDown|instant_status_orb_down|compact_status_orb_mouse_down" "$controller" >/tmp/66tasklight-instant-orb-toggle.txt; then
+  cat /tmp/66tasklight-instant-orb-toggle.txt
+  fail "compact status orb must not toggle on mouse-down before drag intent is known"
+fi
 
 rg -q "persistUIState\\(deferred: true\\)" "$view_model" \
   || fail "edgeCollapsed persistence should be deferred so UI switches before UserDefaults writes"
@@ -131,11 +133,11 @@ rg -q "handleEdgeRailMouseDown" "$controller" \
 rg -q "handleEdgeRailClick\\(clickCount:" "$controller" \
   || fail "central edge rail click handler must receive click count"
 
-rg -q "edge_click_no_toggle" "$controller" \
-  || fail "capsule single click should stay capsule instead of restoring"
+rg -q "restore_single_click" "$controller" \
+  || fail "capsule single click should restore the full cat under the standardized interaction rules"
 
 rg -q "restore_double_click" "$controller" \
-  || fail "capsule restore should require an explicit double click"
+  || fail "capsule double click should remain a valid restore gesture"
 
 if rg -n "scheduleEdgeQuickRestore|quickEdgeRestore|edge_rail_quick_restore|taskLightEdgeQuickRestoreDelay" "$controller" >/tmp/66tasklight-edge-quick-restore.txt; then
   cat /tmp/66tasklight-edge-quick-restore.txt
@@ -658,8 +660,8 @@ rg -q "body_click_pass" "$controller" \
 rg -q "click_path_collapsed" "$controller" \
   || fail "runtime self-test should prove the click handler path"
 
-rg -q "edge_single_click_no_restore_pass" "$controller" "$ROOT_DIR/script/build_and_run.sh" "$ROOT_DIR/script/smoke_luckycat_edge_toggle_runtime.sh" \
-  || fail "runtime self-test should prove capsule single click does not restore"
+rg -q "edge_single_click_restore_pass" "$controller" "$ROOT_DIR/script/build_and_run.sh" "$ROOT_DIR/script/smoke_luckycat_edge_toggle_runtime.sh" \
+  || fail "runtime self-test should prove capsule single click restores"
 
 rg -q "transition\\.edgeCollapsed\\.true\\.end\\.frame" "$controller" \
   || fail "collapse transition trace is missing"

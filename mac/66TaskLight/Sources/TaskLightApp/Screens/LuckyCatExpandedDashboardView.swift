@@ -26,12 +26,17 @@ struct LuckyCatExpandedDashboardView: View {
     @State private var cachedInvalidTasks: [TaskLightTaskSummary] = []
     @State private var cachedObservedThreads: [TaskLightObservationRecord] = []
     @State private var cachedEvents: [TaskLightEventRecord] = []
+    @State private var cachedManagedTaskTotal = 0
+    @State private var cachedInvalidTaskTotal = 0
+    @State private var cachedObservedThreadTotal = 0
+    @State private var cacheLoading = true
     @State private var overviewTaskVisibleLimit = TaskLightUIPerformanceBudget.expandedOverviewManagedTaskInitialRenderLimit
     @State private var taskPageVisibleLimit = TaskLightUIPerformanceBudget.expandedTaskInitialRenderLimit
     @State private var eventVisibleLimit = TaskLightUIPerformanceBudget.expandedRecentEventInitialRenderLimit
     @State private var lastSectionChangeAt = Date.distantPast
     @State private var cacheRefreshGeneration = 0
     @State private var sectionSwitchGeneration = 0
+    @State private var managedTaskCacheLimit = TaskLightUIPerformanceBudget.expandedManagedTaskRenderLimit
 
     private enum TaskRowStyle {
         case card
@@ -77,7 +82,7 @@ struct LuckyCatExpandedDashboardView: View {
         }
         .frame(width: LuckyCatLayout.expandedWidth, height: LuckyCatLayout.expandedHeight)
         .onAppear {
-            refreshContentCache(force: true)
+            scheduleInitialContentCacheRefresh()
         }
         .onReceive(viewModel.$uiState) { _ in
             scheduleContentCacheRefresh()
@@ -171,16 +176,7 @@ struct LuckyCatExpandedDashboardView: View {
     }
 
     private var prewarmedContentDeck: some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(Section.allCases, id: \.self) { section in
-                let isVisible = renderedSection == section
-                contentScrollPane(section: section)
-                    .opacity(isVisible ? 1 : 0)
-                    .allowsHitTesting(isVisible)
-                    .accessibilityHidden(!isVisible)
-                    .zIndex(isVisible ? 1 : 0)
-            }
-        }
+        contentScrollPane(section: renderedSection)
         .transaction { transaction in
             transaction.animation = nil
             transaction.disablesAnimations = true
@@ -218,22 +214,26 @@ struct LuckyCatExpandedDashboardView: View {
                 codexUsageSection
                 managedTaskSection(
                     cachedManagedTasks,
+                    totalCount: cachedManagedTaskTotal,
                     visibleLimit: $overviewTaskVisibleLimit,
-                    maxLimit: TaskLightUIPerformanceBudget.expandedOverviewManagedTaskRenderLimit,
+                    maxLimit: min(cachedManagedTasks.count, TaskLightUIPerformanceBudget.expandedOverviewManagedTaskRenderLimit),
+                    allowsPagination: false,
                     rowStyle: .card
                 )
-                invalidTaskSection(cachedInvalidTasks, rowStyle: .card)
-                observedThreadSection(cachedObservedThreads)
+                invalidTaskSection(cachedInvalidTasks, totalCount: cachedInvalidTaskTotal, rowStyle: .card)
+                observedThreadSection(cachedObservedThreads, totalCount: cachedObservedThreadTotal)
             }
         case .tasks:
             LazyVStack(alignment: .leading, spacing: 14) {
                 managedTaskSection(
                     cachedManagedTasks,
+                    totalCount: cachedManagedTaskTotal,
                     visibleLimit: $taskPageVisibleLimit,
-                    maxLimit: TaskLightUIPerformanceBudget.expandedManagedTaskRenderLimit,
+                    maxLimit: cachedManagedTasks.count,
+                    allowsPagination: true,
                     rowStyle: .compact
                 )
-                invalidTaskSection(cachedInvalidTasks, rowStyle: .compact)
+                invalidTaskSection(cachedInvalidTasks, totalCount: cachedInvalidTaskTotal, rowStyle: .compact)
             }
         case .events:
             eventSection(cachedEvents, visibleLimit: $eventVisibleLimit)
@@ -256,6 +256,15 @@ struct LuckyCatExpandedDashboardView: View {
         refreshContentCache()
     }
 
+    private func scheduleInitialContentCacheRefresh() {
+        cacheRefreshGeneration += 1
+        let generation = cacheRefreshGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            guard cacheRefreshGeneration == generation else { return }
+            refreshContentCache(force: true)
+        }
+    }
+
     private func refreshContentCache(force: Bool = false) {
         let nextKey = [
             viewModel.uiState.projector_generated_at,
@@ -264,10 +273,30 @@ struct LuckyCatExpandedDashboardView: View {
         ].joined(separator: "|")
         guard force || nextKey != cacheKey else { return }
         cacheKey = nextKey
-        cachedManagedTasks = viewModel.sortedManagedTasks()
-        cachedInvalidTasks = viewModel.invalidManagedTasks()
-        cachedObservedThreads = viewModel.visibleObservedThreads()
-        cachedEvents = viewModel.recentEvents(limit: TaskLightUIPerformanceBudget.expandedRecentEventLimit)
+        cacheLoading = true
+        cacheRefreshGeneration += 1
+        let generation = cacheRefreshGeneration
+        let stateSnapshot = viewModel.uiState
+        let eventsSnapshot = viewModel.recentEvents(limit: TaskLightUIPerformanceBudget.expandedRecentEventLimit)
+        let managedLimitSnapshot = managedTaskCacheLimit
+        DispatchQueue.global(qos: .userInitiated).async {
+            let payload = LuckyCatExpandedDashboardCacheBuilder.build(
+                state: stateSnapshot,
+                events: eventsSnapshot,
+                managedLimit: managedLimitSnapshot
+            )
+            DispatchQueue.main.async {
+                guard cacheRefreshGeneration == generation else { return }
+                cachedManagedTasks = payload.managedTasks
+                cachedInvalidTasks = payload.invalidTasks
+                cachedObservedThreads = payload.observedThreads
+                cachedEvents = payload.events
+                cachedManagedTaskTotal = payload.managedTaskTotal
+                cachedInvalidTaskTotal = payload.invalidTaskTotal
+                cachedObservedThreadTotal = payload.observedThreadTotal
+                cacheLoading = false
+            }
+        }
     }
 
     private var codexUsageSection: some View {
@@ -452,15 +481,19 @@ struct LuckyCatExpandedDashboardView: View {
     @ViewBuilder
     private func managedTaskSection(
         _ managedTasks: [TaskLightTaskSummary],
+        totalCount: Int,
         visibleLimit: Binding<Int>,
         maxLimit: Int,
+        allowsPagination: Bool,
         rowStyle: TaskRowStyle
     ) -> some View {
         let cappedTotal = min(managedTasks.count, maxLimit)
         let renderedCount = min(visibleLimit.wrappedValue, cappedTotal)
         let visibleTasks = Array(managedTasks.prefix(renderedCount))
-        sectionHeader("Managed Tasks", subtitle: visibleCountSubtitle(rendered: visibleTasks.count, total: managedTasks.count))
-        if managedTasks.isEmpty {
+        sectionHeader("Managed Tasks", subtitle: cacheLoading ? "loading" : visibleCountSubtitle(rendered: visibleTasks.count, total: totalCount))
+        if cacheLoading && managedTasks.isEmpty {
+            emptyText("Loading managed tasks...")
+        } else if managedTasks.isEmpty {
             emptyText("No managed tasks")
         } else {
             LazyVStack(alignment: .leading, spacing: 10) {
@@ -475,19 +508,20 @@ struct LuckyCatExpandedDashboardView: View {
                 virtualListSentinel(
                     rendered: renderedCount,
                     maxRender: cappedTotal,
-                    total: managedTasks.count,
+                    total: totalCount,
                     noun: "tasks",
-                    visibleLimit: visibleLimit
+                    visibleLimit: visibleLimit,
+                    onLoadNextPage: allowsPagination ? loadNextManagedTaskPage : nil
                 )
             }
         }
     }
 
     @ViewBuilder
-    private func invalidTaskSection(_ invalidTasks: [TaskLightTaskSummary], rowStyle: TaskRowStyle) -> some View {
+    private func invalidTaskSection(_ invalidTasks: [TaskLightTaskSummary], totalCount: Int, rowStyle: TaskRowStyle) -> some View {
         if !invalidTasks.isEmpty {
             let visibleTasks = Array(invalidTasks.prefix(TaskLightUIPerformanceBudget.expandedInvalidTaskRenderLimit))
-            sectionHeader("Invalid Task JSON", subtitle: visibleCountSubtitle(rendered: visibleTasks.count, total: invalidTasks.count))
+            sectionHeader("Invalid Task JSON", subtitle: visibleCountSubtitle(rendered: visibleTasks.count, total: totalCount))
             LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(visibleTasks) { task in
                     switch rowStyle {
@@ -497,23 +531,25 @@ struct LuckyCatExpandedDashboardView: View {
                         LuckyCatTaskListRow(task: task)
                     }
                 }
-                overflowHint(rendered: visibleTasks.count, total: invalidTasks.count, noun: "invalid tasks")
+                overflowHint(rendered: visibleTasks.count, total: totalCount, noun: "invalid tasks")
             }
         }
     }
 
     @ViewBuilder
-    private func observedThreadSection(_ observedThreads: [TaskLightObservationRecord]) -> some View {
+    private func observedThreadSection(_ observedThreads: [TaskLightObservationRecord], totalCount: Int) -> some View {
         let visibleThreads = Array(observedThreads.prefix(TaskLightUIPerformanceBudget.expandedObservedThreadRenderLimit))
-        sectionHeader("Live Observed Threads", subtitle: visibleCountSubtitle(rendered: visibleThreads.count, total: observedThreads.count))
-        if observedThreads.isEmpty {
+        sectionHeader("Live Observed Threads", subtitle: cacheLoading ? "loading" : visibleCountSubtitle(rendered: visibleThreads.count, total: totalCount))
+        if cacheLoading && observedThreads.isEmpty {
+            emptyText("Loading observed threads...")
+        } else if observedThreads.isEmpty {
             emptyText("No live observed threads")
         } else {
             LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(visibleThreads) { thread in
                     LuckyCatObservedThreadCard(thread: thread, scrollOptimized: TaskLightUIPerformanceBudget.expandedScrollUsesOptimizedCards)
                 }
-                overflowHint(rendered: visibleThreads.count, total: observedThreads.count, noun: "observed threads")
+                overflowHint(rendered: visibleThreads.count, total: totalCount, noun: "observed threads")
             }
         }
     }
@@ -601,10 +637,11 @@ struct LuckyCatExpandedDashboardView: View {
         maxRender: Int,
         total: Int,
         noun: String,
-        visibleLimit: Binding<Int>
+        visibleLimit: Binding<Int>,
+        onLoadNextPage: (() -> Void)? = nil
     ) -> some View {
         Group {
-            if total > rendered {
+            if total > rendered && rendered < maxRender {
                 Button {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
@@ -638,8 +675,45 @@ struct LuckyCatExpandedDashboardView: View {
                     transaction.animation = nil
                     transaction.disablesAnimations = true
                 }
+            } else if total > rendered, let onLoadNextPage {
+                Button {
+                    onLoadNextPage()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Load next \(noun) page · cached \(rendered)/\(total)")
+                    }
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white.opacity(0.28))
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            } else if total > rendered {
+                overflowHint(rendered: rendered, total: total, noun: noun)
             }
         }
+    }
+
+    private func loadNextManagedTaskPage() {
+        let target = min(
+            max(managedTaskCacheLimit + TaskLightUIPerformanceBudget.expandedManagedTaskCachePageSize, TaskLightUIPerformanceBudget.expandedManagedTaskRenderLimit),
+            min(cachedManagedTaskTotal, TaskLightUIPerformanceBudget.expandedManagedTaskCacheHardLimit)
+        )
+        guard target > managedTaskCacheLimit else { return }
+        managedTaskCacheLimit = target
+        refreshContentCache(force: true)
     }
 
     private func virtualListHint(rendered: Int, maxRender: Int, total: Int, noun: String) -> String {
@@ -916,6 +990,100 @@ private struct LuckyCatExpandedSidebarNavigation: View {
         .transaction { transaction in
             transaction.animation = nil
             transaction.disablesAnimations = true
+        }
+    }
+}
+
+private struct LuckyCatExpandedDashboardCachePayload {
+    let managedTasks: [TaskLightTaskSummary]
+    let invalidTasks: [TaskLightTaskSummary]
+    let observedThreads: [TaskLightObservationRecord]
+    let events: [TaskLightEventRecord]
+    let managedTaskTotal: Int
+    let invalidTaskTotal: Int
+    let observedThreadTotal: Int
+}
+
+private enum LuckyCatExpandedDashboardCacheBuilder {
+    static func build(
+        state: TaskLightUIState,
+        events: [TaskLightEventRecord],
+        managedLimit: Int
+    ) -> LuckyCatExpandedDashboardCachePayload {
+        let invalidLimit = TaskLightUIPerformanceBudget.expandedInvalidTaskRenderLimit
+        let observedLimit = TaskLightUIPerformanceBudget.expandedObservedThreadRenderLimit
+
+        let sortedManaged = state.tasks
+            .sorted(by: taskSort)
+            .prefix(managedLimit)
+            .map { $0.asTaskSummary() }
+
+        let invalidTasks = state.tasks
+            .filter { $0.display_scope == "invalid" }
+            .map { $0.asTaskSummary() }
+            .sorted { lhs, rhs in (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id) }
+
+        let visibleObserved = state.observations
+            .filter { ["active_execution", "observed_active_high_confidence", "observed_only"].contains($0.display_scope) }
+            .map { $0.asObservationRecord() }
+
+        return LuckyCatExpandedDashboardCachePayload(
+            managedTasks: Array(sortedManaged),
+            invalidTasks: Array(invalidTasks.prefix(invalidLimit)),
+            observedThreads: Array(visibleObserved.prefix(observedLimit)),
+            events: events,
+            managedTaskTotal: state.tasks.count,
+            invalidTaskTotal: invalidTasks.count,
+            observedThreadTotal: visibleObserved.count
+        )
+    }
+
+    private static func taskSort(_ lhs: TaskLightUITask, _ rhs: TaskLightUITask) -> Bool {
+        let lhsRank = taskSortRank(lhs.display_scope)
+        let rhsRank = taskSortRank(rhs.display_scope)
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+        if lhs.updated_at != rhs.updated_at {
+            return (lhs.updated_at ?? "") > (rhs.updated_at ?? "")
+        }
+        return lhs.task_id < rhs.task_id
+    }
+
+    private static func taskSortRank(_ status: String) -> Int {
+        switch status {
+        case "open_blocker":
+            return 0
+        case "active_execution":
+            return 1
+        case "pending_verify":
+            return 2
+        case "recent_done":
+            return 3
+        case "stale_blocker":
+            return 4
+        case "resolved_blocker":
+            return 5
+        case "history":
+            return 6
+        case "released":
+            return 7
+        case "invalid":
+            return 8
+        case TaskLightStatus.blocked.rawValue:
+            return 0
+        case TaskLightStatus.running.rawValue:
+            return 1
+        case TaskLightStatus.done_unverified.rawValue:
+            return 2
+        case TaskLightStatus.done_verified.rawValue:
+            return 3
+        case TaskLightStatus.stale.rawValue:
+            return 4
+        case TaskLightStatus.cancelled.rawValue:
+            return 5
+        default:
+            return 9
         }
     }
 }

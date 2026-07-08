@@ -9,7 +9,10 @@ enum LuckyCatPreviewData {
         LuckyCatPreviewScenario(id: "done", title: "Done", uiState: uiState(status: "done_verified", title: "DONE", done: 3)),
         LuckyCatPreviewScenario(id: "observed", title: "Observed Only", uiState: uiState(status: "idle", title: "IDLE", observed: 2, observedOnly: true)),
         LuckyCatPreviewScenario(id: "lowQuota", title: "Low Quota", uiState: uiState(status: "running", title: "RUNNING", running: 1, quotaShort: 12, quotaLong: 64, quotaStatus: "low")),
-        LuckyCatPreviewScenario(id: "quotaUnknown", title: "Quota Unknown", uiState: uiState(status: "idle", title: "IDLE", quotaFresh: false))
+        LuckyCatPreviewScenario(id: "quotaUnknown", title: "Quota Unknown", uiState: uiState(status: "idle", title: "IDLE", quotaFresh: false)),
+        LuckyCatPreviewScenario(id: "oldWriter", title: "Old Writer", uiState: uiState(status: "stale", title: "BLOCKED", stale: 1, writerStatus: "old_writer")),
+        LuckyCatPreviewScenario(id: "multipleProjector", title: "Multiple Projector", uiState: uiState(status: "stale", title: "BLOCKED", stale: 1, writerStatus: "multiple_writers")),
+        LuckyCatPreviewScenario(id: "processOnly", title: "Process Only", uiState: uiState(status: "idle", title: "IDLE", observed: 1, observedOnly: true))
     ]
 
     static let compactState = TaskLightAggregateState(
@@ -76,7 +79,8 @@ enum LuckyCatPreviewData {
         quotaShort: Int? = 82,
         quotaLong: Int? = 61,
         quotaStatus: String = "ok",
-        quotaFresh: Bool = true
+        quotaFresh: Bool = true,
+        writerStatus: String = "ok"
     ) -> TaskLightUIState {
         let managedActive = blocked + stale + running + queued + pending
         return TaskLightUIState(
@@ -120,7 +124,7 @@ enum LuckyCatPreviewData {
                 manual_resets_available: 0
             ) : nil,
             diagnostics: TaskLightUIDiagnostics(
-                writer_status: "ok",
+                writer_status: writerStatus,
                 hook_bridge_status: "ok",
                 signal_bus_status: "readable",
                 latest_signal_age_sec: running > 0 ? 2 : 18,

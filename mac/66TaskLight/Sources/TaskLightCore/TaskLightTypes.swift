@@ -29,6 +29,7 @@ public struct TaskLightConfig {
     public var hookBridgeHealthURL: URL
     public var uiStateURL: URL
     public var uiEventFlowURL: URL
+    public var quotaHistoryURL: URL
     public var uiClientsDirectoryURL: URL
     public var workspaceCoverageDirectoryURL: URL
     public var workspaceCoverageRunStatusURL: URL
@@ -57,6 +58,7 @@ public struct TaskLightConfig {
         hookBridgeHealthURL: URL? = nil,
         uiStateURL: URL? = nil,
         uiEventFlowURL: URL? = nil,
+        quotaHistoryURL: URL? = nil,
         uiClientsDirectoryURL: URL? = nil,
         workspaceCoverageDirectoryURL: URL? = nil
     ) {
@@ -69,6 +71,7 @@ public struct TaskLightConfig {
         self.hookBridgeHealthURL = hookBridgeHealthURL ?? stateDirectory.appendingPathComponent("hook_bridge_health.json")
         self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
         self.uiEventFlowURL = uiEventFlowURL ?? stateDirectory.appendingPathComponent("ui_event_flow.jsonl")
+        self.quotaHistoryURL = quotaHistoryURL ?? stateDirectory.appendingPathComponent("quota_history.jsonl")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
         self.workspaceCoverageRunStatusURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("run_status.json")
@@ -99,6 +102,7 @@ public struct TaskLightConfig {
         let hookBridgeHealthURL = ProcessInfo.processInfo.environment["TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH"].map { URL(fileURLWithPath: $0) }
         let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
         let uiEventFlowURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_EVENT_FLOW_PATH"].map { URL(fileURLWithPath: $0) }
+        let quotaHistoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_QUOTA_HISTORY_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
@@ -114,6 +118,7 @@ public struct TaskLightConfig {
             hookBridgeHealthURL: hookBridgeHealthURL,
             uiStateURL: uiStateURL,
             uiEventFlowURL: uiEventFlowURL,
+            quotaHistoryURL: quotaHistoryURL,
             uiClientsDirectoryURL: uiClientsDirectoryURL,
             workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL
         )
@@ -1398,6 +1403,231 @@ public struct CodexQuotaUIState: Codable, Equatable {
     }
 }
 
+public enum TaskLightPresenceMode: String, Codable, CaseIterable {
+    case normal
+    case focusCapsule
+    case menuBarOnly
+
+    public var title: String {
+        switch self {
+        case .normal:
+            return "正常"
+        case .focusCapsule:
+            return "Focus 胶囊"
+        case .menuBarOnly:
+            return "只留菜单栏"
+        }
+    }
+}
+
+public struct QuotaHistorySample: Codable, Equatable {
+    public var schema_version: String
+    public var captured_at: String
+    public var source: String?
+    public var fresh: Bool
+    public var window_id: String
+    public var label: String?
+    public var bucket_id: String?
+    public var remaining_percent: Int
+    public var reset_label: String?
+    public var reset_at: String?
+    public var window_duration_mins: Int?
+
+    public init(
+        schema_version: String = "0.1",
+        captured_at: String,
+        source: String? = nil,
+        fresh: Bool,
+        window_id: String,
+        label: String? = nil,
+        bucket_id: String? = nil,
+        remaining_percent: Int,
+        reset_label: String? = nil,
+        reset_at: String? = nil,
+        window_duration_mins: Int? = nil
+    ) {
+        self.schema_version = schema_version
+        self.captured_at = captured_at
+        self.source = source
+        self.fresh = fresh
+        self.window_id = window_id
+        self.label = label
+        self.bucket_id = bucket_id
+        self.remaining_percent = remaining_percent
+        self.reset_label = reset_label
+        self.reset_at = reset_at
+        self.window_duration_mins = window_duration_mins
+    }
+}
+
+public struct QuotaBurnRateWindow: Codable, Equatable, Identifiable {
+    public var id: String
+    public var label: String
+    public var bucket_id: String?
+    public var remaining_percent: Int?
+    public var samples: Int
+    public var burn_percent_per_hour: Double?
+    public var estimated_empty_at: String?
+    public var reset_label: String?
+    public var reset_at: String?
+    public var warning: String?
+    public var data_status: String
+
+    public init(
+        id: String,
+        label: String,
+        bucket_id: String? = nil,
+        remaining_percent: Int? = nil,
+        samples: Int,
+        burn_percent_per_hour: Double? = nil,
+        estimated_empty_at: String? = nil,
+        reset_label: String? = nil,
+        reset_at: String? = nil,
+        warning: String? = nil,
+        data_status: String
+    ) {
+        self.id = id
+        self.label = label
+        self.bucket_id = bucket_id
+        self.remaining_percent = remaining_percent
+        self.samples = samples
+        self.burn_percent_per_hour = burn_percent_per_hour
+        self.estimated_empty_at = estimated_empty_at
+        self.reset_label = reset_label
+        self.reset_at = reset_at
+        self.warning = warning
+        self.data_status = data_status
+    }
+}
+
+public struct QuotaBurnRateSnapshot: Codable, Equatable {
+    public var status: String
+    public var generated_at: String
+    public var effective_remaining_percent: Int?
+    public var is_low_quota: Bool
+    public var windows: [QuotaBurnRateWindow]
+    public var summary: String
+
+    public init(
+        status: String,
+        generated_at: String = TaskLightTaskRecord.nowString(),
+        effective_remaining_percent: Int? = nil,
+        is_low_quota: Bool = false,
+        windows: [QuotaBurnRateWindow] = [],
+        summary: String
+    ) {
+        self.status = status
+        self.generated_at = generated_at
+        self.effective_remaining_percent = effective_remaining_percent
+        self.is_low_quota = is_low_quota
+        self.windows = windows
+        self.summary = summary
+    }
+}
+
+public struct WorkspaceDoctorRow: Codable, Equatable, Identifiable {
+    public var id: String { workspace }
+    public var workspace: String
+    public var name: String
+    public var group: String
+    public var coverage_status: String
+    public var hook_status: String?
+    public var hook_detail: String?
+    public var hook_visibility: String?
+    public var reason: String
+    public var recommended_action: String
+    public var severity: String
+    public var preferred: Bool
+
+    public init(
+        workspace: String,
+        name: String,
+        group: String,
+        coverage_status: String,
+        hook_status: String? = nil,
+        hook_detail: String? = nil,
+        hook_visibility: String? = nil,
+        reason: String,
+        recommended_action: String,
+        severity: String,
+        preferred: Bool
+    ) {
+        self.workspace = workspace
+        self.name = name
+        self.group = group
+        self.coverage_status = coverage_status
+        self.hook_status = hook_status
+        self.hook_detail = hook_detail
+        self.hook_visibility = hook_visibility
+        self.reason = reason
+        self.recommended_action = recommended_action
+        self.severity = severity
+        self.preferred = preferred
+    }
+}
+
+public struct StatusReplayRecord: Codable, Equatable, Identifiable {
+    public var id: String
+    public var recorded_at: String
+    public var from_status: String
+    public var to_status: String
+    public var lamp_status: String
+    public var evidence: String
+    public var markers: [String]
+    public var counts_summary: String
+    public var writer_status: String
+    public var hook_bridge_status: String
+
+    public init(
+        id: String,
+        recorded_at: String,
+        from_status: String,
+        to_status: String,
+        lamp_status: String,
+        evidence: String,
+        markers: [String],
+        counts_summary: String,
+        writer_status: String,
+        hook_bridge_status: String
+    ) {
+        self.id = id
+        self.recorded_at = recorded_at
+        self.from_status = from_status
+        self.to_status = to_status
+        self.lamp_status = lamp_status
+        self.evidence = evidence
+        self.markers = markers
+        self.counts_summary = counts_summary
+        self.writer_status = writer_status
+        self.hook_bridge_status = hook_bridge_status
+    }
+}
+
+public struct InteractionRuleSelfTestResult: Codable, Equatable {
+    public var single_click_toggles: Bool
+    public var drag_threshold_prevents_toggle: Bool
+    public var long_press_prevents_toggle: Bool
+    public var double_click_opens_diagnostics: Bool
+    public var threshold_points: Double
+    public var long_press_ms: Int
+
+    public init(
+        single_click_toggles: Bool,
+        drag_threshold_prevents_toggle: Bool,
+        long_press_prevents_toggle: Bool,
+        double_click_opens_diagnostics: Bool,
+        threshold_points: Double,
+        long_press_ms: Int
+    ) {
+        self.single_click_toggles = single_click_toggles
+        self.drag_threshold_prevents_toggle = drag_threshold_prevents_toggle
+        self.long_press_prevents_toggle = long_press_prevents_toggle
+        self.double_click_opens_diagnostics = double_click_opens_diagnostics
+        self.threshold_points = threshold_points
+        self.long_press_ms = long_press_ms
+    }
+}
+
 public struct TaskLightUIState: Codable, Equatable {
     public var schema_version: String
     public var source: String
@@ -1689,6 +1919,8 @@ public enum TaskLightLedgerKeys {
     public static let muted = "TaskLightMuted"
     public static let expanded = "TaskLightExpanded"
     public static let edgeCollapsed = "TaskLightEdgeCollapsed"
+    public static let presenceMode = "TaskLightPresenceMode"
+    public static let autoMeetingMode = "TaskLightAutoMeetingMode"
 }
 
 private enum SHA256 {
@@ -1700,9 +1932,13 @@ private enum SHA256 {
 
 extension TaskLightTaskRecord {
     public static func nowString() -> String {
+        nowString(from: Date())
+    }
+
+    public static func nowString(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter.string(from: Date()).replacingOccurrences(of: "+00:00", with: "Z")
+        return formatter.string(from: date).replacingOccurrences(of: "+00:00", with: "Z")
     }
 }

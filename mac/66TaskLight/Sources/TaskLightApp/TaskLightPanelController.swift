@@ -135,7 +135,7 @@ private func compactStatusOrbCenter(panelSize: NSSize) -> NSPoint {
 
 private let taskLightEdgeToggleDebounceSeconds: TimeInterval = 0.08
 private let taskLightEdgeTransitionDuration: TimeInterval = 0.06
-private let taskLightDragThreshold: CGFloat = 6
+private let taskLightDragThreshold: CGFloat = 4
 private let taskLightClickMaxDuration: TimeInterval = 0.45
 private let taskLightNativePressRecoveryDelays: [TimeInterval] = [0.045, 0.12, 0.28]
 let taskLightTraceWriteQueue = DispatchQueue(label: "com.local.66tasklight.trace-writes", qos: .utility)
@@ -251,6 +251,13 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             .dropFirst()
             .sink { [weak self] _ in
                 self?.forceRestoreFromEdgePanel(source: "edgeRailClickCatcher.restore")
+            }
+            .store(in: &cancellables)
+        viewModel.$presenceMode
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] mode in
+                self?.applyPresenceModeFromMenuBar(mode)
             }
             .store(in: &cancellables)
     }
@@ -389,6 +396,27 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             closeExpandedFromMenuBar()
         } else {
             openExpandedFromMenuBar()
+        }
+    }
+
+    func applyPresenceModeFromMenuBar(_ mode: TaskLightPresenceMode) {
+        switch mode {
+        case .normal:
+            showCompactFromMenuBar()
+            appendStartupTrace("menuBar.presence.normal")
+        case .focusCapsule:
+            if compactPanel == nil {
+                showPanel()
+            }
+            setEdgeCollapsedFromInteraction(true, source: "menuBar.presence.focusCapsule")
+            appendStartupTrace("menuBar.presence.focusCapsule")
+        case .menuBarOnly:
+            compactPanel?.orderOut(nil)
+            edgePanel?.orderOut(nil)
+            expandedPanel?.orderOut(nil)
+            viewModel.expanded = false
+            viewModel.setContentExpanded(false)
+            appendStartupTrace("menuBar.presence.menuBarOnly")
         }
     }
 
@@ -707,16 +735,14 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
 
         edgeTransitionLockedUntil = .distantPast
         lastEdgeToggleAt = .distantPast
-        let edgeSingleClickHandled = handleEdgeRailClick(clickCount: 1, source: "selfTest.edgeSingleClick")
-        flushPendingEdgeModelSyncForSelfTest()
-        let edgeSingleClickNoRestorePass = edgeSingleClickHandled
-            && viewModel.edgeCollapsed == true
-            && panelIsInteractivelyVisible(edgePanel)
-            && panelIsInteractivelyVisible(compactPanel) == false
         let restoreStart = CACurrentMediaTime()
-        _ = handleEdgeRailClick(clickCount: 2, source: "selfTest.edgeDoubleClick")
+        let edgeSingleClickHandled = handleEdgeRailClick(clickCount: 1, source: "selfTest.edgeSingleClick")
         let restoreApplyMs = (CACurrentMediaTime() - restoreStart) * 1000
         flushPendingEdgeModelSyncForSelfTest()
+        let edgeSingleClickRestorePass = edgeSingleClickHandled
+            && viewModel.edgeCollapsed == false
+            && panelIsInteractivelyVisible(compactPanel)
+            && panelIsInteractivelyVisible(edgePanel) == false
         let restoredPass = compactPanel?.isVisible == true
             && compactPanel.map { panelSizeMatches($0, compactSize) } == true
             && panelIsInteractivelyVisible(compactPanel)
@@ -734,7 +760,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             && collapsedAlphaPass
             && collapsedAnchoredFromCompactPass
             && edgeDragPass
-            && edgeSingleClickNoRestorePass
+            && edgeSingleClickRestorePass
             && restoredPass
             && restoredAlphaPass
             && restoredFromMovedEdgePass
@@ -752,7 +778,15 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             "stale_stored_edge_frame": framePayload(staleStoredEdgeFrame),
             "expected_collapsed_edge_frame": framePayload(expectedCollapsedEdgeFrame),
             "edge_drag_pass": edgeDragPass,
-            "edge_single_click_no_restore_pass": edgeSingleClickNoRestorePass,
+            "edge_single_click_restore_pass": edgeSingleClickRestorePass,
+            "interaction_rules": [
+                "single_click_toggles": true,
+                "drag_threshold_prevents_toggle": compactDragPass && edgeDragPass,
+                "long_press_prevents_toggle": true,
+                "double_click_opens_diagnostics": true,
+                "threshold_points": taskLightDragThreshold,
+                "long_press_ms": Int(taskLightClickMaxDuration * 1000)
+            ],
             "restored_pass": restoredPass,
             "restored_alpha_pass": restoredAlphaPass,
             "restored_from_moved_edge_pass": restoredFromMovedEdgePass,
@@ -939,6 +973,17 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).panelClickNoToggle")
             return true
         }
+        if clickCount >= 2 {
+            viewModel.expanded = true
+            writeClickDiagnostic(
+                source: source,
+                action: "double_click_open_diagnostics",
+                point: point,
+                extra: ["click_count": clickCount]
+            )
+            appendStartupTrace("\(source).doubleClickOpenDiagnostics")
+            return true
+        }
         setEdgeCollapsedFromInteraction(true, source: "\(source).compactCollapse")
         writeClickDiagnostic(
             source: source,
@@ -951,26 +996,13 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
 
     @discardableResult
     private func handleEdgeRailClick(clickCount: Int, source: String) -> Bool {
-        guard clickCount >= 2 else {
-            if let edgePanel {
-                rememberEdgeRailFrame(edgePanel.frame, source: "\(source).singleClickAnchor", persistImmediately: false)
-            }
-            writeClickDiagnostic(
-                source: source,
-                action: "edge_click_no_toggle",
-                point: nil,
-                extra: ["click_count": clickCount]
-            )
-            appendStartupTrace("\(source).edgeClickNoToggle.\(clickCount)")
-            return true
-        }
         if let edgePanel {
             rememberEdgeRailFrame(edgePanel.frame, source: "\(source).restoreAnchor", persistImmediately: false)
         }
         forceRestoreFromEdgePanel(source: "\(source).edgeRestore")
         writeClickDiagnostic(
             source: source,
-            action: "restore_double_click",
+            action: clickCount >= 2 ? "restore_double_click" : "restore_single_click",
             point: nil,
             extra: ["click_count": clickCount]
         )
@@ -993,31 +1025,6 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             } else {
                 _ = handleEdgeRailClick(clickCount: event.clickCount, source: source)
             }
-            return
-        }
-
-        if target == .compact,
-           taskLightCompactStatusOrbHit(event.locationInWindow, panelSize: panel.frame.size) {
-            let startedAt = CACurrentMediaTime()
-            fallbackPress = nil
-            nativePress = nil
-            isPanelPressTracking = false
-            lastPolledLeftMouseDown = true
-            suppressFallbackPressUntil = Date().addingTimeInterval(0.12)
-            appendStartupTrace("\(source).instantStatusOrbDown")
-            _ = handleCompactPanelMouseDown(
-                at: event.locationInWindow,
-                panelSize: panel.frame.size,
-                clickCount: event.clickCount,
-                source: "\(source).instant"
-            )
-            writeManualLatency(
-                source: source,
-                action: "compact_status_orb_mouse_down",
-                startedAt: startedAt,
-                eventTimestamp: event.timestamp
-            )
-            writeClickDiagnostic(source: source, action: "instant_status_orb_down", point: event.locationInWindow)
             return
         }
 

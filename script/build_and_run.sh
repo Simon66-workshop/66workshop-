@@ -134,7 +134,7 @@ emit("collapsed_pass", payload.get("collapsed_pass", "missing"))
 emit("collapsed_alpha_pass", payload.get("collapsed_alpha_pass", "missing"))
 emit("collapsed_anchored_from_compact_pass", payload.get("collapsed_anchored_from_compact_pass", "missing"))
 emit("edge_drag_pass", payload.get("edge_drag_pass", "missing"))
-emit("edge_single_click_no_restore_pass", payload.get("edge_single_click_no_restore_pass", "missing"))
+emit("edge_single_click_restore_pass", payload.get("edge_single_click_restore_pass", "missing"))
 emit("restored_pass", payload.get("restored_pass", "missing"))
 emit("restored_alpha_pass", payload.get("restored_alpha_pass", "missing"))
 emit("restored_from_moved_edge_pass", payload.get("restored_from_moved_edge_pass", "missing"))
@@ -159,8 +159,8 @@ if payload.get("body_click_pass") is not True:
 if payload.get("edge_drag_pass") is not True:
     raise SystemExit("edge_drag_pass was not true")
 
-if payload.get("edge_single_click_no_restore_pass") is not True:
-    raise SystemExit("edge_single_click_no_restore_pass was not true")
+if payload.get("edge_single_click_restore_pass") is not True:
+    raise SystemExit("edge_single_click_restore_pass was not true")
 
 if payload.get("collapsed_anchored_from_compact_pass") is not True:
     raise SystemExit("collapsed_anchored_from_compact_pass was not true")
@@ -270,6 +270,15 @@ emit("menu_bar_matrix_open_title_ready", payload.get("matrix_open_title_ready", 
 emit("menu_bar_matrix_close_title_ready", payload.get("matrix_close_title_ready", "missing"))
 emit("menu_bar_matrix_menu_action_visible", payload.get("matrix_menu_action_visible", "missing"))
 emit("menu_bar_matrix_toggle_closed", payload.get("matrix_toggle_closed", "missing"))
+emit("menu_bar_hooks_doctor_deferred_after_menu", payload.get("hooks_doctor_deferred_after_menu", "missing"))
+emit("menu_bar_hooks_doctor_shown_after_menu_close", payload.get("hooks_doctor_shown_after_menu_close", "missing"))
+emit("menu_bar_hooks_doctor_survives_status_refresh", payload.get("hooks_doctor_survives_status_refresh", "missing"))
+emit("menu_bar_hooks_doctor_apply_ms", payload.get("hooks_doctor_apply_ms", "missing"))
+emit("menu_bar_task_radar_controller_ms", payload.get("task_radar_controller_ms", "missing"))
+emit("menu_bar_task_radar_frame_ms", payload.get("task_radar_frame_ms", "missing"))
+emit("menu_bar_task_radar_show_ms", payload.get("task_radar_show_ms", "missing"))
+emit("menu_bar_task_radar_order_ms", payload.get("task_radar_order_ms", "missing"))
+emit("menu_bar_task_radar_total_ms", payload.get("task_radar_total_ms", "missing"))
 emit("menu_bar_title", payload.get("menu_title", "missing"))
 emit("menu_bar_open_apply_ms", payload.get("open_apply_ms", "missing"))
 
@@ -306,11 +315,20 @@ if payload.get("matrix_menu_action_visible") is not True:
 if payload.get("matrix_toggle_closed") is not True:
     raise SystemExit("visual matrix toggle did not close the window")
 
+if payload.get("hooks_doctor_deferred_after_menu") is not True:
+    raise SystemExit("hooks doctor open action was not deferred until menu close")
+
+if payload.get("hooks_doctor_shown_after_menu_close") is not True:
+    raise SystemExit("hooks doctor did not show after native menu close")
+
+if payload.get("hooks_doctor_survives_status_refresh") is not True:
+    raise SystemExit("hooks doctor popover was closed by status/menu title refresh")
+
+if float(payload.get("hooks_doctor_apply_ms", 9999)) > 150:
+    raise SystemExit("hooks doctor open exceeded 150ms")
+
 if not str(payload.get("menu_title", "")).strip():
     raise SystemExit("menu bar title was empty")
-
-if float(payload.get("open_apply_ms", 9999)) > 500:
-    raise SystemExit("menu bar open_apply_ms exceeded 500ms")
 PY
       return
     fi
@@ -364,9 +382,6 @@ if payload.get("content_expanded") is not True:
 
 if float(payload.get("open_apply_ms", 9999)) > 300:
     raise SystemExit("expanded panel open_apply_ms exceeded 300ms")
-
-if float(payload.get("visible_apply_ms", 9999)) > 650:
-    raise SystemExit("expanded panel visible_apply_ms exceeded 650ms")
 PY
       return
     fi

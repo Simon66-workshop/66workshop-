@@ -1,6 +1,61 @@
 import SwiftUI
 import TaskLightCore
 
+struct TaskRadarWindowHostView: View {
+    @ObservedObject var viewModel: TaskLightViewModel
+    let onOpenVisualMatrix: (() -> Void)?
+    @State private var showsRadar = false
+
+    var body: some View {
+        ZStack {
+            radarHostBackground
+            if showsRadar {
+                TaskRadarPopoverView(viewModel: viewModel, onOpenVisualMatrix: onOpenVisualMatrix)
+                    .transition(.opacity)
+            } else {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("任务雷达")
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    Text("正在整理 Hooks Doctor 和状态回放")
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                }
+                .padding(22)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(.thinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(Color.white.opacity(0.42), lineWidth: 1)
+                        )
+                )
+            }
+        }
+        .frame(width: 420, height: 640, alignment: .center)
+        .onAppear {
+            guard !showsRadar else { return }
+            DispatchQueue.main.async {
+                showsRadar = true
+            }
+        }
+    }
+
+    private var radarHostBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.99, green: 0.93, blue: 0.97).opacity(0.84),
+                Color(red: 0.83, green: 0.94, blue: 1.0).opacity(0.76)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+}
+
 struct TaskRadarPopoverView: View {
     @ObservedObject var viewModel: TaskLightViewModel
     let onOpenVisualMatrix: (() -> Void)?
@@ -28,6 +83,10 @@ struct TaskRadarPopoverView: View {
             quotaCard
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 14) {
+                    quotaPaceSection
+                    hooksDoctorSection
+                    statusReplaySection
+                    interactionRulesSection
                     taskSection
                     observedSection
                     diagnosticsSection
@@ -36,7 +95,7 @@ struct TaskRadarPopoverView: View {
             }
         }
         .padding(16)
-        .frame(width: 390, height: 540, alignment: .topLeading)
+        .frame(width: 420, height: 640, alignment: .topLeading)
         .background(radarBackground)
     }
 
@@ -96,6 +155,99 @@ struct TaskRadarPopoverView: View {
         }
         .padding(12)
         .background(glassCard(cornerRadius: 18))
+    }
+
+    private var quotaPaceSection: some View {
+        let snapshot = viewModel.quotaBurnRateSnapshot()
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Quota Pace", subtitle: snapshot.status)
+            Text(snapshot.summary)
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(snapshot.is_low_quota ? LuckyCatTokens.Palette.red : LuckyCatTokens.Palette.textSecondary)
+            if snapshot.windows.isEmpty {
+                emptyRow("Quota history is still warming up")
+            } else {
+                ForEach(snapshot.windows.prefix(3)) { window in
+                    quotaPaceRow(window)
+                }
+            }
+        }
+    }
+
+    private var hooksDoctorSection: some View {
+        let rows = viewModel.workspaceDoctorRows()
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Hooks Doctor", subtitle: rows.isEmpty ? "no report" : "\(rows.count)")
+            HStack(spacing: 7) {
+                Button("巡检") {
+                    viewModel.runWorkspaceCoverageReport()
+                }
+                .buttonStyle(.plain)
+                .miniRadarButtonStyle()
+                Button("报告") {
+                    viewModel.openWorkspaceCoverageReport()
+                }
+                .buttonStyle(.plain)
+                .miniRadarButtonStyle()
+                Button("安装说明") {
+                    viewModel.openWorkspaceHooksGuide()
+                }
+                .buttonStyle(.plain)
+                .miniRadarButtonStyle()
+                Spacer(minLength: 0)
+            }
+            .accessibilityLabel("Hooks Doctor actions")
+            if rows.isEmpty {
+                emptyRow("Run Workspace 巡检 to build doctor report")
+            } else {
+                ForEach(rows.prefix(5)) { row in
+                    workspaceDoctorRow(row)
+                }
+                Text("可按安装说明手动安装 hooks；安装后仍必须在 Codex UI 手动 Trust。这里不会自动 trust，也不会自动修改任务状态。")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+        }
+    }
+
+    private var statusReplaySection: some View {
+        let records = viewModel.statusReplayRecords(hours: 24, limit: 8)
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("24h Status Replay")
+                    .font(LuckyCatTokens.Typography.sectionLabel)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                Spacer()
+                Text("\(records.count)")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
+                Button("复制证据") {
+                    viewModel.copyStatusReplayEvidence()
+                }
+                .buttonStyle(.plain)
+                .miniRadarButtonStyle()
+            }
+            if records.isEmpty {
+                emptyRow("No state transition evidence in the last 24h")
+            } else {
+                ForEach(records.prefix(5)) { record in
+                    statusReplayRow(record)
+                }
+            }
+        }
+    }
+
+    private var interactionRulesSection: some View {
+        let rules = viewModel.interactionRulesSummary()
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Interaction Rules", subtitle: "\(Int(rules.threshold_points))pt / \(rules.long_press_ms)ms")
+            Text("单击切换 · 拖动只拖动 · 长按不切换 · 双击打开诊断")
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(glassCard(cornerRadius: 14))
+        }
     }
 
     private var taskSection: some View {
@@ -188,6 +340,84 @@ struct TaskRadarPopoverView: View {
         .background(glassCard(cornerRadius: 14))
     }
 
+    private func quotaPaceRow(_ window: QuotaBurnRateWindow) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(window.label)
+                    .font(LuckyCatTokens.Typography.taskTitle)
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    .lineLimit(1)
+                Text("reset \(window.reset_label ?? "--") · samples \(window.samples)")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(window.remaining_percent.map { "\($0)%" } ?? "Q?")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(window.warning == "low_quota" ? LuckyCatTokens.Palette.red : LuckyCatTokens.Palette.textPrimary)
+                    .monospacedDigit()
+                Text(window.burn_percent_per_hour.map { String(format: "%.1f%%/h", $0) } ?? "warming")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+        }
+        .padding(10)
+        .background(glassCard(cornerRadius: 14))
+    }
+
+    private func workspaceDoctorRow(_ row: WorkspaceDoctorRow) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Circle()
+                .fill(workspaceSeverityColor(row.severity))
+                .frame(width: 10, height: 10)
+                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.name)
+                    .font(LuckyCatTokens.Typography.taskTitle)
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    .lineLimit(1)
+                Text("\(row.coverage_status) · \(row.reason)")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            if row.preferred {
+                Text("常用")
+                    .font(LuckyCatTokens.Typography.statusPill)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+        }
+        .padding(10)
+        .background(glassCard(cornerRadius: 14))
+    }
+
+    private func statusReplayRow(_ record: StatusReplayRecord) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("\(record.from_status) → \(record.to_status)")
+                    .font(LuckyCatTokens.Typography.taskTitle)
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                Spacer()
+                Text(shortTime(record.recorded_at))
+                    .font(LuckyCatTokens.Typography.statusPill)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            }
+            Text(record.counts_summary)
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+            if !record.markers.isEmpty {
+                Text(record.markers.joined(separator: " · "))
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.amber)
+                    .lineLimit(1)
+            }
+        }
+        .padding(10)
+        .background(glassCard(cornerRadius: 14))
+    }
+
     private func diagnosticPill(_ row: TaskRadarDiagnosticRow) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(row.label.uppercased())
@@ -226,6 +456,26 @@ struct TaskRadarPopoverView: View {
         }
     }
 
+    private func workspaceSeverityColor(_ severity: String) -> Color {
+        switch severity {
+        case "ok":
+            return LuckyCatTokens.Palette.green
+        case "warning", "needs_review":
+            return LuckyCatTokens.Palette.amber
+        case "attention":
+            return LuckyCatTokens.Palette.red
+        default:
+            return LuckyCatTokens.Palette.textSecondary.opacity(0.7)
+        }
+    }
+
+    private func shortTime(_ raw: String) -> String {
+        guard let date = TaskLightTaskRecord.parseTimestamp(raw) else { return raw }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
     private func glassCard(cornerRadius: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.thinMaterial)
@@ -239,7 +489,7 @@ struct TaskRadarPopoverView: View {
             )
     }
 
-    private var radarBackground: some View {
+private var radarBackground: some View {
         LinearGradient(
             colors: [
                 LuckyCatTokens.Palette.cream.opacity(0.82),
@@ -250,5 +500,16 @@ struct TaskRadarPopoverView: View {
             endPoint: .bottomTrailing
         )
         .overlay(.ultraThinMaterial.opacity(0.64))
+    }
+}
+
+private extension View {
+    func miniRadarButtonStyle() -> some View {
+        self
+            .font(LuckyCatTokens.Typography.statusPill)
+            .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.34)))
     }
 }

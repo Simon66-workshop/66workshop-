@@ -13,6 +13,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_codex_quota.sh"
 "$ROOT_DIR/script/smoke_codex_quota_watcher.sh"
 "$ROOT_DIR/script/smoke_codex_quota_watcher_launch_agent.sh"
+"$ROOT_DIR/script/smoke_quota_burn_rate.sh"
 "$ROOT_DIR/script/smoke_turn_runtime_arbiter.sh"
 "$ROOT_DIR/script/smoke_multitask.sh"
 "$ROOT_DIR/script/smoke_verify_gate.sh"
@@ -25,6 +26,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_codex_thread_coverage.sh"
 "$ROOT_DIR/script/smoke_status_reflection_cases.sh"
 "$ROOT_DIR/script/smoke_workspace_coverage.sh"
+"$ROOT_DIR/script/smoke_workspace_hooks_doctor.sh"
 "$ROOT_DIR/script/smoke_hooks_config.sh"
 "$ROOT_DIR/script/smoke_hook_signal_bridge.sh"
 "$ROOT_DIR/script/smoke_check_all_total_schema.sh"
@@ -39,12 +41,16 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_self_review_generate_scope.sh"
 "$ROOT_DIR/script/smoke_luckycat_edge_toggle_atomic.sh"
 "$ROOT_DIR/script/smoke_luckycat_edge_toggle_runtime.sh"
+"$ROOT_DIR/script/smoke_status_orb_interaction_rules.sh"
 "$ROOT_DIR/script/smoke_luckycat_expanded_panel.sh"
 "$ROOT_DIR/script/smoke_luckycat_expanded_panel_runtime.sh"
 "$ROOT_DIR/script/smoke_luckycat_menu_bar.sh"
 "$ROOT_DIR/script/smoke_luckycat_menu_bar_runtime.sh"
 "$ROOT_DIR/script/smoke_luckycat_visual_matrix.sh"
+"$ROOT_DIR/script/smoke_luckycat_visual_matrix_readability.sh"
 "$ROOT_DIR/script/smoke_luckycat_visual_matrix_runtime.sh"
+"$ROOT_DIR/script/smoke_status_replay_history.sh"
+"$ROOT_DIR/script/smoke_focus_meeting_mode.sh"
 python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
 "$ROOT_DIR/script/check_state_projector.sh" >/dev/null
 "$ROOT_DIR/script/build_and_run.sh" --verify

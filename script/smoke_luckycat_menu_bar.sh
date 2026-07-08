@@ -81,6 +81,14 @@ rg -q "func menuWillOpen" "$controller" \
 rg -q "func menuNeedsUpdate" "$controller" \
   || fail "native status menu should rebuild dynamic titles before opening"
 
+sed -n '/func menuNeedsUpdate/,/^    func menuDidClose/p' "$controller" > /tmp/66tasklight-menu-needs-update-section.txt
+rg -q "updateStatusMenuTitles\\(" /tmp/66tasklight-menu-needs-update-section.txt \
+  || fail "menuNeedsUpdate should only refresh lightweight menu titles"
+if rg -n "rebuildStatusMenu\\(|removeAllItems\\(" /tmp/66tasklight-menu-needs-update-section.txt >/tmp/66tasklight-menu-needs-update-heavy.txt; then
+  cat /tmp/66tasklight-menu-needs-update-heavy.txt
+  fail "menuNeedsUpdate must not rebuild or remove menu items while the user is tracking the menu"
+fi
+
 rg -q "guard !isStatusMenuOpen else" "$controller" \
   || fail "status item updates must be deferred while the native menu is tracking"
 
@@ -93,11 +101,30 @@ if rg -n "rebuildStatusMenu\\(" /tmp/66tasklight-menu-close-section.txt >/tmp/66
   fail "menuDidClose must not synchronously rebuild the menu after every menu tracking session"
 fi
 
+rg -q "pendingMenuCloseAction" /tmp/66tasklight-menu-close-section.txt \
+  || fail "menu actions that open radar should be deferred until after native menu tracking closes"
+
 sed -n '/private func togglePopover/,/^    private func rebuildStatusMenu/p' "$controller" > /tmp/66tasklight-menu-popover-section.txt
 if rg -n "NSApp\\.activate" /tmp/66tasklight-menu-popover-section.txt >/tmp/66tasklight-menu-popover-activate.txt; then
   cat /tmp/66tasklight-menu-popover-activate.txt
   fail "task radar popover should not activate the app during menu tracking"
 fi
+
+sed -n '/private func rebuildStatusMenu/,/^    private func updateStatusMenuTitles/p' "$controller" > /tmp/66tasklight-menu-rebuild-section.txt
+if rg -n "popover\\.close|performClose" /tmp/66tasklight-menu-rebuild-section.txt >/tmp/66tasklight-menu-rebuild-closes-popover.txt; then
+  cat /tmp/66tasklight-menu-rebuild-closes-popover.txt
+  fail "status/menu title refresh must not close the radar popover"
+fi
+rg -q "guard statusMenu\\.items\\.isEmpty else" /tmp/66tasklight-menu-rebuild-section.txt \
+  || fail "status menu should be built once and then updated in place to avoid hover latency"
+if rg -n "removeAllItems\\(" /tmp/66tasklight-menu-rebuild-section.txt >/tmp/66tasklight-menu-remove-all.txt; then
+  cat /tmp/66tasklight-menu-remove-all.txt
+  fail "status menu must not remove/rebuild all items during normal refresh"
+fi
+
+sed -n '/private func schedulePopoverOpen/,/^    @objc private func toggleFocusMode/p' "$controller" > /tmp/66tasklight-menu-schedule-popover.txt
+rg -q "pendingMenuCloseAction = openAction" /tmp/66tasklight-menu-schedule-popover.txt \
+  || fail "radar popover should be scheduled after menu close to avoid transient popover dismissal"
 
 sed -n '/private func appendMenuTrace/,/^}/p' "$controller" > /tmp/66tasklight-menu-trace-section.txt
 rg -q "taskLightTraceWriteQueue\\.async" /tmp/66tasklight-menu-trace-section.txt \

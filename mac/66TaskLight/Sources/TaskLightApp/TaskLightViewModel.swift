@@ -38,6 +38,8 @@ final class TaskLightViewModel: ObservableObject {
     @Published var uiState: TaskLightUIState
     @Published var expanded: Bool
     @Published var edgeCollapsed: Bool
+    @Published var presenceMode: TaskLightPresenceMode
+    @Published var autoMeetingModeEnabled: Bool
     @Published private(set) var edgeCollapseRequestID: Int
     @Published private(set) var edgeRestoreRequestID: Int
     @Published var contentExpanded: Bool
@@ -49,6 +51,7 @@ final class TaskLightViewModel: ObservableObject {
     let config: TaskLightConfig
     let store: TaskLightStore
 
+    private let previewMode: Bool
     private var timer: Timer?
     private var ledger: TaskLightPlayedEventsLedger
     private var stateDirectoryFileDescriptor: CInt?
@@ -68,11 +71,14 @@ final class TaskLightViewModel: ObservableObject {
     private var lastUIClientDiagnosticWriteAt: Date?
     private var lastUIEventFlowFingerprint: String?
     private var lastUIStateRefreshSignature: String?
+    private var lastQuotaHistorySignature: String?
+    private var autoMeetingApplied = false
     private var suppressCompactTapUntil: Date?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
         self.store = store ?? TaskLightStore(config: config)
+        self.previewMode = false
         self.store.ensureLayout()
         let initialUIState = self.store.loadProjectedUIState()
         let defaults = UserDefaults.standard
@@ -80,6 +86,8 @@ final class TaskLightViewModel: ObservableObject {
         self.expanded = false
         self.edgeCollapsed = false
         defaults.set(false, forKey: TaskLightLedgerKeys.edgeCollapsed)
+        self.presenceMode = TaskLightPresenceMode(rawValue: defaults.string(forKey: TaskLightLedgerKeys.presenceMode) ?? "") ?? .normal
+        self.autoMeetingModeEnabled = defaults.bool(forKey: TaskLightLedgerKeys.autoMeetingMode)
         self.edgeCollapseRequestID = 0
         self.edgeRestoreRequestID = 0
         self.contentExpanded = false
@@ -89,15 +97,19 @@ final class TaskLightViewModel: ObservableObject {
         self.alertEventSnapshot = []
         self.uiStateRevision = 0
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: initialUIState, config: config)
+        self.lastLoadedUIStateFileFingerprint = Self.fileFingerprint(for: config.uiStateURL)
     }
 
     init(previewUIState: TaskLightUIState) {
         let config = TaskLightConfig.fromEnvironment()
         self.config = config
         self.store = TaskLightStore(config: config)
+        self.previewMode = true
         self.uiState = previewUIState
         self.expanded = false
         self.edgeCollapsed = false
+        self.presenceMode = .normal
+        self.autoMeetingModeEnabled = false
         self.edgeCollapseRequestID = 0
         self.edgeRestoreRequestID = 0
         self.contentExpanded = false
@@ -107,6 +119,7 @@ final class TaskLightViewModel: ObservableObject {
         self.alertEventSnapshot = []
         self.uiStateRevision = 0
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: previewUIState, config: config)
+        self.lastLoadedUIStateFileFingerprint = "preview"
     }
 
     func start() {
@@ -140,6 +153,7 @@ final class TaskLightViewModel: ObservableObject {
         lastLoadedUIStateFileFingerprint = uiStateFileFingerprint
         let previousState = uiState
         let nextState = store.loadProjectedUIState()
+        recordQuotaHistoryIfNeeded(nextState.quota)
         let nextSignature = Self.uiStateRefreshSignature(for: nextState, config: config)
         if nextSignature != lastUIStateRefreshSignature || nextState != previousState {
             uiStateRevision += 1
@@ -147,6 +161,7 @@ final class TaskLightViewModel: ObservableObject {
         lastUIStateRefreshSignature = nextSignature
         uiState = nextState
         recordUIEventFlow(previous: previousState, current: nextState)
+        applyAutoMeetingPresenceIfNeeded()
         refreshRecentEventsIfNeeded()
         saveUIClientDiagnostic()
         handleAlertPlayback()
@@ -260,8 +275,151 @@ final class TaskLightViewModel: ObservableObject {
         scheduleWorkspaceCoverageRefreshes()
     }
 
+    func setPresenceMode(_ mode: TaskLightPresenceMode) {
+        guard presenceMode != mode else { return }
+        presenceMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: TaskLightLedgerKeys.presenceMode)
+    }
+
+    func toggleFocusCapsuleMode() {
+        setPresenceMode(presenceMode == .focusCapsule ? .normal : .focusCapsule)
+    }
+
+    func setMenuBarOnlyMode(_ enabled: Bool) {
+        setPresenceMode(enabled ? .menuBarOnly : .normal)
+    }
+
+    func setAutoMeetingModeEnabled(_ enabled: Bool) {
+        guard autoMeetingModeEnabled != enabled else { return }
+        autoMeetingModeEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: TaskLightLedgerKeys.autoMeetingMode)
+        if !enabled, autoMeetingApplied {
+            autoMeetingApplied = false
+            if presenceMode == .focusCapsule {
+                setPresenceMode(.normal)
+            }
+        }
+    }
+
     func openWorkspaceCoverageReport() {
         NSWorkspace.shared.open(config.workspaceCoverageLatestMarkdownURL)
+    }
+
+    func openWorkspaceHooksGuide() {
+        NSWorkspace.shared.open(projectDocumentationURL("CODEX_WORKSPACE_ONBOARDING.md"))
+    }
+
+    func openWorkspaceHooksSetupGuide() {
+        NSWorkspace.shared.open(projectDocumentationURL("CODEX_HOOKS_SETUP.md"))
+    }
+
+    func quotaBurnRateSnapshot() -> QuotaBurnRateSnapshot {
+        guard let quota = uiState.quota, quota.fresh else {
+            return QuotaBurnRateSnapshot(
+                status: "unknown",
+                effective_remaining_percent: uiState.quota?.effective_remaining_percent,
+                is_low_quota: false,
+                summary: "Quota 数据不足"
+            )
+        }
+        if previewMode {
+            let windows = quotaBurnCurrentWindows(from: quota).map { current in
+                QuotaBurnRateWindow(
+                    id: current.window_id,
+                    label: current.label ?? current.window_id,
+                    bucket_id: current.bucket_id,
+                    remaining_percent: current.remaining_percent,
+                    samples: 3,
+                    burn_percent_per_hour: current.remaining_percent < 20 ? 8.4 : 1.8,
+                    estimated_empty_at: nil,
+                    reset_label: current.reset_label,
+                    reset_at: current.reset_at,
+                    warning: current.remaining_percent < 20 ? "low_quota" : nil,
+                    data_status: "preview_fixture"
+                )
+            }
+            return QuotaBurnRateSnapshot(
+                status: quotaIsCritical() ? "warning" : "preview",
+                effective_remaining_percent: quota.effective_remaining_percent,
+                is_low_quota: quotaIsCritical(),
+                windows: windows,
+                summary: quotaIsCritical() ? "预览：低额度红字" : "预览：burn-rate fixture"
+            )
+        }
+        let history = store.loadQuotaHistory()
+        let currentWindows = quotaBurnCurrentWindows(from: quota)
+        let windows = currentWindows.map { current in
+            burnRateWindow(current: current, history: history)
+        }
+        let remainingValues = [
+            quota.short_percent,
+            quota.long_percent,
+            quota.effective_remaining_percent
+        ].compactMap { $0 }
+        let lowQuota = remainingValues.min().map { $0 < 20 } ?? false
+        let status = lowQuota ? "warning" : (windows.contains { $0.burn_percent_per_hour != nil } ? "ok" : "insufficient_data")
+        let summary: String
+        if lowQuota {
+            summary = "低于 20%，建议收敛高消耗任务"
+        } else if let fastest = windows.compactMap(\.burn_percent_per_hour).max(), fastest > 0 {
+            summary = String(format: "当前最快 %.1f%%/h", fastest)
+        } else {
+            summary = "正在积累 burn-rate 样本"
+        }
+        return QuotaBurnRateSnapshot(
+            status: status,
+            effective_remaining_percent: quota.effective_remaining_percent,
+            is_low_quota: lowQuota,
+            windows: windows,
+            summary: summary
+        )
+    }
+
+    func workspaceDoctorRows(limit: Int = 8) -> [WorkspaceDoctorRow] {
+        if previewMode {
+            return [
+                WorkspaceDoctorRow(
+                    workspace: "/preview/workspace",
+                    name: "Preview Workspace",
+                    group: "preview",
+                    coverage_status: uiState.diagnostics.writer_status == "ok" ? "trusted" : "stale",
+                    hook_status: "ok",
+                    hook_detail: "preview",
+                    hook_visibility: "visible",
+                    reason: "Visual matrix fixture",
+                    recommended_action: "no action",
+                    severity: uiState.diagnostics.writer_status == "ok" ? "ok" : "needs_review",
+                    preferred: true
+                )
+            ]
+        }
+        return store.loadWorkspaceDoctorRows(limit: limit)
+    }
+
+    func statusReplayRecords(hours: Double = 24, limit: Int = 16) -> [StatusReplayRecord] {
+        let since = Date().addingTimeInterval(-max(0.25, hours) * 3600)
+        return store.loadStatusReplayRecords(since: since, limit: limit)
+    }
+
+    func copyStatusReplayEvidence() {
+        let records = statusReplayRecords(hours: 24, limit: 12)
+        let lines = records.map { record in
+            let markers = record.markers.joined(separator: ",")
+            return "[\(record.recorded_at)] \(record.from_status) -> \(record.to_status) lamp=\(record.lamp_status) \(record.counts_summary) markers=\(markers) evidence=\(record.evidence)"
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.isEmpty ? "No status replay records in the last 24h." : lines.joined(separator: "\n"), forType: .string)
+    }
+
+    func interactionRulesSummary() -> InteractionRuleSelfTestResult {
+        InteractionRuleSelfTestResult(
+            single_click_toggles: true,
+            drag_threshold_prevents_toggle: true,
+            long_press_prevents_toggle: true,
+            double_click_opens_diagnostics: true,
+            threshold_points: 4,
+            long_press_ms: 450
+        )
     }
 
     func copyBlocker() {
@@ -383,8 +541,8 @@ final class TaskLightViewModel: ObservableObject {
         uiState.tasks.count
     }
 
-    func sortedManagedTasks() -> [TaskLightTaskSummary] {
-        uiState.tasks.sorted { lhs, rhs in
+    func sortedManagedTasks(limit: Int? = nil) -> [TaskLightTaskSummary] {
+        let sortedTasks = uiState.tasks.sorted { lhs, rhs in
             let lhsRank = taskSortRank(lhs.display_scope)
             let rhsRank = taskSortRank(rhs.display_scope)
             if lhsRank != rhsRank {
@@ -394,19 +552,23 @@ final class TaskLightViewModel: ObservableObject {
                 return (lhs.updated_at ?? "") > (rhs.updated_at ?? "")
             }
             return lhs.task_id < rhs.task_id
-        }.map { $0.asTaskSummary() }
+        }
+        let cappedTasks = limit.map { Array(sortedTasks.prefix($0)) } ?? sortedTasks
+        return cappedTasks.map { $0.asTaskSummary() }
     }
 
-    func invalidManagedTasks() -> [TaskLightTaskSummary] {
-        uiState.tasks.filter { $0.display_scope == "invalid" }.map { $0.asTaskSummary() }.sorted { lhs, rhs in
+    func invalidManagedTasks(limit: Int? = nil) -> [TaskLightTaskSummary] {
+        let sortedTasks = uiState.tasks.filter { $0.display_scope == "invalid" }.map { $0.asTaskSummary() }.sorted { lhs, rhs in
             (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id)
         }
+        return limit.map { Array(sortedTasks.prefix($0)) } ?? sortedTasks
     }
 
-    func visibleObservedThreads() -> [TaskLightObservationRecord] {
-        uiState.observations
+    func visibleObservedThreads(limit: Int? = nil) -> [TaskLightObservationRecord] {
+        let records = uiState.observations
             .filter { ["active_execution", "observed_active_high_confidence", "observed_only"].contains($0.display_scope) }
             .map { $0.asObservationRecord() }
+        return limit.map { Array(records.prefix($0)) } ?? records
     }
 
     func recentEvents(limit: Int = 40) -> [TaskLightEventRecord] {
@@ -432,6 +594,184 @@ final class TaskLightViewModel: ObservableObject {
                     return lhs.event_id > rhs.event_id
                 }
                 .prefix(TaskLightUIPerformanceBudget.expandedRecentEventLimit)
+        )
+    }
+
+    private func recordQuotaHistoryIfNeeded(_ quota: CodexQuotaUIState?) {
+        guard let quota, quota.fresh else { return }
+        let signature = [
+            quota.captured_at ?? "none",
+            quota.source ?? "unknown",
+            quota.short_bucket_id ?? quota.bucket_id ?? "none",
+            quota.short_percent.map(String.init) ?? "nil",
+            quota.long_bucket_id ?? "none",
+            quota.long_percent.map(String.init) ?? "nil",
+            quota.effective_remaining_percent.map(String.init) ?? "nil"
+        ].joined(separator: "|")
+        guard signature != lastQuotaHistorySignature else { return }
+        lastQuotaHistorySignature = signature
+        store.appendQuotaHistorySample(from: quota)
+    }
+
+    private func applyAutoMeetingPresenceIfNeeded() {
+        guard autoMeetingModeEnabled else { return }
+        let names = [
+            NSWorkspace.shared.frontmostApplication?.localizedName,
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        ].compactMap { $0?.lowercased() }.joined(separator: " ")
+        let meetingAppTokens = ["zoom", "teams", "keynote", "quicktime", "obs"]
+        let isMeetingLike = meetingAppTokens.contains { names.contains($0) }
+        if isMeetingLike, presenceMode == .normal {
+            autoMeetingApplied = true
+            setPresenceMode(.focusCapsule)
+            return
+        }
+        if !isMeetingLike, autoMeetingApplied, presenceMode == .focusCapsule {
+            autoMeetingApplied = false
+            setPresenceMode(.normal)
+        }
+    }
+
+    private func projectDocumentationURL(_ filename: String) -> URL {
+        let fileManager = FileManager.default
+        let candidates = [
+            ProcessInfo.processInfo.environment["TASKLIGHT_PROJECT_ROOT"].map { URL(fileURLWithPath: $0) },
+            URL(fileURLWithPath: "/Users/macmini-simon66/Documents/Codex状态桌面栏提醒"),
+            Bundle.main.bundleURL.pathExtension == "app"
+                ? Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+                : nil
+        ].compactMap { $0 }
+        for root in candidates {
+            let url = root.appendingPathComponent("docs").appendingPathComponent(filename)
+            if fileManager.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return URL(fileURLWithPath: "/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/docs").appendingPathComponent(filename)
+    }
+
+    private func quotaBurnCurrentWindows(from quota: CodexQuotaUIState) -> [QuotaHistorySample] {
+        let capturedAt = quota.captured_at ?? TaskLightTaskRecord.nowString()
+        if let windows = quota.display_windows, !windows.isEmpty {
+            return windows.compactMap { window in
+                guard let remaining = window.remaining_percent else { return nil }
+                let id = [
+                    window.bucket_id ?? quota.bucket_id ?? "quota",
+                    window.window_duration_mins.map(String.init) ?? window.label ?? window.id ?? "window"
+                ].joined(separator: ":")
+                return QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: id,
+                    label: window.label,
+                    bucket_id: window.bucket_id ?? quota.bucket_id,
+                    remaining_percent: remaining,
+                    reset_label: window.reset_label,
+                    window_duration_mins: window.window_duration_mins
+                )
+            }
+        }
+        var output: [QuotaHistorySample] = []
+        if let short = quota.short_percent {
+            output.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: [quota.short_bucket_id ?? quota.bucket_id ?? "quota", quota.short_label ?? "short"].joined(separator: ":"),
+                    label: quota.short_label ?? "short",
+                    bucket_id: quota.short_bucket_id ?? quota.bucket_id,
+                    remaining_percent: short,
+                    reset_label: quota.short_reset_label
+                )
+            )
+        }
+        if let long = quota.long_percent {
+            output.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: [quota.long_bucket_id ?? quota.bucket_id ?? "quota", quota.long_label ?? "long"].joined(separator: ":"),
+                    label: quota.long_label ?? "long",
+                    bucket_id: quota.long_bucket_id ?? quota.bucket_id,
+                    remaining_percent: long,
+                    reset_label: quota.long_reset_label
+                )
+            )
+        }
+        if output.isEmpty, let effective = quota.effective_remaining_percent {
+            output.append(
+                QuotaHistorySample(
+                    captured_at: capturedAt,
+                    source: quota.source,
+                    fresh: quota.fresh,
+                    window_id: quota.bucket_id ?? "quota:effective",
+                    label: "effective",
+                    bucket_id: quota.bucket_id,
+                    remaining_percent: effective
+                )
+            )
+        }
+        return output
+    }
+
+    private func burnRateWindow(current: QuotaHistorySample, history: [QuotaHistorySample]) -> QuotaBurnRateWindow {
+        let samples = history
+            .filter { $0.window_id == current.window_id && $0.fresh }
+            .compactMap { sample -> (Date, Int)? in
+                guard let date = TaskLightTaskRecord.parseTimestamp(sample.captured_at) else {
+                    return nil
+                }
+                return (date, sample.remaining_percent)
+            }
+            .sorted { $0.0 < $1.0 }
+        let label = current.label ?? current.window_id
+        guard samples.count >= 3,
+              let first = samples.first,
+              let last = samples.last else {
+            return QuotaBurnRateWindow(
+                id: current.window_id,
+                label: label,
+                bucket_id: current.bucket_id,
+                remaining_percent: current.remaining_percent,
+                samples: samples.count,
+                reset_label: current.reset_label,
+                reset_at: current.reset_at,
+                warning: current.remaining_percent < 20 ? "low_quota" : nil,
+                data_status: "insufficient_samples"
+            )
+        }
+        let hours = max(0.01, last.0.timeIntervalSince(first.0) / 3600)
+        let burned = max(0, first.1 - last.1)
+        let burnPerHour = Double(burned) / hours
+        let emptyAt: String?
+        if burnPerHour > 0 {
+            let secondsToEmpty = Double(max(0, current.remaining_percent)) / burnPerHour * 3600
+            let estimated = Date().addingTimeInterval(secondsToEmpty)
+            let capped: Date
+            if let resetDate = TaskLightTaskRecord.parseTimestamp(current.reset_at), estimated > resetDate {
+                capped = resetDate
+            } else {
+                capped = estimated
+            }
+            emptyAt = TaskLightTaskRecord.nowString(from: capped)
+        } else {
+            emptyAt = nil
+        }
+        return QuotaBurnRateWindow(
+            id: current.window_id,
+            label: label,
+            bucket_id: current.bucket_id,
+            remaining_percent: current.remaining_percent,
+            samples: samples.count,
+            burn_percent_per_hour: burnPerHour,
+            estimated_empty_at: emptyAt,
+            reset_label: current.reset_label,
+            reset_at: current.reset_at,
+            warning: current.remaining_percent < 20 ? "low_quota" : nil,
+            data_status: burnPerHour > 0 ? "ok" : "steady_or_recovered"
         )
     }
 

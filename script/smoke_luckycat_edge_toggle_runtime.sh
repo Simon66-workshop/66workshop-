@@ -63,9 +63,9 @@ if ! grep -q '^edge_drag_pass=True$' <<<"$output"; then
   exit 1
 fi
 
-if ! grep -q '^edge_single_click_no_restore_pass=True$' <<<"$output"; then
+if ! grep -q '^edge_single_click_restore_pass=True$' <<<"$output"; then
   echo "STATUS=fail"
-  echo "reason=edge toggle runtime self-test did not prove capsule single click stays capsule"
+  echo "reason=edge toggle runtime self-test did not prove capsule single click restores cat"
   exit 1
 fi
 
