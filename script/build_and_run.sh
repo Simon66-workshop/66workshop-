@@ -134,6 +134,7 @@ emit("collapsed_pass", payload.get("collapsed_pass", "missing"))
 emit("collapsed_alpha_pass", payload.get("collapsed_alpha_pass", "missing"))
 emit("collapsed_anchored_from_compact_pass", payload.get("collapsed_anchored_from_compact_pass", "missing"))
 emit("edge_drag_pass", payload.get("edge_drag_pass", "missing"))
+emit("edge_single_click_no_restore_pass", payload.get("edge_single_click_no_restore_pass", "missing"))
 emit("restored_pass", payload.get("restored_pass", "missing"))
 emit("restored_alpha_pass", payload.get("restored_alpha_pass", "missing"))
 emit("restored_from_moved_edge_pass", payload.get("restored_from_moved_edge_pass", "missing"))
@@ -158,6 +159,9 @@ if payload.get("body_click_pass") is not True:
 if payload.get("edge_drag_pass") is not True:
     raise SystemExit("edge_drag_pass was not true")
 
+if payload.get("edge_single_click_no_restore_pass") is not True:
+    raise SystemExit("edge_single_click_no_restore_pass was not true")
+
 if payload.get("collapsed_anchored_from_compact_pass") is not True:
     raise SystemExit("collapsed_anchored_from_compact_pass was not true")
 
@@ -178,6 +182,197 @@ PY
     sleep 0.2
   done
   echo "edge_toggle_self_test_status=timeout"
+  pgrep -fl "$BINARY_NAME" || true
+  tail -40 "$state_dir/startup_trace.log" 2>/dev/null || true
+  return 1
+}
+
+launch_visual_matrix_self_test() {
+  local state_dir="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
+  local result_path="$state_dir/visual_matrix_self_test.json"
+  rm -f "$result_path"
+  /usr/bin/open -n "$RUNTIME_BUNDLE" --args --tasklight-visual-matrix-self-test
+  for _ in $(seq 1 100); do
+    if [ -s "$result_path" ]; then
+      python3 - "$result_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+def emit(key, value):
+    print(f"{key}={value}")
+
+emit("visual_matrix_self_test_path", path)
+emit("visual_matrix_self_test_status", payload.get("status", "missing"))
+emit("visual_matrix_visible", payload.get("visible", "missing"))
+emit("visual_matrix_key", payload.get("key", "missing"))
+emit("visual_matrix_title", payload.get("title", "missing"))
+emit("visual_matrix_open_apply_ms", payload.get("open_apply_ms", "missing"))
+emit("visual_matrix_frame", payload.get("frame", {}))
+
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+
+if payload.get("visible") is not True:
+    raise SystemExit("visual matrix window was not visible")
+
+if payload.get("title") != "66TaskLight 视觉状态矩阵":
+    raise SystemExit("visual matrix window title mismatch")
+
+frame = payload.get("frame") or {}
+if float(frame.get("width", 0)) < 820 or float(frame.get("height", 0)) < 640:
+    raise SystemExit("visual matrix window frame too small")
+
+if float(payload.get("open_apply_ms", 9999)) > 500:
+    raise SystemExit("visual matrix open_apply_ms exceeded 500ms")
+PY
+      return
+    fi
+    sleep 0.2
+  done
+  echo "visual_matrix_self_test_status=timeout"
+  pgrep -fl "$BINARY_NAME" || true
+  tail -40 "$state_dir/startup_trace.log" 2>/dev/null || true
+  tail -40 "$state_dir/menu_bar_actions.log" 2>/dev/null || true
+  return 1
+}
+
+launch_menu_bar_self_test() {
+  local state_dir="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
+  local result_path="$state_dir/menu_bar_self_test.json"
+  rm -f "$result_path"
+  /usr/bin/open -n "$RUNTIME_BUNDLE" --args --tasklight-menu-bar-self-test
+  for _ in $(seq 1 100); do
+    if [ -s "$result_path" ]; then
+      python3 - "$result_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+def emit(key, value):
+    print(f"{key}={value}")
+
+emit("menu_bar_self_test_path", path)
+emit("menu_bar_self_test_status", payload.get("status", "missing"))
+emit("menu_bar_status_button_ready", payload.get("status_button_ready", "missing"))
+emit("menu_bar_popover_content_ready", payload.get("popover_content_ready", "missing"))
+emit("menu_bar_expanded_open_title_ready", payload.get("expanded_open_title_ready", "missing"))
+emit("menu_bar_expanded_close_title_ready", payload.get("expanded_close_title_ready", "missing"))
+emit("menu_bar_expanded_toggle_closed", payload.get("expanded_toggle_closed", "missing"))
+emit("menu_bar_matrix_menu_action_ready", payload.get("matrix_menu_action_ready", "missing"))
+emit("menu_bar_matrix_open_title_ready", payload.get("matrix_open_title_ready", "missing"))
+emit("menu_bar_matrix_close_title_ready", payload.get("matrix_close_title_ready", "missing"))
+emit("menu_bar_matrix_menu_action_visible", payload.get("matrix_menu_action_visible", "missing"))
+emit("menu_bar_matrix_toggle_closed", payload.get("matrix_toggle_closed", "missing"))
+emit("menu_bar_title", payload.get("menu_title", "missing"))
+emit("menu_bar_open_apply_ms", payload.get("open_apply_ms", "missing"))
+
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+
+if payload.get("status_button_ready") is not True:
+    raise SystemExit("menu bar status button action was not ready")
+
+if payload.get("popover_content_ready") is not True:
+    raise SystemExit("menu bar popover content was not ready")
+
+if payload.get("expanded_open_title_ready") is not True:
+    raise SystemExit("expanded panel open title/action was not ready")
+
+if payload.get("expanded_close_title_ready") is not True:
+    raise SystemExit("expanded panel close title/action was not ready")
+
+if payload.get("expanded_toggle_closed") is not True:
+    raise SystemExit("expanded panel toggle did not close the panel")
+
+if payload.get("matrix_menu_action_ready") is not True:
+    raise SystemExit("visual matrix menu action was not wired")
+
+if payload.get("matrix_open_title_ready") is not True:
+    raise SystemExit("visual matrix open title/action was not ready")
+
+if payload.get("matrix_close_title_ready") is not True:
+    raise SystemExit("visual matrix close title/action was not ready")
+
+if payload.get("matrix_menu_action_visible") is not True:
+    raise SystemExit("visual matrix menu action did not show the window")
+
+if payload.get("matrix_toggle_closed") is not True:
+    raise SystemExit("visual matrix toggle did not close the window")
+
+if not str(payload.get("menu_title", "")).strip():
+    raise SystemExit("menu bar title was empty")
+
+if float(payload.get("open_apply_ms", 9999)) > 500:
+    raise SystemExit("menu bar open_apply_ms exceeded 500ms")
+PY
+      return
+    fi
+    sleep 0.2
+  done
+  echo "menu_bar_self_test_status=timeout"
+  pgrep -fl "$BINARY_NAME" || true
+  tail -40 "$state_dir/startup_trace.log" 2>/dev/null || true
+  return 1
+}
+
+launch_expanded_panel_self_test() {
+  local state_dir="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
+  local result_path="$state_dir/expanded_panel_self_test.json"
+  rm -f "$result_path"
+  /usr/bin/open -n "$RUNTIME_BUNDLE" --args --tasklight-expanded-panel-self-test
+  for _ in $(seq 1 100); do
+    if [ -s "$result_path" ]; then
+      python3 - "$result_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+def emit(key, value):
+    print(f"{key}={value}")
+
+emit("expanded_panel_self_test_path", path)
+emit("expanded_panel_self_test_status", payload.get("status", "missing"))
+emit("expanded_panel_visible", payload.get("visible", "missing"))
+emit("expanded_panel_expanded", payload.get("expanded", "missing"))
+emit("expanded_panel_content_expanded", payload.get("content_expanded", "missing"))
+emit("expanded_panel_managed_task_count", payload.get("managed_task_count", "missing"))
+emit("expanded_panel_open_apply_ms", payload.get("open_apply_ms", "missing"))
+emit("expanded_panel_visible_apply_ms", payload.get("visible_apply_ms", "missing"))
+emit("expanded_panel_frame", payload.get("frame", {}))
+
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+
+if payload.get("visible") is not True:
+    raise SystemExit("expanded panel was not visible")
+
+if payload.get("expanded") is not True:
+    raise SystemExit("view model expanded was not true")
+
+if payload.get("content_expanded") is not True:
+    raise SystemExit("expanded content was not activated")
+
+if float(payload.get("open_apply_ms", 9999)) > 300:
+    raise SystemExit("expanded panel open_apply_ms exceeded 300ms")
+
+if float(payload.get("visible_apply_ms", 9999)) > 650:
+    raise SystemExit("expanded panel visible_apply_ms exceeded 650ms")
+PY
+      return
+    fi
+    sleep 0.2
+  done
+  echo "expanded_panel_self_test_status=timeout"
   pgrep -fl "$BINARY_NAME" || true
   tail -40 "$state_dir/startup_trace.log" 2>/dev/null || true
   return 1
@@ -302,8 +497,29 @@ case "$MODE" in
     stage_runtime_bundle
     launch_edge_toggle_self_test
     ;;
+  --visual-matrix-self-test|visual-matrix-self-test)
+    kill_existing
+    build_app
+    stage_bundle
+    stage_runtime_bundle
+    launch_visual_matrix_self_test
+    ;;
+  --menu-bar-self-test|menu-bar-self-test)
+    kill_existing
+    build_app
+    stage_bundle
+    stage_runtime_bundle
+    launch_menu_bar_self_test
+    ;;
+  --expanded-panel-self-test|expanded-panel-self-test)
+    kill_existing
+    build_app
+    stage_bundle
+    stage_runtime_bundle
+    launch_expanded_panel_self_test
+    ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test|--visual-matrix-self-test|--menu-bar-self-test|--expanded-panel-self-test]" >&2
     exit 2
     ;;
 esac

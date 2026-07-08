@@ -61,6 +61,8 @@ final class TaskLightClickShieldView: NSView {
 
     var hitMode: HitMode = .full
     var onMouseDown: ((NSEvent) -> Void)?
+    var onMouseDragged: ((NSEvent) -> Void)?
+    var onMouseUp: ((NSEvent) -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -80,6 +82,14 @@ final class TaskLightClickShieldView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onMouseDragged?(event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        onMouseUp?(event)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -123,10 +133,12 @@ private func compactStatusOrbCenter(panelSize: NSSize) -> NSPoint {
     )
 }
 
-private let taskLightEdgeToggleDebounceSeconds: TimeInterval = 0.16
-private let taskLightEdgeTransitionDuration: TimeInterval = 0.10
+private let taskLightEdgeToggleDebounceSeconds: TimeInterval = 0.08
+private let taskLightEdgeTransitionDuration: TimeInterval = 0.06
 private let taskLightDragThreshold: CGFloat = 6
-private let taskLightClickMaxDuration: TimeInterval = 0.16
+private let taskLightClickMaxDuration: TimeInterval = 0.45
+private let taskLightNativePressRecoveryDelays: [TimeInterval] = [0.045, 0.12, 0.28]
+let taskLightTraceWriteQueue = DispatchQueue(label: "com.local.66tasklight.trace-writes", qos: .utility)
 
 private let taskLightMouseEventTapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else {
@@ -200,8 +212,15 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     private var mouseButtonPollTimer: Timer?
     private var lastPolledLeftMouseDown = false
     private var isPanelPressTracking = false
+    private var suppressFallbackPressUntil = Date.distantPast
     private var fallbackPress: TaskLightFallbackPress?
+    private var nativePress: TaskLightFallbackPress?
+    private var nativePressRecoveryWorkItems: [DispatchWorkItem] = []
+    private var suppressedEdgeTransitionValue: Bool?
+    private var pendingEdgeModelSyncWorkItem: DispatchWorkItem?
+    private var lastKnownCompactFrame: NSRect?
     private var lastKnownEdgeRailFrame: NSRect?
+    private var compactFramePersistWorkItem: DispatchWorkItem?
     private var edgeRailFramePersistWorkItem: DispatchWorkItem?
 
     init(viewModel: TaskLightViewModel) {
@@ -216,6 +235,9 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         viewModel.$edgeCollapsed
             .removeDuplicates()
             .sink { [weak self] edgeCollapsed in
+                if self?.consumeSuppressedEdgeTransition(edgeCollapsed) == true {
+                    return
+                }
                 self?.transition(edgeCollapsed: edgeCollapsed)
             }
             .store(in: &cancellables)
@@ -245,15 +267,17 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         appendStartupTrace("showPanel.appliedStartupCompactFrame")
         let warmedEdgePanel = ensureEdgePanel()
         applyPanelFrame(storedEdgeRailFrame() ?? edgeRailFrame(from: initialCompactFrame), to: warmedEdgePanel)
-        warmedEdgePanel.alphaValue = 1
+        warmedEdgePanel.alphaValue = 0
         warmedEdgePanel.ignoresMouseEvents = true
-        warmedEdgePanel.orderOut(nil)
+        prewarmPanelSurface(warmedEdgePanel)
+        warmedEdgePanel.orderFrontRegardless()
         appendStartupTrace("showPanel.warmedEdgePanel")
         if viewModel.expanded && !viewModel.edgeCollapsed {
             let expandedPanel = ensureExpandedPanel()
             preExpandedCompactFrame = compactPanel.frame
             applyPanelFrame(expandedFrame(from: compactPanel.frame), to: expandedPanel)
-            compactPanel.orderOut(nil)
+            compactPanel.alphaValue = 0
+            compactPanel.ignoresMouseEvents = true
             expandedPanel.makeKeyAndOrderFront(nil)
             expandedPanel.orderFrontRegardless()
             viewModel.setContentExpanded(true)
@@ -262,17 +286,20 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             let edgePanel = warmedEdgePanel
             applyPanelFrame(storedEdgeRailFrame() ?? edgeRailFrame(from: initialCompactFrame), to: edgePanel)
             compactPanel.ignoresMouseEvents = true
-            compactPanel.orderOut(nil)
+            compactPanel.alphaValue = 0
             expandedPanel?.orderOut(nil)
+            edgePanel.alphaValue = 1
             edgePanel.ignoresMouseEvents = false
-            edgePanel.makeKeyAndOrderFront(nil)
             edgePanel.orderFrontRegardless()
             viewModel.setContentExpanded(false)
             appendStartupTrace("showPanel.frontEdgePanel")
         } else {
             compactPanel.ignoresMouseEvents = false
-            edgePanel?.orderOut(nil)
+            compactPanel.alphaValue = 1
+            edgePanel?.alphaValue = 0
+            edgePanel?.ignoresMouseEvents = true
             expandedPanel?.orderOut(nil)
+            prewarmPanelSurface(compactPanel)
             compactPanel.makeKeyAndOrderFront(nil)
             compactPanel.orderFrontRegardless()
             viewModel.setContentExpanded(false)
@@ -282,13 +309,19 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         appendStartupTrace("showPanel.activateApp")
         viewModel.start()
         appendStartupTrace("showPanel.startedViewModel")
-        installMouseEventTap()
-        startMouseButtonPollingFallback()
+        installInputFallbacksIfRequested()
         scheduleStartupVisibilityRecovery()
     }
 
     var anyTaskLightPanelVisible: Bool {
-        compactPanel?.isVisible == true || edgePanel?.isVisible == true || expandedPanel?.isVisible == true
+        panelIsInteractivelyVisible(compactPanel)
+            || panelIsInteractivelyVisible(edgePanel)
+            || expandedPanel?.isVisible == true
+    }
+
+    private func panelIsInteractivelyVisible(_ panel: TaskLightPanel?) -> Bool {
+        guard let panel else { return false }
+        return panel.isVisible && panel.alphaValue > 0.05 && !panel.ignoresMouseEvents
     }
 
     func togglePanelVisibilityFromMenuBar() {
@@ -318,7 +351,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         if compactPanel == nil {
             showPanel()
         }
-        viewModel.setEdgeCollapsed(!viewModel.edgeCollapsed)
+        if viewModel.edgeCollapsed || panelIsInteractivelyVisible(edgePanel) || compactPanel.map({ compactPanelIsVisuallyEdgeCollapsed($0) }) == true {
+            forceRestoreFromEdgePanel(source: "menuBar.toggleEdgeRail.restore")
+        } else {
+            setEdgeCollapsedFromInteraction(true, source: "menuBar.toggleEdgeRail.collapse")
+        }
     }
 
     func openExpandedFromMenuBar() {
@@ -335,6 +372,26 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    func closeExpandedFromMenuBar() {
+        if compactPanel == nil {
+            showPanel()
+        }
+        guard viewModel.expanded || expandedPanel?.isVisible == true else {
+            showCurrentModeFromMenuBar(source: "menuBar.closeExpanded.alreadyCompact")
+            return
+        }
+        viewModel.expanded = false
+        showCurrentModeFromMenuBar(source: "menuBar.closeExpanded")
+    }
+
+    func toggleExpandedFromMenuBar() {
+        if viewModel.expanded || expandedPanel?.isVisible == true {
+            closeExpandedFromMenuBar()
+        } else {
+            openExpandedFromMenuBar()
+        }
+    }
+
     func transition(expanded: Bool) {
         guard let compactPanel else { return }
         guard !viewModel.edgeCollapsed else {
@@ -348,11 +405,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             preExpandedCompactFrame = compactFrame
             saveCompactFrame(compactFrame)
             applyPanelFrame(expandedFrame(from: compactFrame), to: expandedPanel)
-            compactPanel.orderOut(nil)
-            edgePanel?.orderOut(nil)
+            compactPanel.alphaValue = 0
+            compactPanel.ignoresMouseEvents = true
+            edgePanel?.alphaValue = 0
+            edgePanel?.ignoresMouseEvents = true
             expandedPanel.makeKeyAndOrderFront(nil)
             expandedPanel.orderFrontRegardless()
-            NSApp.activate(ignoringOtherApps: true)
             viewModel.setContentExpanded(true)
         } else {
             guard let expandedPanel else { return }
@@ -364,7 +422,10 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             )
             applyPanelFrame(targetFrame, to: compactPanel)
             expandedPanel.orderOut(nil)
-            edgePanel?.orderOut(nil)
+            edgePanel?.alphaValue = 0
+            edgePanel?.ignoresMouseEvents = true
+            compactPanel.alphaValue = 1
+            compactPanel.ignoresMouseEvents = false
             compactPanel.makeKeyAndOrderFront(nil)
             compactPanel.orderFrontRegardless()
             preExpandedCompactFrame = nil
@@ -385,8 +446,8 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
                 ? restoredCompactFrameFromEdgeRail(compactPanel.frame)
                 : compactFrame(from: compactPanel.frame)
             let targetFrame = edgeRailFrame(from: compactFrame)
-            saveCompactFrame(compactFrame)
-            rememberEdgeRailFrame(targetFrame, source: "transition.collapse.anchor")
+            rememberCompactFrame(compactFrame, source: "transition.collapse.anchor", persistImmediately: false)
+            rememberEdgeRailFrame(targetFrame, source: "transition.collapse.anchor", persistImmediately: false)
             expandedPanel?.orderOut(nil)
             preExpandedCompactFrame = nil
             viewModel.setContentExpanded(false)
@@ -394,29 +455,29 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             edgePanel.alphaValue = 1
             edgePanel.ignoresMouseEvents = false
             edgePanel.orderFrontRegardless()
-            compactPanel.orderOut(nil)
+            compactPanel.alphaValue = 0
+            compactPanel.ignoresMouseEvents = true
             appendStartupTrace("transition.edgeCollapsed.true.end.frame.\(Int(targetFrame.width))x\(Int(targetFrame.height))")
         } else {
             compactPanel.ignoresMouseEvents = false
             compactPanel.acceptsMouseMovedEvents = true
             compactPanel.isMovableByWindowBackground = true
             let edgeFrame = currentEdgeRailFrame(fallback: compactPanel.frame)
-            let restoringFromEdge = edgePanel?.isVisible == true || compactPanelIsVisuallyEdgeCollapsed(compactPanel)
+            let restoringFromEdge = panelIsInteractivelyVisible(edgePanel) || compactPanelIsVisuallyEdgeCollapsed(compactPanel)
             let targetFrame = restoringFromEdge
                 ? restoredCompactFrameFromEdgeRail(edgeFrame)
                 : restoredCompactFrame(fallback: compactFrame(from: compactPanel.frame))
             if restoringFromEdge {
-                rememberEdgeRailFrame(edgeFrame, source: "transition.restore.edgeFrame")
+                rememberEdgeRailFrame(edgeFrame, source: "transition.restore.edgeFrame", persistImmediately: false)
             }
             if compactPanel.contentViewController == nil {
                 refreshCompactRootView()
             }
             applyPanelFrame(targetFrame, to: compactPanel, animated: false)
             compactPanel.alphaValue = 1
-            compactPanel.makeKeyAndOrderFront(nil)
             compactPanel.orderFrontRegardless()
             edgePanel?.ignoresMouseEvents = true
-            edgePanel?.orderOut(nil)
+            edgePanel?.alphaValue = 0
             viewModel.setContentExpanded(false)
             appendStartupTrace("transition.edgeCollapsed.false.end.frame.\(Int(targetFrame.width))x\(Int(targetFrame.height))")
         }
@@ -437,32 +498,35 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             let panel = ensureEdgePanel()
             if let compactPanel {
                 applyPanelFrame(storedEdgeRailFrame() ?? edgeRailFrame(from: compactPanel.frame), to: panel)
+                compactPanel.alphaValue = 0
+                compactPanel.ignoresMouseEvents = true
             }
-            compactPanel?.orderOut(nil)
             expandedPanel?.orderOut(nil)
+            panel.alphaValue = 1
             panel.ignoresMouseEvents = false
-            panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
         } else if viewModel.expanded {
             guard let compactPanel else { return }
             let panel = ensureExpandedPanel()
             applyPanelFrame(expandedFrame(from: compactPanel.frame), to: panel)
-            compactPanel.orderOut(nil)
-            edgePanel?.orderOut(nil)
+            compactPanel.alphaValue = 0
+            compactPanel.ignoresMouseEvents = true
+            edgePanel?.alphaValue = 0
+            edgePanel?.ignoresMouseEvents = true
             panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
         } else {
             guard let compactPanel else { return }
-            edgePanel?.orderOut(nil)
+            edgePanel?.alphaValue = 0
+            edgePanel?.ignoresMouseEvents = true
             expandedPanel?.orderOut(nil)
             compactPanel.ignoresMouseEvents = false
+            compactPanel.alphaValue = 1
             compactPanel.makeKeyAndOrderFront(nil)
             compactPanel.orderFrontRegardless()
         }
-        NSApp.activate(ignoringOtherApps: true)
         viewModel.start()
-        installMouseEventTap()
-        startMouseButtonPollingFallback()
+        installInputFallbacksIfRequested()
         appendStartupTrace("\(source).end")
     }
 
@@ -471,12 +535,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             || CGEventSource.buttonState(.hidSystemState, button: .right)
         guard mouseButtonDown else { return }
         let screenPoint = normalizedPanelScreenPoint(NSEvent.mouseLocation)
-        if let edgePanel, edgePanel.isVisible, edgePanel.frame.contains(screenPoint) {
+        if let edgePanel, panelIsInteractivelyVisible(edgePanel), edgePanel.frame.contains(screenPoint) {
             writeClickDiagnostic(source: "activation.\(reason).edgeRail", action: "observed_mouse_down", point: screenPoint)
             appendStartupTrace("activation.\(reason).edgeRail.observedMouseDown")
             return
         }
-        guard let compactPanel, compactPanel.isVisible, !viewModel.expanded else { return }
+        guard let compactPanel, panelIsInteractivelyVisible(compactPanel), !viewModel.expanded else { return }
         guard compactPanel.frame.contains(screenPoint) else { return }
         let panelPoint = NSPoint(
             x: screenPoint.x - compactPanel.frame.minX,
@@ -489,6 +553,43 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             point: panelPoint
         )
         appendStartupTrace("activation.\(reason).compact.observedMouseDown")
+    }
+
+    func runExpandedPanelSelfTest(completion: @escaping ([String: Any]) -> Void) {
+        guard compactPanel != nil else {
+            completion([
+                "status": "fail",
+                "reason": "compact_panel_missing"
+            ])
+            return
+        }
+
+        viewModel.setEdgeCollapsed(false)
+        viewModel.expanded = false
+        appendStartupTrace("expandedPanelSelfTest.begin")
+
+        let startedAt = CACurrentMediaTime()
+        openExpandedFromMenuBar()
+        let openApplyMs = (CACurrentMediaTime() - startedAt) * 1000
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+            guard let self else { return }
+            let visibleApplyMs = (CACurrentMediaTime() - startedAt) * 1000
+            let panel = self.expandedPanel
+            let visible = self.panelIsInteractivelyVisible(panel)
+            let status = visible && self.viewModel.expanded && self.viewModel.contentExpanded ? "ok" : "fail"
+            completion([
+                "status": status,
+                "reason": status == "ok" ? "expanded_panel_visible" : "expanded_panel_not_visible",
+                "open_apply_ms": openApplyMs,
+                "expanded": self.viewModel.expanded,
+                "content_expanded": self.viewModel.contentExpanded,
+                "visible": visible,
+                "managed_task_count": self.viewModel.managedCount(),
+                "visible_apply_ms": visibleApplyMs,
+                "frame": self.framePayload(panel?.frame)
+            ])
+        }
     }
 
     func runEdgeToggleSelfTest(completion: @escaping (Bool) -> Void) {
@@ -535,7 +636,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         }
         let compactDragEndFrame = compactPanel?.frame ?? .zero
         let compactDragPass = viewModel.edgeCollapsed == false
-            && compactPanel?.isVisible == true
+            && panelIsInteractivelyVisible(compactPanel)
             && abs(compactDragEndFrame.minX - compactDragStartFrame.minX) >= taskLightDragThreshold
 
         let bodyClickHandled = handleCompactPanelMouseDown(
@@ -546,9 +647,8 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         )
         let bodyClickPass = bodyClickHandled
             && viewModel.edgeCollapsed == false
-            && compactPanel?.isVisible == true
+            && panelIsInteractivelyVisible(compactPanel)
 
-        let compactStart = CACurrentMediaTime()
         let staleStoredEdgeFrame = NSRect(
             x: compactDragEndFrame.midX - edgeRailSize.width / 2,
             y: compactDragEndFrame.midY - edgeRailSize.height / 2,
@@ -557,6 +657,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         )
         saveEdgeRailFrame(staleStoredEdgeFrame)
         let expectedCollapsedEdgeFrame = edgeRailFrame(from: compactDragEndFrame)
+        let compactStart = CACurrentMediaTime()
         let clickPathCollapsed = handleCompactPanelMouseDown(
             at: compactStatusOrbCenter(panelSize: compactSize),
             panelSize: compactSize,
@@ -564,9 +665,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             source: "selfTest.compactClick"
         )
         let collapseApplyMs = (CACurrentMediaTime() - compactStart) * 1000
+        flushPendingEdgeModelSyncForSelfTest()
         let collapsedPass = edgePanel?.isVisible == true
             && edgePanel.map { panelSizeMatches($0, edgeRailSize) } == true
-            && compactPanel?.isVisible != true
+            && panelIsInteractivelyVisible(compactPanel) == false
+            && panelIsInteractivelyVisible(edgePanel)
         let collapsedAlphaPass = (edgePanel?.alphaValue ?? 0) >= 0.99
         let collapsedAnchoredFromCompactPass = edgePanel.map {
             abs($0.frame.minX - expectedCollapsedEdgeFrame.minX) <= 2
@@ -596,20 +699,28 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         }
         let edgeDragEndFrame = edgePanel?.frame ?? .zero
         let edgeDragPass = viewModel.edgeCollapsed == true
-            && edgePanel?.isVisible == true
-            && compactPanel?.isVisible != true
+            && panelIsInteractivelyVisible(edgePanel)
+            && panelIsInteractivelyVisible(compactPanel) == false
             && abs(edgeDragEndFrame.minX - edgeDragStartFrame.minX) >= taskLightDragThreshold
             && abs(edgeDragEndFrame.minY - edgeDragStartFrame.minY) >= taskLightDragThreshold
         let expectedRestoredFrame = restoredCompactFrameFromEdgeRail(edgeDragEndFrame)
 
         edgeTransitionLockedUntil = .distantPast
         lastEdgeToggleAt = .distantPast
+        let edgeSingleClickHandled = handleEdgeRailClick(clickCount: 1, source: "selfTest.edgeSingleClick")
+        flushPendingEdgeModelSyncForSelfTest()
+        let edgeSingleClickNoRestorePass = edgeSingleClickHandled
+            && viewModel.edgeCollapsed == true
+            && panelIsInteractivelyVisible(edgePanel)
+            && panelIsInteractivelyVisible(compactPanel) == false
         let restoreStart = CACurrentMediaTime()
-        handleEdgeRailMouseDown(source: "selfTest.edgeClick")
+        _ = handleEdgeRailClick(clickCount: 2, source: "selfTest.edgeDoubleClick")
         let restoreApplyMs = (CACurrentMediaTime() - restoreStart) * 1000
+        flushPendingEdgeModelSyncForSelfTest()
         let restoredPass = compactPanel?.isVisible == true
             && compactPanel.map { panelSizeMatches($0, compactSize) } == true
-            && edgePanel?.isVisible != true
+            && panelIsInteractivelyVisible(compactPanel)
+            && panelIsInteractivelyVisible(edgePanel) == false
         let restoredAlphaPass = (compactPanel?.alphaValue ?? 0) >= 0.99
         let restoredFromMovedEdgePass = compactPanel.map {
             abs($0.frame.minX - expectedRestoredFrame.minX) <= 2
@@ -623,6 +734,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             && collapsedAlphaPass
             && collapsedAnchoredFromCompactPass
             && edgeDragPass
+            && edgeSingleClickNoRestorePass
             && restoredPass
             && restoredAlphaPass
             && restoredFromMovedEdgePass
@@ -640,6 +752,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             "stale_stored_edge_frame": framePayload(staleStoredEdgeFrame),
             "expected_collapsed_edge_frame": framePayload(expectedCollapsedEdgeFrame),
             "edge_drag_pass": edgeDragPass,
+            "edge_single_click_no_restore_pass": edgeSingleClickNoRestorePass,
             "restored_pass": restoredPass,
             "restored_alpha_pass": restoredAlphaPass,
             "restored_from_moved_edge_pass": restoredFromMovedEdgePass,
@@ -658,6 +771,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     func shutdown() {
         startupVisibilityWorkItems.forEach { $0.cancel() }
         startupVisibilityWorkItems.removeAll()
+        cancelNativePressRecovery()
+        pendingEdgeModelSyncWorkItem?.cancel()
+        pendingEdgeModelSyncWorkItem = nil
+        compactFramePersistWorkItem?.cancel()
+        compactFramePersistWorkItem = nil
         edgeRailFramePersistWorkItem?.cancel()
         edgeRailFramePersistWorkItem = nil
         uninstallMouseEventTap()
@@ -689,6 +807,15 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         edgePanel = panel
         appendStartupTrace("panel.createdEdgeRailOnDemand")
         return panel
+    }
+
+    private func installInputFallbacksIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("--tasklight-input-fallbacks") else {
+            appendStartupTrace("inputFallbacks.disabled")
+            return
+        }
+        installMouseEventTap()
+        startMouseButtonPollingFallback()
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -754,7 +881,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
                 self?.pollMouseButtonFallback()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .default)
         mouseButtonPollTimer = timer
         appendStartupTrace("mouseButtonPoll.installed")
     }
@@ -768,6 +895,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     private func pollMouseButtonFallback() {
         let leftMouseDown = CGEventSource.buttonState(.hidSystemState, button: .left)
         guard !isPanelPressTracking else {
+            fallbackPress = nil
+            lastPolledLeftMouseDown = leftMouseDown
+            return
+        }
+        guard Date() >= suppressFallbackPressUntil else {
             fallbackPress = nil
             lastPolledLeftMouseDown = leftMouseDown
             return
@@ -807,123 +939,232 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).panelClickNoToggle")
             return true
         }
+        setEdgeCollapsedFromInteraction(true, source: "\(source).compactCollapse")
         writeClickDiagnostic(
             source: source,
             action: "collapse_status_orb",
             point: point,
             extra: ["click_count": clickCount]
         )
-        setEdgeCollapsedFromInteraction(true, source: "\(source).compactCollapse")
+        return true
+    }
+
+    @discardableResult
+    private func handleEdgeRailClick(clickCount: Int, source: String) -> Bool {
+        guard clickCount >= 2 else {
+            if let edgePanel {
+                rememberEdgeRailFrame(edgePanel.frame, source: "\(source).singleClickAnchor", persistImmediately: false)
+            }
+            writeClickDiagnostic(
+                source: source,
+                action: "edge_click_no_toggle",
+                point: nil,
+                extra: ["click_count": clickCount]
+            )
+            appendStartupTrace("\(source).edgeClickNoToggle.\(clickCount)")
+            return true
+        }
+        if let edgePanel {
+            rememberEdgeRailFrame(edgePanel.frame, source: "\(source).restoreAnchor", persistImmediately: false)
+        }
+        forceRestoreFromEdgePanel(source: "\(source).edgeRestore")
+        writeClickDiagnostic(
+            source: source,
+            action: "restore_double_click",
+            point: nil,
+            extra: ["click_count": clickCount]
+        )
         return true
     }
 
     private func handleEdgeRailMouseDown(source: String) {
-        writeClickDiagnostic(source: source, action: "restore", point: nil)
-        if let edgePanel {
-            rememberEdgeRailFrame(edgePanel.frame, source: "\(source).restoreAnchor")
-        }
-        forceRestoreFromEdgePanel(source: "\(source).edgeRestore")
+        _ = handleEdgeRailClick(clickCount: 2, source: source)
     }
 
-    @discardableResult
-    private func trackPanelPress(on panel: TaskLightPanel, event: NSEvent, target: TaskLightPressTarget, source: String) -> Bool {
+    private func beginNativePress(on panel: TaskLightPanel, event: NSEvent, target: TaskLightPressTarget, source: String) {
         guard event.type == .leftMouseDown else {
             if target == .compact {
-                return handleCompactPanelMouseDown(
+                _ = handleCompactPanelMouseDown(
                     at: event.locationInWindow,
                     panelSize: panel.frame.size,
                     clickCount: event.clickCount,
                     source: source
                 )
+            } else {
+                _ = handleEdgeRailClick(clickCount: event.clickCount, source: source)
             }
-            handleEdgeRailMouseDown(source: source)
-            return true
+            return
+        }
+
+        if target == .compact,
+           taskLightCompactStatusOrbHit(event.locationInWindow, panelSize: panel.frame.size) {
+            let startedAt = CACurrentMediaTime()
+            fallbackPress = nil
+            nativePress = nil
+            isPanelPressTracking = false
+            lastPolledLeftMouseDown = true
+            suppressFallbackPressUntil = Date().addingTimeInterval(0.12)
+            appendStartupTrace("\(source).instantStatusOrbDown")
+            _ = handleCompactPanelMouseDown(
+                at: event.locationInWindow,
+                panelSize: panel.frame.size,
+                clickCount: event.clickCount,
+                source: "\(source).instant"
+            )
+            writeManualLatency(
+                source: source,
+                action: "compact_status_orb_mouse_down",
+                startedAt: startedAt,
+                eventTimestamp: event.timestamp
+            )
+            writeClickDiagnostic(source: source, action: "instant_status_orb_down", point: event.locationInWindow)
+            return
         }
 
         isPanelPressTracking = true
-        defer { isPanelPressTracking = false }
         fallbackPress = nil
         lastPolledLeftMouseDown = true
+        nativePress = TaskLightFallbackPress(
+            target: target,
+            startPoint: screenPoint(for: event, in: panel),
+            startFrame: panel.frame
+        )
+        writeClickDiagnostic(source: source, action: "press_begin", point: event.locationInWindow)
+        appendStartupTrace("\(source).pressBegin")
+        if target == .compact {
+            scheduleNativePressRecovery(on: panel, source: source)
+        }
+    }
 
-        let pressStartedAt = Date()
-        let pressPoint = event.locationInWindow
-        let startPoint = screenPoint(for: event, in: panel)
-        let startFrame = panel.frame
-        var didDrag = false
-        var didEnd = false
+    private func updateNativePress(on panel: TaskLightPanel, event: NSEvent, source: String) {
+        guard var press = nativePress else { return }
+        let currentPoint = screenPoint(for: event, in: panel)
+        let dx = currentPoint.x - press.startPoint.x
+        let dy = currentPoint.y - press.startPoint.y
+        if !press.didDrag, hypot(dx, dy) >= taskLightDragThreshold {
+            press.didDrag = true
+            writeClickDiagnostic(source: source, action: "drag_begin", point: event.locationInWindow)
+            appendStartupTrace("\(source).dragBegin")
+        }
+        if press.didDrag {
+            applyDraggedFrame(
+                panel,
+                target: press.target,
+                startFrame: press.startFrame,
+                deltaX: dx,
+                deltaY: dy
+            )
+        }
+        nativePress = press
+    }
 
-        while !didEnd {
-            guard let next = panel.nextEvent(
-                matching: [.leftMouseDragged, .leftMouseUp],
-                until: .distantFuture,
-                inMode: .eventTracking,
-                dequeue: true
-            ) else {
-                break
-            }
-
-            switch next.type {
-            case .leftMouseDragged:
-                let currentPoint = screenPoint(for: next, in: panel)
-                let totalDX = currentPoint.x - startPoint.x
-                let totalDY = currentPoint.y - startPoint.y
-                if !didDrag, hypot(totalDX, totalDY) >= taskLightDragThreshold {
-                    didDrag = true
-                    writeClickDiagnostic(source: source, action: "drag_begin", point: pressPoint)
-                    appendStartupTrace("\(source).dragBegin")
-                    if target == .edgeRail {
-                        panel.performDrag(with: event)
-                        didEnd = true
-                        continue
-                    }
-                }
-                if didDrag {
-                    applyDraggedFrame(
-                        panel,
-                        target: target,
-                        startFrame: startFrame,
-                        deltaX: totalDX,
-                        deltaY: totalDY
-                    )
-                }
-            case .leftMouseUp:
-                didEnd = true
-            default:
-                break
-            }
+    private func finishNativePress(on panel: TaskLightPanel, event: NSEvent, source: String) {
+        guard let press = nativePress else {
+            isPanelPressTracking = false
+            return
+        }
+        cancelNativePressRecovery()
+        nativePress = nil
+        defer {
+            isPanelPressTracking = false
+            fallbackPress = nil
+            lastPolledLeftMouseDown = CGEventSource.buttonState(.hidSystemState, button: .left)
+            suppressFallbackPressUntil = Date().addingTimeInterval(0.22)
         }
 
-        if didDrag {
-            finishPanelDrag(panel, target: target, source: source)
-            return true
+        if press.didDrag {
+            finishPanelDrag(panel, target: press.target, source: source)
+            return
         }
 
-        let pressDuration = Date().timeIntervalSince(pressStartedAt)
+        let pressDuration = Date().timeIntervalSince(press.startedAt)
         if pressDuration >= taskLightClickMaxDuration {
             writeClickDiagnostic(
                 source: source,
                 action: "press_hold_no_toggle",
-                point: pressPoint,
+                point: event.locationInWindow,
                 extra: ["duration_ms": Int(pressDuration * 1000)]
             )
             appendStartupTrace("\(source).pressHoldNoToggle.\(Int(pressDuration * 1000))ms")
-            return true
+            return
         }
 
-        if target == .compact {
-            return handleCompactPanelMouseDown(
-                at: pressPoint,
+        switch press.target {
+        case .compact:
+            let startedAt = CACurrentMediaTime()
+            _ = handleCompactPanelMouseDown(
+                at: event.locationInWindow,
                 panelSize: panel.frame.size,
                 clickCount: event.clickCount,
                 source: source
             )
+            writeManualLatency(
+                source: source,
+                action: "compact_mouse_up",
+                startedAt: startedAt,
+                eventTimestamp: event.timestamp
+            )
+        case .edgeRail:
+            let startedAt = CACurrentMediaTime()
+            _ = handleEdgeRailClick(clickCount: event.clickCount, source: source)
+            writeManualLatency(
+                source: source,
+                action: "edge_rail_mouse_up",
+                startedAt: startedAt,
+                eventTimestamp: event.timestamp
+            )
         }
+    }
 
-        handleEdgeRailMouseDown(source: source)
-        return true
+    private func scheduleNativePressRecovery(on panel: TaskLightPanel, source: String) {
+        cancelNativePressRecovery()
+        for delay in taskLightNativePressRecoveryDelays {
+            let workItem = DispatchWorkItem { [weak self, weak panel] in
+                guard let self, let panel else { return }
+                self.recoverNativePressIfReleased(on: panel, source: source)
+            }
+            nativePressRecoveryWorkItems.append(workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        }
+    }
+
+    private func cancelNativePressRecovery() {
+        nativePressRecoveryWorkItems.forEach { $0.cancel() }
+        nativePressRecoveryWorkItems.removeAll()
+    }
+
+    private func recoverNativePressIfReleased(on panel: TaskLightPanel, source: String) {
+        guard let press = nativePress, !press.didDrag else { return }
+        let leftMouseDown = CGEventSource.buttonState(.hidSystemState, button: .left)
+        guard !leftMouseDown else { return }
+        nativePress = nil
+        cancelNativePressRecovery()
+        defer {
+            isPanelPressTracking = false
+            fallbackPress = nil
+            lastPolledLeftMouseDown = false
+            suppressFallbackPressUntil = Date().addingTimeInterval(0.22)
+        }
+        appendStartupTrace("\(source).recoverReleasedMouseUp")
+        switch press.target {
+        case .compact:
+            let panelPoint = NSPoint(
+                x: press.startPoint.x - panel.frame.minX,
+                y: press.startPoint.y - panel.frame.minY
+            )
+            _ = handleCompactPanelMouseDown(
+                at: panelPoint,
+                panelSize: panel.frame.size,
+                clickCount: 1,
+                source: "\(source).recoveredMouseUp"
+            )
+        case .edgeRail:
+            _ = handleEdgeRailClick(clickCount: 1, source: "\(source).recoveredMouseUp")
+        }
     }
 
     func handleMouseEventTap(type: CGEventType, screenPoint: NSPoint, eventLocation: CGPoint) {
+        let eventPoint = NSPoint(x: eventLocation.x, y: eventLocation.y)
         writeClickDiagnostic(
             source: "eventTap.any",
             action: "observed",
@@ -934,10 +1175,42 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             ]
         )
         appendStartupTrace("eventTap.any.observed.x\(Int(screenPoint.x)).y\(Int(screenPoint.y))")
+        guard !isPanelPressTracking else {
+            appendStartupTrace("eventTap.ignored.nativeTracking")
+            return
+        }
+        handleMouseCoordinateInput(source: "eventTap", screenPoints: [eventPoint, screenPoint], recordsAnyClick: false)
     }
 
     private func handleMouseCoordinateInput(source: String, screenPoint: NSPoint, recordsAnyClick: Bool) {
-        let normalizedPoint = normalizedPanelScreenPoint(screenPoint)
+        handleMouseCoordinateInput(source: source, screenPoints: [screenPoint], recordsAnyClick: recordsAnyClick)
+    }
+
+    private func handleMouseCoordinateInput(source: String, screenPoints: [NSPoint], recordsAnyClick: Bool) {
+        var tried: [[String: CGFloat]] = []
+        for screenPoint in expandedPanelCoordinateCandidates(from: screenPoints) {
+            let normalizedPoint = normalizedPanelScreenPoint(screenPoint)
+            tried.append(["x": normalizedPoint.x, "y": normalizedPoint.y])
+            if handleMouseCoordinateCandidate(source: source, screenPoint: screenPoint, normalizedPoint: normalizedPoint, recordsAnyClick: recordsAnyClick) {
+                return
+            }
+        }
+        writeClickDiagnostic(
+            source: "\(source).miss",
+            action: "outside_panels",
+            point: nil,
+            extra: ["candidate_points": tried]
+        )
+        appendStartupTrace("\(source).miss.outsidePanels")
+    }
+
+    @discardableResult
+    private func handleMouseCoordinateCandidate(
+        source: String,
+        screenPoint: NSPoint,
+        normalizedPoint: NSPoint,
+        recordsAnyClick: Bool
+    ) -> Bool {
         if recordsAnyClick {
             writeClickDiagnostic(
                 source: "\(source).any",
@@ -947,14 +1220,13 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             )
             appendStartupTrace("\(source).any.observed.x\(Int(normalizedPoint.x)).y\(Int(normalizedPoint.y))")
         }
-        if let edgePanel, edgePanel.isVisible, edgePanel.frame.contains(normalizedPoint) {
-            writeClickDiagnostic(source: "\(source).edgeRail", action: "restore", point: nil)
-            handleEdgeRailMouseDown(source: "\(source).edgeRail")
-            return
+        if let edgePanel, panelIsInteractivelyVisible(edgePanel), edgePanel.frame.contains(normalizedPoint) {
+            _ = handleEdgeRailClick(clickCount: 1, source: "\(source).edgeRail")
+            return true
         }
 
-        guard let compactPanel, compactPanel.isVisible, !viewModel.expanded else { return }
-        guard compactPanel.frame.contains(normalizedPoint) else { return }
+        guard let compactPanel, panelIsInteractivelyVisible(compactPanel), !viewModel.expanded else { return false }
+        guard compactPanel.frame.contains(normalizedPoint) else { return false }
         let panelPoint = NSPoint(
             x: normalizedPoint.x - compactPanel.frame.minX,
             y: normalizedPoint.y - compactPanel.frame.minY
@@ -967,7 +1239,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
                 point: panelPoint
             )
             appendStartupTrace("\(source).compact.panelClickNoToggle")
-            return
+            return true
         }
         writeClickDiagnostic(
             source: "\(source).compact",
@@ -975,16 +1247,17 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             point: panelPoint
         )
         setEdgeCollapsedFromInteraction(true, source: "\(source).compact.panelCollapse")
+        return true
     }
 
     private func beginFallbackPress(at point: NSPoint) {
-        if let edgePanel, edgePanel.isVisible, edgePanel.frame.contains(point) {
+        if let edgePanel, panelIsInteractivelyVisible(edgePanel), edgePanel.frame.contains(point) {
             fallbackPress = TaskLightFallbackPress(target: .edgeRail, startPoint: point, startFrame: edgePanel.frame)
             writeClickDiagnostic(source: "mousePoll.edgeRail", action: "press_begin", point: point)
             appendStartupTrace("mousePoll.edgeRail.pressBegin")
             return
         }
-        if let compactPanel, compactPanel.isVisible, !viewModel.expanded, compactPanel.frame.contains(point) {
+        if let compactPanel, panelIsInteractivelyVisible(compactPanel), !viewModel.expanded, compactPanel.frame.contains(point) {
             fallbackPress = TaskLightFallbackPress(target: .compact, startPoint: point, startFrame: compactPanel.frame)
             writeClickDiagnostic(source: "mousePoll.compact", action: "press_begin", point: point)
             appendStartupTrace("mousePoll.compact.pressBegin")
@@ -1044,7 +1317,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
                 source: "mousePoll.compact"
             )
         case .edgeRail:
-            handleEdgeRailMouseDown(source: "mousePoll.edgeRail")
+            _ = handleEdgeRailClick(clickCount: 1, source: "mousePoll.edgeRail")
         }
     }
 
@@ -1148,6 +1421,32 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         return point
     }
 
+    private func expandedPanelCoordinateCandidates(from points: [NSPoint]) -> [NSPoint] {
+        var candidates: [NSPoint] = []
+        func appendUnique(_ point: NSPoint) {
+            let alreadyIncluded = candidates.contains {
+                abs($0.x - point.x) < 0.5 && abs($0.y - point.y) < 0.5
+            }
+            if !alreadyIncluded {
+                candidates.append(point)
+            }
+        }
+
+        for point in points {
+            appendUnique(point)
+            for screen in NSScreen.screens {
+                appendUnique(NSPoint(x: point.x, y: screen.frame.maxY - point.y + screen.frame.minY))
+            }
+        }
+
+        appendUnique(NSEvent.mouseLocation)
+        for screen in NSScreen.screens {
+            let mouse = NSEvent.mouseLocation
+            appendUnique(NSPoint(x: mouse.x, y: screen.frame.maxY - mouse.y + screen.frame.minY))
+        }
+        return candidates
+    }
+
     private func currentDragScreenPoint() -> NSPoint {
         NSEvent.mouseLocation
     }
@@ -1170,19 +1469,15 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         }
         lastEdgeToggleAt = now
         let visualState = compactPanel.map { compactPanelIsVisuallyEdgeCollapsed($0) } ?? false
-        let edgeVisible = edgePanel?.isVisible == true
+        let edgeVisible = panelIsInteractivelyVisible(edgePanel)
         appendStartupTrace("\(source).setEdgeCollapsed.\(value).model.\(viewModel.edgeCollapsed).visual.\(visualState).edgeVisible.\(edgeVisible)")
-        if value {
-            viewModel.expanded = false
+        let needsVisualTransition = visualState != value || edgeVisible != value || viewModel.edgeCollapsed != value
+        if needsVisualTransition {
+            appendStartupTrace("\(source).fastVisualTransition.\(value)")
+            transition(edgeCollapsed: value)
         }
-        if viewModel.edgeCollapsed == value {
-            if visualState != value || edgeVisible != value {
-                appendStartupTrace("\(source).reconcileVisual.\(value)")
-                transition(edgeCollapsed: value)
-            }
-        } else {
-            viewModel.setEdgeCollapsed(value)
-        }
+        guard viewModel.edgeCollapsed != value else { return }
+        scheduleEdgeCollapsedModelSync(value)
     }
 
     private func forceRestoreFromEdgePanel(source: String) {
@@ -1192,7 +1487,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).restoreBypassedTransitionLock")
         }
         lastEdgeToggleAt = .distantPast
-        let edgeVisible = edgePanel?.isVisible == true
+        let edgeVisible = panelIsInteractivelyVisible(edgePanel)
         let visualState = compactPanel.map { compactPanelIsVisuallyEdgeCollapsed($0) } ?? false
         appendStartupTrace("\(source).forceRestore.model.\(viewModel.edgeCollapsed).visual.\(visualState).edgeVisible.\(edgeVisible)")
         guard viewModel.edgeCollapsed || edgeVisible || visualState else {
@@ -1200,12 +1495,34 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).ignoredAlreadyRestored")
             return
         }
-        viewModel.expanded = false
-        if viewModel.edgeCollapsed {
-            viewModel.setEdgeCollapsed(false)
-            return
-        }
         transition(edgeCollapsed: false)
+        guard viewModel.edgeCollapsed else { return }
+        scheduleEdgeCollapsedModelSync(false)
+    }
+
+    private func consumeSuppressedEdgeTransition(_ edgeCollapsed: Bool) -> Bool {
+        guard suppressedEdgeTransitionValue == edgeCollapsed else { return false }
+        suppressedEdgeTransitionValue = nil
+        appendStartupTrace("edgeTransition.suppressedDuplicate.\(edgeCollapsed)")
+        return true
+    }
+
+    private func scheduleEdgeCollapsedModelSync(_ value: Bool) {
+        pendingEdgeModelSyncWorkItem?.cancel()
+        suppressedEdgeTransitionValue = value
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.viewModel.setEdgeCollapsed(value)
+        }
+        pendingEdgeModelSyncWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func flushPendingEdgeModelSyncForSelfTest() {
+        guard let workItem = pendingEdgeModelSyncWorkItem else { return }
+        pendingEdgeModelSyncWorkItem = nil
+        workItem.perform()
+        workItem.cancel()
     }
 
     private func compactPanelIsVisuallyEdgeCollapsed(_ panel: NSWindow) -> Bool {
@@ -1277,27 +1594,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = hosting
         installClickShield(on: panel, displayMode: displayMode)
         panel.delegate = self
-        if displayMode == .compact {
-            panel.mouseDownInterceptor = { [weak self, weak panel] event in
-                guard let self, let panel else { return false }
-                return self.trackPanelPress(
-                    on: panel,
-                    event: event,
-                    target: .compact,
-                    source: "panelMouse.compact"
-                )
-            }
-        } else if displayMode == .edgeRail {
-            panel.mouseDownInterceptor = { [weak self, weak panel] event in
-                guard let self, let panel else { return false }
-                return self.trackPanelPress(
-                    on: panel,
-                    event: event,
-                    target: .edgeRail,
-                    source: "edgePanelMouse"
-                )
-            }
-        }
+        panel.mouseDownInterceptor = nil
         appendStartupTrace("createPanel.\(displayMode.traceName).end")
         return panel
     }
@@ -1314,24 +1611,30 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             shield.hitMode = .full
             shield.onMouseDown = { [weak self] event in
                 guard let self, let panel = event.window as? TaskLightPanel else { return }
-                _ = self.trackPanelPress(
-                    on: panel,
-                    event: event,
-                    target: .compact,
-                    source: "nativeClickShield.compact"
-                )
+                self.beginNativePress(on: panel, event: event, target: .compact, source: "nativeClickShield.compact")
+            }
+            shield.onMouseDragged = { [weak self] event in
+                guard let self, let panel = event.window as? TaskLightPanel else { return }
+                self.updateNativePress(on: panel, event: event, source: "nativeClickShield.compact")
+            }
+            shield.onMouseUp = { [weak self] event in
+                guard let self, let panel = event.window as? TaskLightPanel else { return }
+                self.finishNativePress(on: panel, event: event, source: "nativeClickShield.compact")
             }
             appendStartupTrace("clickShield.compact.installed")
         case .edgeRail:
             shield.hitMode = .full
             shield.onMouseDown = { [weak self] event in
                 guard let self, let panel = event.window as? TaskLightPanel else { return }
-                _ = self.trackPanelPress(
-                    on: panel,
-                    event: event,
-                    target: .edgeRail,
-                    source: "nativeClickShield.edgeRail"
-                )
+                self.beginNativePress(on: panel, event: event, target: .edgeRail, source: "nativeClickShield.edgeRail")
+            }
+            shield.onMouseDragged = { [weak self] event in
+                guard let self, let panel = event.window as? TaskLightPanel else { return }
+                self.updateNativePress(on: panel, event: event, source: "nativeClickShield.edgeRail")
+            }
+            shield.onMouseUp = { [weak self] event in
+                guard let self, let panel = event.window as? TaskLightPanel else { return }
+                self.finishNativePress(on: panel, event: event, source: "nativeClickShield.edgeRail")
             }
             appendStartupTrace("clickShield.edgeRail.installed")
         case .expanded:
@@ -1363,6 +1666,13 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     }
 
     private func storedCompactFrame() -> NSRect? {
+        if let lastKnownCompactFrame {
+            let visibleFrame = visibleFrame(containing: NSPoint(x: lastKnownCompactFrame.midX, y: lastKnownCompactFrame.midY))
+                ?? activeVisibleFrame()
+                ?? visibleFrames().first
+                ?? lastKnownCompactFrame
+            return TaskLightPanelGeometry.clampedFrame(lastKnownCompactFrame, visibleFrame: visibleFrame)
+        }
         let defaults = UserDefaults.standard
         let keys = [TaskLightLedgerKeys.compactWindowFrame, TaskLightLedgerKeys.windowFrame]
         for key in keys {
@@ -1428,9 +1738,23 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
 
     private func saveCompactFrame(_ frame: NSRect) {
         let compact = compactFrame(from: frame)
+        lastKnownCompactFrame = compact
         let data = try? NSKeyedArchiver.archivedData(withRootObject: NSValue(rect: compact), requiringSecureCoding: false)
         UserDefaults.standard.set(data, forKey: TaskLightLedgerKeys.compactWindowFrame)
         UserDefaults.standard.set(data, forKey: TaskLightLedgerKeys.windowFrame)
+    }
+
+    private func rememberCompactFrame(_ frame: NSRect, source: String, persistImmediately: Bool = true) {
+        let compact = compactFrame(from: frame)
+        lastKnownCompactFrame = compact
+        if persistImmediately {
+            compactFramePersistWorkItem?.cancel()
+            compactFramePersistWorkItem = nil
+            saveCompactFrame(compact)
+            appendStartupTrace("\(source).rememberCompactFrame.x\(Int(compact.minX)).y\(Int(compact.minY))")
+            return
+        }
+        scheduleCompactFramePersist(source: source)
     }
 
     private func saveEdgeRailFrame(_ frame: NSRect) {
@@ -1450,6 +1774,19 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             return
         }
         scheduleEdgeRailFramePersist(source: source)
+    }
+
+    private func scheduleCompactFramePersist(source: String) {
+        compactFramePersistWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, let compactFrame = self.lastKnownCompactFrame else { return }
+                self.saveCompactFrame(compactFrame)
+                self.appendStartupTrace("\(source).debouncedRememberCompactFrame.x\(Int(compactFrame.minX)).y\(Int(compactFrame.minY))")
+            }
+        }
+        compactFramePersistWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: workItem)
     }
 
     private func scheduleEdgeRailFramePersist(source: String) {
@@ -1481,16 +1818,29 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         isApplyingProgrammaticFrame = true
         programmaticFrameChangeID += 1
         let changeID = programmaticFrameChangeID
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animated ? duration : 0
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            context.allowsImplicitAnimation = animated
-            panel.setFrame(frame, display: display, animate: animated)
+        guard animated else {
+            panel.setFrame(frame, display: display)
+            DispatchQueue.main.async { [weak self] in
+                guard self?.programmaticFrameChangeID == changeID else { return }
+                self?.isApplyingProgrammaticFrame = false
+            }
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + (animated ? duration + 0.06 : 0.05)) { [weak self] in
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            panel.setFrame(frame, display: display, animate: true)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.06) { [weak self] in
             guard self?.programmaticFrameChangeID == changeID else { return }
             self?.isApplyingProgrammaticFrame = false
         }
+    }
+
+    private func prewarmPanelSurface(_ panel: TaskLightPanel) {
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.contentView?.displayIfNeeded()
     }
 
     private func animatePanelAlpha(_ panel: TaskLightPanel, to alpha: CGFloat, duration: TimeInterval) {
@@ -1566,6 +1916,28 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             } catch {
                 DispatchQueue.main.async { [weak self] in
                     self?.appendStartupTrace("clickDiagnostic.writeFailed.\(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func writeManualLatency(source: String, action: String, startedAt: CFTimeInterval, eventTimestamp: TimeInterval? = nil) {
+        let directory = viewModel.config.stateDirectory
+        let url = directory.appendingPathComponent("manual_interaction_latency.log")
+        let appliedMs = (CACurrentMediaTime() - startedAt) * 1000
+        let eventDelay = eventTimestamp.map { max(0, (CACurrentMediaTime() - $0) * 1000) }
+        let eventDelayText = eventDelay.map { String(format: " event_delay_ms=%.2f", $0) } ?? ""
+        let line = "\(ISO8601DateFormatter().string(from: Date())) panel source=\(source) action=\(action) applied_ms=\(String(format: "%.2f", appliedMs))\(eventDelayText) edge_collapsed=\(viewModel.edgeCollapsed) compact_alpha=\(String(format: "%.2f", compactPanel?.alphaValue ?? -1)) edge_alpha=\(String(format: "%.2f", edgePanel?.alphaValue ?? -1))\n"
+        taskLightTraceWriteQueue.async {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if let data = line.data(using: .utf8) {
+                if FileManager.default.fileExists(atPath: url.path),
+                   let handle = try? FileHandle(forWritingTo: url) {
+                    _ = try? handle.seekToEnd()
+                    try? handle.write(contentsOf: data)
+                    try? handle.close()
+                } else {
+                    try? data.write(to: url)
                 }
             }
         }
@@ -1680,16 +2052,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         }
         applyPanelFrame(recoveredFrame, to: targetPanel)
         targetPanel.ignoresMouseEvents = false
-        targetPanel.makeKeyAndOrderFront(nil)
         targetPanel.orderFrontRegardless()
         if targetPanel === edgePanel {
-            NSApp.activate(ignoringOtherApps: true)
             appendStartupTrace("ensureVisibleOnActiveSpace.edgePanelKey")
             return
         }
-        targetPanel.makeKey()
-        NSApp.activate(ignoringOtherApps: true)
-        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         appendStartupTrace("ensureVisibleOnActiveSpace")
     }
 
@@ -1697,7 +2064,7 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         let directory = viewModel.config.stateDirectory
         let url = directory.appendingPathComponent("startup_trace.log")
             let line = "\(ISO8601DateFormatter().string(from: Date())) panel_controller \(event)\n"
-        DispatchQueue.global(qos: .utility).async {
+        taskLightTraceWriteQueue.async {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             if let data = line.data(using: .utf8) {
                 if FileManager.default.fileExists(atPath: url.path),

@@ -144,6 +144,42 @@ public final class TaskLightStore {
             }
     }
 
+    public func loadRecentEvents(
+        limit: Int = TaskLightUIPerformanceBudget.alertPlaybackRecentEventLimit,
+        maxBytes: Int = TaskLightUIPerformanceBudget.eventTailReadMaxBytes
+    ) -> [TaskLightEventRecord] {
+        ensureLayout()
+        guard limit > 0,
+              maxBytes > 0,
+              let handle = try? FileHandle(forReadingFrom: config.eventsURL)
+        else {
+            return []
+        }
+        defer { try? handle.close() }
+
+        let fileSize = (try? handle.seekToEnd()) ?? 0
+        guard fileSize > 0 else { return [] }
+        let bytesToRead = min(UInt64(maxBytes), fileSize)
+        let startOffset = fileSize - bytesToRead
+        do {
+            try handle.seek(toOffset: startOffset)
+            guard let data = try handle.readToEnd(), !data.isEmpty else { return [] }
+            guard var raw = String(data: data, encoding: .utf8), !raw.isEmpty else { return [] }
+            if startOffset > 0, let firstNewline = raw.firstIndex(where: \.isNewline) {
+                raw = String(raw[raw.index(after: firstNewline)...])
+            }
+            return raw
+                .split(whereSeparator: \.isNewline)
+                .suffix(limit)
+                .compactMap { line in
+                    guard let data = String(line).data(using: .utf8) else { return nil }
+                    return try? decoder.decode(TaskLightEventRecord.self, from: data)
+                }
+        } catch {
+            return []
+        }
+    }
+
     public func loadPlayedLedger() -> TaskLightPlayedEventsLedger {
         ensureLayout()
         guard let ledger: TaskLightPlayedEventsLedger = try? readJSON(from: config.playedEventsURL) else {

@@ -53,11 +53,19 @@ final class TaskLightViewModel: ObservableObject {
     private var ledger: TaskLightPlayedEventsLedger
     private var stateDirectoryFileDescriptor: CInt?
     private var stateDirectorySource: DispatchSourceFileSystemObject?
+    private var uiPersistWorkItem: DispatchWorkItem?
     private var pendingStateFileRefresh: DispatchWorkItem?
     private var pendingWorkspaceCoverageRefreshes: [DispatchWorkItem] = []
     private var pendingWorkspaceCoverageHide: DispatchWorkItem?
     private var pendingInitialRefresh: DispatchWorkItem?
-    private var recentEventsModifiedAt: Date?
+    private var recentEventsFingerprint: String?
+    private var alertEventSnapshot: [TaskLightEventRecord]
+    private var lastAlertPlaybackFingerprint: String?
+    private var lastAlertPlaybackMuted: Bool?
+    private var lastWatchedUIStateFileFingerprint: String?
+    private var lastLoadedUIStateFileFingerprint: String?
+    private var lastUIClientDiagnosticSignature: String?
+    private var lastUIClientDiagnosticWriteAt: Date?
     private var lastUIEventFlowFingerprint: String?
     private var lastUIStateRefreshSignature: String?
     private var suppressCompactTapUntil: Date?
@@ -78,6 +86,7 @@ final class TaskLightViewModel: ObservableObject {
         self.ledger = self.store.loadPlayedLedger()
         self.muted = self.ledger.muted
         self.recentEventSnapshot = []
+        self.alertEventSnapshot = []
         self.uiStateRevision = 0
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: initialUIState, config: config)
     }
@@ -95,20 +104,22 @@ final class TaskLightViewModel: ObservableObject {
         self.ledger = TaskLightPlayedEventsLedger()
         self.muted = false
         self.recentEventSnapshot = []
+        self.alertEventSnapshot = []
         self.uiStateRevision = 0
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: previewUIState, config: config)
     }
 
     func start() {
-        pendingInitialRefresh?.cancel()
         startStateFileWatcher()
+        guard timer == nil else { return }
+        pendingInitialRefresh?.cancel()
         timer?.invalidate()
         let timer = Timer(timeInterval: config.refreshSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .default)
         self.timer = timer
         let workItem = DispatchWorkItem { [weak self] in
             self?.refresh()
@@ -118,6 +129,15 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func refresh() {
+        let uiStateFileFingerprint = Self.fileFingerprint(for: config.uiStateURL)
+        if uiStateFileFingerprint != "missing",
+           uiStateFileFingerprint == lastLoadedUIStateFileFingerprint {
+            refreshRecentEventsIfNeeded()
+            handleAlertPlayback()
+            saveUIClientDiagnostic()
+            return
+        }
+        lastLoadedUIStateFileFingerprint = uiStateFileFingerprint
         let previousState = uiState
         let nextState = store.loadProjectedUIState()
         let nextSignature = Self.uiStateRefreshSignature(for: nextState, config: config)
@@ -136,6 +156,9 @@ final class TaskLightViewModel: ObservableObject {
     func shutdown() {
         timer?.invalidate()
         timer = nil
+        uiPersistWorkItem?.cancel()
+        uiPersistWorkItem = nil
+        writeUIStateDefaults()
         pendingInitialRefresh?.cancel()
         pendingInitialRefresh = nil
         pendingStateFileRefresh?.cancel()
@@ -191,17 +214,17 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func setEdgeCollapsed(_ value: Bool) {
-        suppressCompactTapUntil = Date().addingTimeInterval(0.42)
+        suppressCompactTapUntil = Date().addingTimeInterval(0.16)
         guard edgeCollapsed != value else {
             expanded = false
             contentExpanded = false
-            persistUIState()
+            persistUIState(deferred: true)
             return
         }
         expanded = false
         contentExpanded = false
         edgeCollapsed = value
-        persistUIState()
+        persistUIState(deferred: true)
     }
 
     func setContentExpanded(_ value: Bool) {
@@ -361,9 +384,9 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func sortedManagedTasks() -> [TaskLightTaskSummary] {
-        uiState.tasks.map { $0.asTaskSummary() }.sorted { lhs, rhs in
-            let lhsRank = taskSortRank(uiDisplayScope(for: lhs.task_id, fallback: lhs.effective_status))
-            let rhsRank = taskSortRank(uiDisplayScope(for: rhs.task_id, fallback: rhs.effective_status))
+        uiState.tasks.sorted { lhs, rhs in
+            let lhsRank = taskSortRank(lhs.display_scope)
+            let rhsRank = taskSortRank(rhs.display_scope)
             if lhsRank != rhsRank {
                 return lhsRank < rhsRank
             }
@@ -371,7 +394,7 @@ final class TaskLightViewModel: ObservableObject {
                 return (lhs.updated_at ?? "") > (rhs.updated_at ?? "")
             }
             return lhs.task_id < rhs.task_id
-        }
+        }.map { $0.asTaskSummary() }
     }
 
     func invalidManagedTasks() -> [TaskLightTaskSummary] {
@@ -392,11 +415,16 @@ final class TaskLightViewModel: ObservableObject {
 
     private func refreshRecentEventsIfNeeded() {
         let eventURL = store.config.eventsURL
-        let modifiedAt = (try? FileManager.default.attributesOfItem(atPath: eventURL.path)[.modificationDate]) as? Date
-        guard modifiedAt != recentEventsModifiedAt || recentEventSnapshot.isEmpty else { return }
-        recentEventsModifiedAt = modifiedAt
+        let attributes = try? FileManager.default.attributesOfItem(atPath: eventURL.path)
+        let modifiedAt = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let fileSize = (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
+        let fingerprint = "\(modifiedAt):\(fileSize)"
+        guard fingerprint != recentEventsFingerprint else { return }
+        recentEventsFingerprint = fingerprint
+        let loadedEvents = store.loadRecentEvents()
+        alertEventSnapshot = loadedEvents
         recentEventSnapshot = Array(
-            store.loadEvents()
+            loadedEvents
                 .sorted { lhs, rhs in
                     if lhs.created_at != rhs.created_at {
                         return lhs.created_at > rhs.created_at
@@ -587,10 +615,22 @@ final class TaskLightViewModel: ObservableObject {
             TaskLightStatus.done_unverified.rawValue,
             TaskLightStatus.invalid_json.rawValue
         ])
-        return sortedManagedTasks().filter { task in
-            let scope = uiDisplayScope(for: task.task_id, fallback: task.effective_status)
-            return activeScopes.contains(scope) || activeStatuses.contains(task.effective_status)
-        }
+        return uiState.tasks
+            .filter { task in
+                activeScopes.contains(task.display_scope) || activeStatuses.contains(task.effective_status)
+            }
+            .sorted { lhs, rhs in
+                let lhsRank = taskSortRank(lhs.display_scope)
+                let rhsRank = taskSortRank(rhs.display_scope)
+                if lhsRank != rhsRank {
+                    return lhsRank < rhsRank
+                }
+                if lhs.updated_at != rhs.updated_at {
+                    return (lhs.updated_at ?? "") > (rhs.updated_at ?? "")
+                }
+                return lhs.task_id < rhs.task_id
+            }
+            .map { $0.asTaskSummary() }
     }
 
     func taskRadarObservedThreads() -> [TaskLightObservationRecord] {
@@ -686,6 +726,9 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func scheduleStateFileRefresh() {
+        let fingerprint = Self.fileFingerprint(for: config.uiStateURL)
+        guard fingerprint != lastWatchedUIStateFileFingerprint else { return }
+        lastWatchedUIStateFileFingerprint = fingerprint
         pendingStateFileRefresh?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             self?.refresh()
@@ -722,10 +765,16 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func handleAlertPlayback() {
-        var ledger = store.loadPlayedLedger()
+        guard recentEventsFingerprint != lastAlertPlaybackFingerprint || muted != lastAlertPlaybackMuted else {
+            return
+        }
+        lastAlertPlaybackFingerprint = recentEventsFingerprint
+        lastAlertPlaybackMuted = muted
+
+        var ledger = self.ledger
         ledger.muted = muted
 
-        let events = store.loadEvents()
+        let events = alertEventSnapshot
         let sortedEvents = events.sorted { lhs, rhs in
             if lhs.created_at != rhs.created_at {
                 return lhs.created_at < rhs.created_at
@@ -856,7 +905,22 @@ final class TaskLightViewModel: ObservableObject {
         }
     }
 
-    private func persistUIState() {
+    private func persistUIState(deferred: Bool = false) {
+        guard deferred else {
+            writeUIStateDefaults()
+            return
+        }
+        uiPersistWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.writeUIStateDefaults()
+            }
+        }
+        uiPersistWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: workItem)
+    }
+
+    private func writeUIStateDefaults() {
         let defaults = UserDefaults.standard
         defaults.set(expanded, forKey: TaskLightLedgerKeys.expanded)
         defaults.set(edgeCollapsed, forKey: TaskLightLedgerKeys.edgeCollapsed)
@@ -870,12 +934,30 @@ final class TaskLightViewModel: ObservableObject {
         let bundleID = bundle.bundleIdentifier ?? "com.local.66tasklight"
         let resourceDate = (try? bundleURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
         let buildID = resourceDate.map { String(Int($0.timeIntervalSince1970)) } ?? TaskLightTaskRecord.nowString()
+        let signature = [bundleID, bundleURL.path, executableURL.path, buildID, config.stateDirectory.path].joined(separator: "|")
+        let now = Date()
+        if signature == lastUIClientDiagnosticSignature,
+           let lastWrite = lastUIClientDiagnosticWriteAt,
+           now.timeIntervalSince(lastWrite) < 15 {
+            return
+        }
+        lastUIClientDiagnosticSignature = signature
+        lastUIClientDiagnosticWriteAt = now
         store.saveUIClientRecord(
             bundleID: bundleID,
             bundlePath: bundleURL.path,
             executablePath: executableURL.path,
             buildID: buildID
         )
+    }
+
+    private static func fileFingerprint(for url: URL) -> String {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return "missing"
+        }
+        let modifiedAt = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let fileSize = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+        return "\(modifiedAt):\(fileSize)"
     }
 
     private func recordUIEventFlow(previous: TaskLightUIState, current: TaskLightUIState) {

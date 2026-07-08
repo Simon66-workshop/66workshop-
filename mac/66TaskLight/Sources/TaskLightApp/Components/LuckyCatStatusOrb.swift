@@ -12,8 +12,6 @@ struct LuckyCatStatusOrb: View {
     var showsGlow: Bool = true
     var style: Style = .standard
 
-    @State private var animated = false
-
     var body: some View {
         ZStack {
             if showsGlow {
@@ -21,8 +19,8 @@ struct LuckyCatStatusOrb: View {
                     .fill(status.glow)
                     .frame(width: size + 24, height: size + 24)
                     .blur(radius: 14)
-                    .scaleEffect(pulsing && animated ? 1.12 : 0.98)
-                    .opacity(pulsing ? 0.95 : 0.78)
+                    .scaleEffect(pulsing ? 1.04 : 0.98)
+                    .opacity(pulsing ? 0.86 : 0.78)
             }
 
             Circle()
@@ -36,7 +34,7 @@ struct LuckyCatStatusOrb: View {
                             status.tint.opacity(0.20)
                         ],
                         center: .center,
-                        angle: .degrees(animated ? 360 : 0)
+                        angle: .degrees(0)
                     ),
                     lineWidth: style == .embedded ? 2.6 : 3.2
                 )
@@ -126,7 +124,7 @@ struct LuckyCatStatusOrb: View {
                         style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
                     )
                     .frame(width: size * 0.72, height: size * 0.72)
-                    .rotationEffect(.degrees(animated ? 338 : -24))
+                    .rotationEffect(.degrees(-24))
                     .offset(x: size * 0.03, y: size * 0.02)
                     .blur(radius: 0.25)
                     .blendMode(.screen)
@@ -136,11 +134,6 @@ struct LuckyCatStatusOrb: View {
                 .fill(Color.white.opacity(style == .embedded ? 0.58 : 0.44))
                 .frame(width: size * (style == .embedded ? 0.16 : 0.22), height: size * (style == .embedded ? 0.16 : 0.22))
                 .offset(x: -size * 0.14, y: -size * 0.14)
-        }
-        .animation(pulsing ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : nil, value: animated)
-        .onAppear {
-            guard pulsing else { return }
-            animated = true
         }
     }
 }

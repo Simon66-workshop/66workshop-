@@ -19,6 +19,7 @@ chrome_primitives="$APP_DIR/Screens/EdgeRailGlassChromePrimitives.swift"
 orb_view="$APP_DIR/Screens/EdgeRailGlassStatusOrb.swift"
 compact_shell="$APP_DIR/Components/LuckyCatCompactShell.swift"
 view_model="$APP_DIR/TaskLightViewModel.swift"
+store="$ROOT_DIR/mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift"
 rail_glass_sources=("$rail_view" "$chrome_view" "$chrome_background" "$chrome_shell" "$chrome_primitives")
 
 for source in "${rail_glass_sources[@]}"; do
@@ -54,19 +55,92 @@ if rg -n "NSEvent\\.addGlobalMonitor|NSEvent\\.addLocalMonitor|withTimeInterval:
   fail "edge toggle should not use NSEvent global/local monitors or 8ms polling"
 fi
 
-if rg -n "override func mouseUp|override func rightMouseUp|override func otherMouseUp" "$controller" >/tmp/66tasklight-edge-toggle-mouseup.txt; then
-  cat /tmp/66tasklight-edge-toggle-mouseup.txt
-  fail "mouse-up must not be a toggle trigger"
+rg -q "beginNativePress" "$controller" \
+  || fail "native click shield should use a non-blocking press begin handler"
+
+rg -q "updateNativePress" "$controller" \
+  || fail "native click shield should update drag intent without blocking the main thread"
+
+rg -q "finishNativePress" "$controller" \
+  || fail "native click shield should finish click/drag on mouse-up"
+
+rg -q "scheduleNativePressRecovery" "$controller" \
+  || fail "native press path should recover when a transparent panel loses mouse-up"
+
+rg -Fq "taskLightNativePressRecoveryDelays: [TimeInterval] = [0.045, 0.12, 0.28]" "$controller" \
+  || fail "transparent-panel mouse-up recovery should stay below perceptible latency"
+
+rg -q "instantStatusOrbDown" "$controller" \
+  || fail "compact status orb should collapse on mouse-down for millisecond response"
+
+rg -q "persistUIState\\(deferred: true\\)" "$view_model" \
+  || fail "edgeCollapsed persistence should be deferred so UI switches before UserDefaults writes"
+
+sed -n '/func start()/,/^    func refresh()/p' "$view_model" > /tmp/66tasklight-viewmodel-start-section.txt
+rg -q "guard timer == nil else \\{ return \\}" /tmp/66tasklight-viewmodel-start-section.txt \
+  || fail "view model start should be idempotent so menu/show actions do not restart refresh timers"
+rg -q "RunLoop\\.main\\.add\\(timer, forMode: \\.default\\)" /tmp/66tasklight-viewmodel-start-section.txt \
+  || fail "ui_state refresh timer should not run in common modes during menu tracking or drag tracking"
+
+rg -q "loadRecentEvents" "$store" \
+  || fail "event log readers should expose a bounded tail reader for UI refresh paths"
+
+rg -q "recentEventsFingerprint" "$view_model" \
+  || fail "view model should skip event parsing when the event log has not changed"
+
+rg -q "lastLoadedUIStateFileFingerprint" "$view_model" \
+  || fail "view model should skip ui_state JSON decoding when the file has not changed"
+
+if rg -n "store\\.loadEvents\\(" "$view_model" >/tmp/66tasklight-viewmodel-full-event-load.txt; then
+  cat /tmp/66tasklight-viewmodel-full-event-load.txt
+  fail "view model refresh paths must not parse the full event log on the main thread"
+fi
+
+if rg -n "repeatForever" "$compact_shell" "$APP_DIR/Components/LuckyCatPawCounterChip.swift" "$APP_DIR/Components/LuckyCatStatusOrb.swift" >/tmp/66tasklight-compact-infinite-animation.txt; then
+  cat /tmp/66tasklight-compact-infinite-animation.txt
+  fail "compact LuckyCat should not run idle repeatForever animations because they stall menu tracking"
+fi
+
+sed -n '/func applicationDidBecomeActive/,/^    func applicationWillTerminate/p' "$APP_DIR/TaskLightAppDelegate.swift" > /tmp/66tasklight-app-active-section.txt
+if rg -n "recoverVisibility" /tmp/66tasklight-app-active-section.txt >/tmp/66tasklight-app-active-recover.txt; then
+  cat /tmp/66tasklight-app-active-recover.txt
+  fail "applicationDidBecomeActive must not run visibility recovery during manual clicks"
+fi
+
+sed -n '/private func appendStartupTrace/,/^}/p' "$APP_DIR/TaskLightAppDelegate.swift" > /tmp/66tasklight-app-trace-section.txt
+rg -q "taskLightTraceWriteQueue\\.async" /tmp/66tasklight-app-trace-section.txt \
+  || fail "app delegate trace writes must be asynchronous and serialized so launch/click activation does not stall UI"
+
+if rg -n "until: \\.distantFuture" "$controller" >/tmp/66tasklight-edge-toggle-blocking-event-loop.txt; then
+  cat /tmp/66tasklight-edge-toggle-blocking-event-loop.txt
+  fail "manual edge toggle must not block waiting for a future mouse-up event"
 fi
 
 rg -q "isTaskLightMouseDown" "$controller" \
   || fail "panel should intercept only mouse-down trigger types"
+
+rg -q "panelIsInteractivelyVisible" "$controller" \
+  || fail "alpha-hot standby windows require interactive visibility checks"
 
 rg -q "handleCompactPanelMouseDown" "$controller" \
   || fail "central compact click handler is missing"
 
 rg -q "handleEdgeRailMouseDown" "$controller" \
   || fail "central edge rail click handler is missing"
+
+rg -q "handleEdgeRailClick\\(clickCount:" "$controller" \
+  || fail "central edge rail click handler must receive click count"
+
+rg -q "edge_click_no_toggle" "$controller" \
+  || fail "capsule single click should stay capsule instead of restoring"
+
+rg -q "restore_double_click" "$controller" \
+  || fail "capsule restore should require an explicit double click"
+
+if rg -n "scheduleEdgeQuickRestore|quickEdgeRestore|edge_rail_quick_restore|taskLightEdgeQuickRestoreDelay" "$controller" >/tmp/66tasklight-edge-quick-restore.txt; then
+  cat /tmp/66tasklight-edge-quick-restore.txt
+  fail "capsule must not use quick single-click restore"
+fi
 
 rg -q "taskLightCompactStatusOrbHit" "$controller" \
   || fail "status orb hit test is missing"
@@ -127,17 +201,37 @@ rg -q "CGEventSource\\.buttonState" "$controller" \
 rg -q "Timer\\(timeInterval: 0\\.016" "$controller" \
   || fail "mouse polling fallback should use 16ms cadence"
 
+sed -n '/private func startMouseButtonPollingFallback/,/^    private func stopMouseButtonPollingFallback/p' "$controller" > /tmp/66tasklight-mouse-poll-section.txt
+rg -q "RunLoop\\.main\\.add\\(timer, forMode: \\.default\\)" /tmp/66tasklight-mouse-poll-section.txt \
+  || fail "mouse polling fallback should not run in common modes during native menu tracking"
+
 rg -q "handleMouseCoordinateInput" "$controller" \
   || fail "shared coordinate click handler is missing"
 
-rg -q "trackPanelPress" "$controller" \
-  || fail "panel press tracker is missing"
+rg -q "suppressedEdgeTransitionValue" "$controller" \
+  || fail "manual edge toggle should suppress duplicate Combine transitions after direct visual switching"
+
+rg -q "fastVisualTransition" "$controller" \
+  || fail "manual edge toggle should switch the window before model fan-out work"
+
+if rg -n "trackPanelPress|nextEvent\\(" "$controller" >/tmp/66tasklight-edge-toggle-blocking-press.txt; then
+  cat /tmp/66tasklight-edge-toggle-blocking-press.txt
+  fail "panel press handling should not keep the old blocking tracker"
+fi
 
 rg -q "taskLightClickMaxDuration" "$controller" \
   || fail "short-click duration gate is missing"
 
 rg -q "taskLightDragThreshold" "$controller" \
   || fail "click/drag threshold is missing"
+
+sed -n '/private func beginNativePress/,/^    private func updateNativePress/p' "$controller" > /tmp/66tasklight-begin-native-press-section.txt
+rg -q "if target == \\.compact \\{" /tmp/66tasklight-begin-native-press-section.txt \
+  || fail "native press recovery should be limited to compact interactions"
+if rg -n "target == \\.edgeRail[^{]*\\{[^}]*scheduleNativePressRecovery" /tmp/66tasklight-begin-native-press-section.txt >/tmp/66tasklight-edge-recovery-timer.txt; then
+  cat /tmp/66tasklight-edge-recovery-timer.txt
+  fail "capsule drag must not be interrupted by native press recovery timers"
+fi
 
 rg -q "edgeRailWindowFrame" "$ROOT_DIR/mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift" "$controller" \
   || fail "free capsule frame persistence is missing"
@@ -167,8 +261,35 @@ if rg -Fq "storedEdgeRailFrame() ?? edgeRailFrame(from: compactFrame)" "$control
   fail "collapse from compact must not prefer a stale stored edge-rail frame"
 fi
 
+sed -n '/private func showCurrentModeFromMenuBar/,/^    func handleActivationClickIfInsidePanel/p' "$controller" > /tmp/66tasklight-show-current-menu-section.txt
+if rg -n "NSApp\\.activate|NSRunningApplication\\.current\\.activate" /tmp/66tasklight-show-current-menu-section.txt >/tmp/66tasklight-show-current-activate.txt; then
+  cat /tmp/66tasklight-show-current-activate.txt
+  fail "menu bar show/current-mode path must not activate the app during interaction"
+fi
+
+sed -n '/func applicationDidBecomeActive/,/^    func applicationWillTerminate/p' "$APP_DIR/TaskLightAppDelegate.swift" > /tmp/66tasklight-activation-section.txt
+if rg -n "recoverVisibility" /tmp/66tasklight-activation-section.txt >/tmp/66tasklight-activation-recover.txt; then
+  cat /tmp/66tasklight-activation-recover.txt
+  fail "activation clicks must not trigger full visibility recovery"
+fi
+
+sed -n '/func ensureVisibleOnActiveSpace/,/^    private func appendStartupTrace/p' "$controller" > /tmp/66tasklight-ensure-visible-section.txt
+if rg -n "NSApp\\.activate|NSRunningApplication\\.current\\.activate|makeKey\\(" /tmp/66tasklight-ensure-visible-section.txt >/tmp/66tasklight-ensure-visible-activate.txt; then
+  cat /tmp/66tasklight-ensure-visible-activate.txt
+  fail "visibility recovery must not steal focus or key status during edge/cat interaction"
+fi
+
 rg -q "edgeRailFramePersistWorkItem" "$controller" \
   || fail "edge rail movement should debounce persisted frame writes"
+
+rg -q "compactFramePersistWorkItem" "$controller" \
+  || fail "compact frame writes should be debounced during click-to-capsule transitions"
+
+rg -q "rememberCompactFrame\\(compactFrame, source: \"transition\\.collapse\\.anchor\", persistImmediately: false\\)" "$controller" \
+  || fail "collapse should not synchronously write compact frame before the UI switches"
+
+rg -q "rememberEdgeRailFrame\\(targetFrame, source: \"transition\\.collapse\\.anchor\", persistImmediately: false\\)" "$controller" \
+  || fail "collapse should not synchronously write edge frame before the UI switches"
 
 rg -q "persistImmediately: false" "$controller" \
   || fail "edge rail window move should not synchronously persist every frame"
@@ -432,16 +553,22 @@ if rg -n "snapEdgePanelToRightEdge|snapRightEdge" "$controller" >/tmp/66taskligh
   fail "edge rail drag must not snap back to the right edge"
 fi
 
-rg -Fq "nextEvent(" "$controller" \
-  || fail "panel press should track dragged/up events before toggling"
+rg -q "override func mouseDragged" "$controller" \
+  || fail "click shield should forward mouse-dragged events without blocking"
 
-rg -q "leftMouseDragged" "$controller" \
-  || fail "panel press should handle mouse-dragged events"
+rg -q "override func mouseUp" "$controller" \
+  || fail "click shield should forward mouse-up events without blocking"
+
+rg -q "onMouseDragged" "$controller" \
+  || fail "panel press should track dragged events before toggling"
+
+rg -q "onMouseUp" "$controller" \
+  || fail "panel press should finish on mouse-up before toggling"
 
 rg -Fq "screenPoint(for: event, in: panel)" "$controller" \
   || fail "panel drag path should derive the start screen point from the mouse-down event"
 
-rg -Fq "screenPoint(for: next, in: panel)" "$controller" \
+rg -Fq "screenPoint(for: event, in: panel)" "$controller" \
   || fail "panel drag path should derive screen points from each panel event"
 
 rg -q "applyDraggedFrame" "$controller" \
@@ -450,31 +577,28 @@ rg -q "applyDraggedFrame" "$controller" \
 rg -q "setFrameOrigin" "$controller" \
   || fail "panel drag should move same-size windows by origin without forcing redraw"
 
-rg -q "performDrag\\(with: event\\)" "$controller" \
-  || fail "edge rail drag should hand off to native AppKit window dragging"
-
 python3 - "$controller" <<'PY'
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("private func trackPanelPress")
-end = source.index("func handleMouseEventTap", start)
+start = source.index("private func updateNativePress")
+end = source.index("private func finishNativePress", start)
 body = source[start:end]
 if "normalizedPanelScreenPoint" in body:
-    print("trackPanelPress still normalizes drag coordinates")
+    print("updateNativePress still normalizes drag coordinates")
     raise SystemExit(1)
 if "currentDragScreenPoint()" in body:
-    print("trackPanelPress still uses global mouse location for panel drag")
+    print("updateNativePress still uses global mouse location for panel drag")
     raise SystemExit(1)
 if "movePanel(panel, target: target, from:" in body:
-    print("trackPanelPress still uses incremental drag deltas")
+    print("updateNativePress still uses incremental drag deltas")
     raise SystemExit(1)
-if "startFrame = panel.frame" not in body:
-    print("trackPanelPress does not anchor dragging to the mouse-down frame")
+if "startFrame: press.startFrame" not in body:
+    print("updateNativePress does not anchor dragging to the mouse-down frame")
     raise SystemExit(1)
-if "target == .edgeRail" not in body or "performDrag(with: event)" not in body:
-    print("trackPanelPress does not use native drag for the edge rail")
+if "applyDraggedFrame(" not in body:
+    print("updateNativePress does not apply non-accumulating drag frames")
     raise SystemExit(1)
 PY
 
@@ -503,13 +627,18 @@ rg -q "drag_end" "$controller" \
 rg -q "normalizedPanelScreenPoint" "$controller" \
   || fail "coordinate fallback should normalize CGEvent/NSEvent screen coordinates"
 
-if rg -n 'handleMouseCoordinateInput\(source: "eventTap"|handleMouseCoordinateInput\(source: "mousePoll"' "$controller" >/tmp/66tasklight-edge-toggle-immediate-fallback.txt; then
+rg -Fq 'handleMouseCoordinateInput(source: "eventTap"' "$controller" \
+  || fail "event tap should act as a real manual-click fallback when window hit-testing misses"
+
+if rg -n 'handleMouseCoordinateInput\(source: "mousePoll"' "$controller" >/tmp/66tasklight-edge-toggle-immediate-fallback.txt; then
   cat /tmp/66tasklight-edge-toggle-immediate-fallback.txt
-  fail "fallback mouse-down paths must not toggle before drag intent is known"
+  fail "mouse polling fallback must not toggle before drag intent is known"
 fi
 
-rg -Fq "panelMouse.compact" "$controller" \
-  || fail "panel mouse compact click path is missing"
+if rg -n "panelMouse\\.compact|panelMouse\\.edgeRail|mouseDownInterceptor = \\{" "$controller" >/tmp/66tasklight-edge-toggle-duplicate-panel-mouse.txt; then
+  cat /tmp/66tasklight-edge-toggle-duplicate-panel-mouse.txt
+  fail "panel mouse interceptor path must stay disabled; native click shield owns click/drag"
+fi
 
 rg -Fq "nativeClickShield.compact" "$controller" \
   || fail "native compact status-orb click shield path is missing"
@@ -528,6 +657,9 @@ rg -q "body_click_pass" "$controller" \
 
 rg -q "click_path_collapsed" "$controller" \
   || fail "runtime self-test should prove the click handler path"
+
+rg -q "edge_single_click_no_restore_pass" "$controller" "$ROOT_DIR/script/build_and_run.sh" "$ROOT_DIR/script/smoke_luckycat_edge_toggle_runtime.sh" \
+  || fail "runtime self-test should prove capsule single click does not restore"
 
 rg -q "transition\\.edgeCollapsed\\.true\\.end\\.frame" "$controller" \
   || fail "collapse transition trace is missing"
@@ -613,6 +745,18 @@ rg -q "createPanel\\(displayMode: \\.edgeRail\\)" "$controller" \
 rg -q "showPanel\\.warmedEdgePanel" "$controller" \
   || fail "edge rail panel should be warmed at startup for first-click speed"
 
+rg -q "warmedEdgePanel\\.alphaValue = 0" "$controller" \
+  || fail "edge rail panel should stay hot at alpha 0 instead of being cold-hidden"
+
+rg -q "warmedEdgePanel\\.orderFrontRegardless\\(\\)" "$controller" \
+  || fail "edge rail panel should be ordered once during warmup for millisecond first toggle"
+
+rg -q "compactPanel\\.alphaValue = 0" "$controller" \
+  || fail "cat-to-capsule should hide compact panel by alpha, not cold window removal"
+
+rg -q "edgePanel\\?\\.alphaValue = 0" "$controller" \
+  || fail "capsule-to-cat should hide edge panel by alpha, not cold window removal"
+
 if rg -n "\\.nonactivatingPanel" "$controller" >/tmp/66tasklight-edge-toggle-nonactivating.txt; then
   cat /tmp/66tasklight-edge-toggle-nonactivating.txt
   fail "edge rail should use a regular clickable floating panel"
@@ -635,8 +779,8 @@ rg -q "\\.clipShape" "${rail_glass_sources[@]}" \
 rg -q "compactPanel\\.alphaValue = 1" "$controller" \
   || fail "compact panel should be explicitly visible on restore"
 
-rg -q "taskLightEdgeTransitionDuration: TimeInterval = 0\\.10" "$controller" \
-  || fail "edge transition budget should stay sub-200ms"
+rg -q "taskLightEdgeTransitionDuration: TimeInterval = 0\\.06" "$controller" \
+  || fail "edge transition budget should stay close to one frame"
 
 echo "direct_view_writes=0"
 echo "legacy_edge_toggle_layers=0"
@@ -688,5 +832,5 @@ echo "edge_restore_panel_channel=present"
 echo "dedicated_edge_panel=present"
 echo "edge_panel_warmed=present"
 echo "edge_panel_nonactivating=absent"
-echo "edge_frame_transitions=0.10s"
+echo "edge_frame_transitions=0.06s"
 echo "STATUS=ok"

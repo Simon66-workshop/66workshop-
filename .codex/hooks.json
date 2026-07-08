@@ -1,0 +1,79 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight session signal"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight prompt signal"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight tool-start signal"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight approval signal"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight tool-complete signal"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/macmini-simon66/Documents/Codex状态桌面栏提醒/script/codex_hook_event.py\" --event-json - --spool-dir \"/Users/macmini-simon66/.66tasklight/signals\" >/dev/null",
+            "timeout": 5,
+            "statusMessage": "66TaskLight stop signal"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -32,9 +32,6 @@ struct TaskLightRootView: View {
     private var compactRoot: some View {
         LuckyCatCompactView(viewModel: viewModel)
             .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.toggleExpanded()
-            }
     }
 }
 

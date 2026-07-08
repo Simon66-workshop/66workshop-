@@ -16,6 +16,8 @@ mac/66TaskLight/.build/
 *.log
 *.tmp
 *.swp
+.codex/*.bak.*
+.codex/tasks/
 
 # Xcode / SwiftPM local state
 *.xcresult

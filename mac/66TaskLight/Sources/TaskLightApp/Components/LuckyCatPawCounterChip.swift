@@ -7,8 +7,6 @@ struct LuckyCatPawCounterChip: View {
     var isActive: Bool = false
     var showsLabel: Bool = true
 
-    @State private var shimmer = false
-
     var body: some View {
         let hasCount = count > 0
         let active = isActive || hasCount
@@ -56,7 +54,7 @@ struct LuckyCatPawCounterChip: View {
                             LuckyCatTokens.Palette.glassRoseTint.opacity(0.74),
                             LuckyCatTokens.Palette.glassRoseDepth.opacity(0.28)
                         ],
-                        startPoint: shimmer ? .topLeading : .topTrailing,
+                        startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
@@ -82,7 +80,7 @@ struct LuckyCatPawCounterChip: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .offset(x: shimmer ? 12 : -16)
+                .offset(x: -4)
                 .blur(radius: 4)
                 .blendMode(.screen)
         )
@@ -101,11 +99,6 @@ struct LuckyCatPawCounterChip: View {
                 .offset(y: 6)
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.78), value: active)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.7).repeatForever(autoreverses: true)) {
-                shimmer = true
-            }
-        }
     }
 }
 

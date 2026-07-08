@@ -18,7 +18,7 @@ struct LuckyCatVisualStateMatrixView: View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 390), spacing: 18)], spacing: 18) {
                 ForEach(scenarios) { scenario in
-                    scenarioCard(scenario)
+                    LuckyCatVisualScenarioCard(scenario: scenario)
                 }
             }
             .padding(22)
@@ -26,10 +26,60 @@ struct LuckyCatVisualStateMatrixView: View {
         .frame(minWidth: 820, minHeight: 680)
         .background(matrixBackground)
     }
+}
 
-    private func scenarioCard(_ scenario: LuckyCatPreviewScenario) -> some View {
-        let model = previewModel(for: scenario.uiState)
-        return VStack(alignment: .leading, spacing: 14) {
+struct LuckyCatVisualMatrixHostView: View {
+    @State private var showsMatrix = false
+
+    var body: some View {
+        ZStack {
+            matrixBackground
+            if showsMatrix {
+                LuckyCatVisualStateMatrixView()
+                    .transition(.opacity)
+            } else {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text("视觉矩阵")
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                    Text("正在载入状态预览")
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                }
+                .padding(22)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(.thinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(Color.white.opacity(0.46), lineWidth: 1)
+                        )
+                )
+            }
+        }
+        .frame(minWidth: 820, minHeight: 680)
+        .onAppear {
+            guard !showsMatrix else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+                showsMatrix = true
+            }
+        }
+    }
+}
+
+private struct LuckyCatVisualScenarioCard: View {
+    let scenario: LuckyCatPreviewScenario
+    @StateObject private var model: TaskLightViewModel
+
+    init(scenario: LuckyCatPreviewScenario) {
+        self.scenario = scenario
+        _model = StateObject(wrappedValue: TaskLightViewModel(previewUIState: scenario.uiState))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(scenario.title)
                     .font(.system(size: 17, weight: .black, design: .rounded))
@@ -74,20 +124,16 @@ struct LuckyCatVisualStateMatrixView: View {
                 )
         )
     }
+}
 
-    private func previewModel(for state: TaskLightUIState) -> TaskLightViewModel {
-        TaskLightViewModel(previewUIState: state)
-    }
-
-    private var matrixBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.93, green: 0.96, blue: 1),
-                LuckyCatTokens.Palette.cream.opacity(0.86),
-                Color(red: 0.18, green: 0.22, blue: 0.30).opacity(0.40)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+private var matrixBackground: some View {
+    LinearGradient(
+        colors: [
+            Color(red: 0.93, green: 0.96, blue: 1),
+            LuckyCatTokens.Palette.cream.opacity(0.86),
+            Color(red: 0.18, green: 0.22, blue: 0.30).opacity(0.40)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 }

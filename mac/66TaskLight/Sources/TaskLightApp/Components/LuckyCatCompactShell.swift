@@ -16,9 +16,7 @@ struct LuckyCatCompactShell<Content: View>: View {
     let weakRuntimeHint: String?
     let onNoseTripleTap: (() -> Void)?
     let content: Content
-
-    @State private var bellSwing = false
-    @State private var ambientPhase = false
+    private let ambientPhase = false
 
     init(
         status: LuckyCatVisualStatus,
@@ -73,11 +71,6 @@ struct LuckyCatCompactShell<Content: View>: View {
             noseTripleTapTarget
         }
         .frame(width: LuckyCatLayout.compactCanvasWidth, height: LuckyCatLayout.compactCanvasHeight)
-        .scaleEffect(ambientPhase ? 1.006 : 0.998)
-        .animation(.easeInOut(duration: 3.8).repeatForever(autoreverses: true), value: ambientPhase)
-        .onAppear {
-            ambientPhase = true
-        }
     }
 
     @ViewBuilder
@@ -1092,14 +1085,18 @@ private final class LuckyCatFloatingBellNSView: NSView {
     func update(highlightsBell: Bool) {
         bellLayer.opacity = highlightsBell ? 1 : 0.96
         ringLayer.opacity = highlightsBell ? 1 : 0.96
-        ensureSwingAnimation()
+        if highlightsBell {
+            ensureSwingAnimation()
+        } else {
+            swingLayer.removeAnimation(forKey: "luckycat.bell.swing")
+            swingLayer.setAffineTransform(.identity)
+        }
     }
 
     override func layout() {
         super.layout()
         layer?.frame = bounds
         layoutLayers()
-        ensureSwingAnimation()
     }
 
     private func setupLayers() {
@@ -1499,8 +1496,6 @@ private struct ArcCurve: Shape {
 private struct LuckyCatOuterPaw: View {
     let status: LuckyCatVisualStatus
 
-    @State private var shimmer = false
-
     var body: some View {
         ZStack {
             LuckyCatOuterPawShape()
@@ -1516,7 +1511,7 @@ private struct LuckyCatOuterPaw: View {
                             LuckyCatTokens.Palette.cream.opacity(0.92),
                             LuckyCatTokens.Palette.creamDeep.opacity(0.66)
                         ],
-                        startPoint: shimmer ? .topLeading : .topTrailing,
+                        startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
@@ -1552,26 +1547,21 @@ private struct LuckyCatOuterPaw: View {
             LinearGradient(
                 colors: [
                     Color.white.opacity(0.0),
-                    Color.white.opacity(shimmer ? 0.42 : 0.22),
+                    Color.white.opacity(0.30),
                     Color.white.opacity(0.0)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .blendMode(.screen)
-            .opacity(shimmer ? 0.46 : 0.20)
+            .opacity(0.30)
             .blur(radius: 3)
-            .offset(x: shimmer ? 8 : -8)
+            .offset(x: -2)
             .mask(LuckyCatOuterPawShape())
         }
         .frame(width: 58, height: 36)
         .shadow(color: LuckyCatTokens.Palette.glassDeepShadow.opacity(0.42), radius: 9, x: 0, y: 5)
         .shadow(color: status.tint.opacity(0.12), radius: 7, x: 0, y: 1)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
-                    shimmer = true
-                }
-            }
     }
 }
 
@@ -1613,8 +1603,6 @@ private struct LuckyCatOuterPawShape: Shape {
 private struct LuckyCatSidePaw: View {
     let status: LuckyCatVisualStatus
 
-    @State private var shimmer = false
-
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(.ultraThinMaterial)
@@ -1629,7 +1617,7 @@ private struct LuckyCatSidePaw: View {
                                 LuckyCatTokens.Palette.cream.opacity(0.88),
                                 LuckyCatTokens.Palette.creamDeep.opacity(0.62)
                             ],
-                            startPoint: shimmer ? .topLeading : .topTrailing,
+                            startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
@@ -1642,14 +1630,14 @@ private struct LuckyCatSidePaw: View {
                         LinearGradient(
                             colors: [
                                 Color.white.opacity(0.0),
-                                Color.white.opacity(shimmer ? 0.36 : 0.18),
+                                Color.white.opacity(0.24),
                                 Color.white.opacity(0.0)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .offset(x: shimmer ? 7 : -7)
+                    .offset(x: -2)
                     .blur(radius: 3)
                     .blendMode(.screen)
             )
@@ -1678,11 +1666,6 @@ private struct LuckyCatSidePaw: View {
             )
             .shadow(color: LuckyCatTokens.Palette.glassDeepShadow.opacity(0.42), radius: 9, x: 0, y: 5)
             .shadow(color: status.tint.opacity(0.12), radius: 7, x: 0, y: 1)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
-                    shimmer = true
-                }
-            }
     }
 }
 

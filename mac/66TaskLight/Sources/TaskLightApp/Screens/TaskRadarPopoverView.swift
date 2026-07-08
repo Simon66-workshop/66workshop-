@@ -3,6 +3,12 @@ import TaskLightCore
 
 struct TaskRadarPopoverView: View {
     @ObservedObject var viewModel: TaskLightViewModel
+    let onOpenVisualMatrix: (() -> Void)?
+
+    init(viewModel: TaskLightViewModel, onOpenVisualMatrix: (() -> Void)? = nil) {
+        self.viewModel = viewModel
+        self.onOpenVisualMatrix = onOpenVisualMatrix
+    }
 
     private var activeTasks: [TaskLightTaskSummary] {
         viewModel.taskRadarActiveTasks()
@@ -46,6 +52,19 @@ struct TaskRadarPopoverView: View {
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
             }
             Spacer(minLength: 0)
+            if let onOpenVisualMatrix {
+                Button(action: onOpenVisualMatrix) {
+                    Label("矩阵", systemImage: "square.grid.2x2")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .background(Capsule(style: .continuous).fill(Color.white.opacity(0.36)))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                .help("打开视觉状态矩阵")
+            }
             Text(viewModel.menuBarStatusTitle())
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(LuckyCatTokens.Palette.textSecondary)

@@ -14,6 +14,8 @@ public enum TaskLightUIPerformanceBudget {
     public static let expandedObservedThreadRenderLimit = 40
     public static let expandedRecentEventInitialRenderLimit = 12
     public static let expandedRecentEventLimit = 40
+    public static let alertPlaybackRecentEventLimit = 240
+    public static let eventTailReadMaxBytes = 512 * 1024
 
     public static func renderingScore(
         bellUsesCompositedAnimation: Bool,
