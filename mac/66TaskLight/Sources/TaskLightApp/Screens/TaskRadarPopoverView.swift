@@ -59,6 +59,9 @@ struct TaskRadarWindowHostView: View {
 struct TaskRadarPopoverView: View {
     @ObservedObject var viewModel: TaskLightViewModel
     let onOpenVisualMatrix: (() -> Void)?
+    @State private var selectedHookWorkspaces: Set<String> = []
+    @State private var pendingHookInstallRequest: WorkspaceHookInstallRequest?
+    @State private var showsHookInstallConfirm = false
 
     init(viewModel: TaskLightViewModel, onOpenVisualMatrix: (() -> Void)? = nil) {
         self.viewModel = viewModel
@@ -84,6 +87,7 @@ struct TaskRadarPopoverView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 14) {
                     quotaPaceSection
+                    providerSection
                     hooksDoctorSection
                     statusReplaySection
                     interactionRulesSection
@@ -97,6 +101,18 @@ struct TaskRadarPopoverView: View {
         .padding(16)
         .frame(width: 420, height: 640, alignment: .topLeading)
         .background(radarBackground)
+        .confirmationDialog(
+            "安装选中的 workspace hooks？",
+            isPresented: $showsHookInstallConfirm,
+            presenting: pendingHookInstallRequest
+        ) { request in
+            Button("确认安装 hooks", role: .none) {
+                viewModel.installWorkspaceHooks(request: request, confirmed: true)
+            }
+            Button("取消", role: .cancel) {}
+        } message: { request in
+            Text("将安装 \(request.workspaces.count) 个 workspace 的 hooks。安装后仍需要在 Codex UI 手动 Trust。")
+        }
     }
 
     private var header: some View {
@@ -174,8 +190,41 @@ struct TaskRadarPopoverView: View {
         }
     }
 
+    private var providerSection: some View {
+        let providers = viewModel.usageProviderSnapshots()
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Usage Providers", subtitle: "\(providers.count)")
+            ForEach(providers) { provider in
+                HStack(alignment: .center, spacing: 9) {
+                    Circle()
+                        .fill(providerHealthColor(provider.health))
+                        .frame(width: 9, height: 9)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(provider.display_name)
+                            .font(LuckyCatTokens.Typography.taskTitle)
+                            .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                        Text(provider.health.rawValue)
+                            .font(LuckyCatTokens.Typography.taskMeta)
+                            .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    }
+                    Spacer(minLength: 0)
+                    Text(provider.quota_text)
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                        .foregroundStyle(provider.is_low_quota ? LuckyCatTokens.Palette.red : LuckyCatTokens.Palette.textPrimary)
+                        .monospacedDigit()
+                }
+                .padding(10)
+                .background(glassCard(cornerRadius: 14))
+            }
+            Text("Provider 数据只用于额度展示，不参与主灯判定；禁用 Provider 不联网、不读凭证。")
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+        }
+    }
+
     private var hooksDoctorSection: some View {
         let rows = viewModel.workspaceDoctorRows()
+        let selectedCount = rows.filter { selectedHookWorkspaces.contains($0.workspace) }.count
         return VStack(alignment: .leading, spacing: 9) {
             sectionHeader("Hooks Doctor", subtitle: rows.isEmpty ? "no report" : "\(rows.count)")
             HStack(spacing: 7) {
@@ -194,6 +243,13 @@ struct TaskRadarPopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .miniRadarButtonStyle()
+                Button("安装选中") {
+                    pendingHookInstallRequest = viewModel.workspaceHookInstallRequest(for: selectedHookWorkspaces)
+                    showsHookInstallConfirm = pendingHookInstallRequest != nil
+                }
+                .disabled(selectedCount == 0)
+                .buttonStyle(.plain)
+                .miniRadarButtonStyle()
                 Spacer(minLength: 0)
             }
             .accessibilityLabel("Hooks Doctor actions")
@@ -202,6 +258,14 @@ struct TaskRadarPopoverView: View {
             } else {
                 ForEach(rows.prefix(5)) { row in
                     workspaceDoctorRow(row)
+                }
+                if let result = viewModel.workspaceHookInstallResult {
+                    Text("\(result.status): \(result.message)")
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(result.status == "success" ? LuckyCatTokens.Palette.green : LuckyCatTokens.Palette.amber)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(glassCard(cornerRadius: 14))
                 }
                 Text("可按安装说明手动安装 hooks；安装后仍必须在 Codex UI 手动 Trust。这里不会自动 trust，也不会自动修改任务状态。")
                     .font(LuckyCatTokens.Typography.taskMeta)
@@ -368,6 +432,22 @@ struct TaskRadarPopoverView: View {
 
     private func workspaceDoctorRow(_ row: WorkspaceDoctorRow) -> some View {
         HStack(alignment: .top, spacing: 9) {
+            if workspaceDoctorInstallable(row) {
+                Toggle("", isOn: Binding(
+                    get: { selectedHookWorkspaces.contains(row.workspace) },
+                    set: { isSelected in
+                        if isSelected {
+                            selectedHookWorkspaces.insert(row.workspace)
+                        } else {
+                            selectedHookWorkspaces.remove(row.workspace)
+                        }
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .padding(.top, 1)
+            }
             Circle()
                 .fill(workspaceSeverityColor(row.severity))
                 .frame(width: 10, height: 10)
@@ -467,6 +547,23 @@ struct TaskRadarPopoverView: View {
         default:
             return LuckyCatTokens.Palette.textSecondary.opacity(0.7)
         }
+    }
+
+    private func providerHealthColor(_ health: ProviderHealth) -> Color {
+        switch health {
+        case .ok:
+            return LuckyCatTokens.Palette.green
+        case .warning:
+            return LuckyCatTokens.Palette.amber
+        case .disabled:
+            return LuckyCatTokens.Palette.textSecondary.opacity(0.46)
+        case .unavailable:
+            return LuckyCatTokens.Palette.red.opacity(0.76)
+        }
+    }
+
+    private func workspaceDoctorInstallable(_ row: WorkspaceDoctorRow) -> Bool {
+        ["attention", "warning", "needs_review"].contains(row.severity)
     }
 
     private func shortTime(_ raw: String) -> String {

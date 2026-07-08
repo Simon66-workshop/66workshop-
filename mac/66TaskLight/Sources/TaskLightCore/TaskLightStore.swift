@@ -232,6 +232,7 @@ public final class TaskLightStore {
         for sample in windows {
             appendQuotaHistorySample(sample, capturedAt: capturedAt, source: quota.source, fresh: quota.fresh)
         }
+        pruneQuotaHistoryIfNeeded()
     }
 
     public func loadQuotaHistory(limit: Int = 400) -> [QuotaHistorySample] {
@@ -250,6 +251,16 @@ public final class TaskLightStore {
             }
     }
 
+    public func saveWidgetSnapshot(_ snapshot: TaskLightWidgetSnapshot) {
+        ensureLayout()
+        try? writeJSONAtomic(snapshot, to: config.widgetSnapshotURL)
+    }
+
+    public func loadWidgetSnapshot() -> TaskLightWidgetSnapshot? {
+        ensureLayout()
+        return try? readJSON(from: config.widgetSnapshotURL)
+    }
+
     public func loadWorkspaceDoctorRows(limit: Int = 12) -> [WorkspaceDoctorRow] {
         ensureLayout()
         guard limit > 0,
@@ -263,6 +274,70 @@ public final class TaskLightStore {
             .sorted(by: workspaceDoctorSort)
             .prefix(limit)
             .map { $0 }
+    }
+
+    public func workspaceHookInstallRequest(for rows: [WorkspaceDoctorRow]) -> WorkspaceHookInstallRequest? {
+        let workspaces = rows
+            .filter { ["attention", "warning", "needs_review"].contains($0.severity) }
+            .map(\.workspace)
+            .filter { !$0.isEmpty }
+        guard !workspaces.isEmpty else { return nil }
+        let preview = "script/install_hooks_for_workspaces.sh " + workspaces.map { "--workspace \"\($0)\"" }.joined(separator: " ")
+        return WorkspaceHookInstallRequest(workspaces: workspaces, command_preview: preview)
+    }
+
+    public func runWorkspaceHookInstall(request: WorkspaceHookInstallRequest, confirmed: Bool) -> WorkspaceHookInstallResult {
+        ensureLayout()
+        guard confirmed, request.requires_user_confirmation else {
+            return WorkspaceHookInstallResult(
+                status: "blocked",
+                message: "需要用户确认后才会安装 hooks"
+            )
+        }
+        guard request.manual_trust_required else {
+            return WorkspaceHookInstallResult(
+                status: "blocked",
+                message: "安装闭环必须保留 Codex UI 手动 Trust"
+            )
+        }
+        let safeWorkspaces = request.workspaces.filter { !$0.isEmpty && !$0.contains("\n") }
+        guard !safeWorkspaces.isEmpty else {
+            return WorkspaceHookInstallResult(
+                status: "failed",
+                message: "没有可安装的 workspace"
+            )
+        }
+
+        let scriptURL = projectRootURL().appendingPathComponent("script/install_hooks_for_workspaces.sh")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [scriptURL.path] + safeWorkspaces.flatMap { ["--workspace", $0] }
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return WorkspaceHookInstallResult(
+                status: "failed",
+                failed_count: safeWorkspaces.count,
+                message: "hooks 安装启动失败：\(error.localizedDescription)"
+            )
+        }
+
+        if process.terminationStatus == 0 {
+            runWorkspaceCoverageReport(openReport: false)
+            return WorkspaceHookInstallResult(
+                status: "success",
+                installed_count: safeWorkspaces.count,
+                message: "hooks 已安装；仍需在 Codex UI 手动 Trust"
+            )
+        }
+        return WorkspaceHookInstallResult(
+            status: "failed",
+            failed_count: safeWorkspaces.count,
+            message: "hooks 安装脚本失败，退出码 \(process.terminationStatus)"
+        )
     }
 
     public func loadStatusReplayRecords(since: Date, limit: Int = 80) -> [StatusReplayRecord] {
@@ -496,6 +571,22 @@ public final class TaskLightStore {
             write(fd, pointer, strlen(pointer))
         }
         fsync(fd)
+    }
+
+    private func pruneQuotaHistoryIfNeeded(maxSamples: Int = 2000, maxBytes: UInt64 = 512_000) {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: config.quotaHistoryURL.path),
+              let size = attributes[.size] as? NSNumber,
+              size.uint64Value > maxBytes,
+              let raw = try? String(contentsOf: config.quotaHistoryURL, encoding: .utf8),
+              !raw.isEmpty else {
+            return
+        }
+        let retained = raw
+            .split(whereSeparator: \.isNewline)
+            .suffix(maxSamples)
+            .joined(separator: "\n")
+        let output = retained.isEmpty ? "" : retained + "\n"
+        try? output.write(to: config.quotaHistoryURL, atomically: true, encoding: .utf8)
     }
 
     private func workspaceDoctorRow(from item: [String: Any]) -> WorkspaceDoctorRow? {

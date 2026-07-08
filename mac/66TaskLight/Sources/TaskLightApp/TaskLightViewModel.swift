@@ -45,6 +45,7 @@ final class TaskLightViewModel: ObservableObject {
     @Published var contentExpanded: Bool
     @Published var muted: Bool
     @Published var workspaceCoveragePresentation: TaskLightWorkspaceCoveragePresentation?
+    @Published var workspaceHookInstallResult: WorkspaceHookInstallResult?
     @Published private(set) var uiStateRevision: Int
     @Published private var recentEventSnapshot: [TaskLightEventRecord]
 
@@ -124,6 +125,7 @@ final class TaskLightViewModel: ObservableObject {
 
     func start() {
         startStateFileWatcher()
+        saveWidgetSnapshot(for: uiState)
         guard timer == nil else { return }
         pendingInitialRefresh?.cancel()
         timer?.invalidate()
@@ -145,6 +147,9 @@ final class TaskLightViewModel: ObservableObject {
         let uiStateFileFingerprint = Self.fileFingerprint(for: config.uiStateURL)
         if uiStateFileFingerprint != "missing",
            uiStateFileFingerprint == lastLoadedUIStateFileFingerprint {
+            if store.loadWidgetSnapshot() == nil {
+                saveWidgetSnapshot(for: uiState)
+            }
             refreshRecentEventsIfNeeded()
             handleAlertPlayback()
             saveUIClientDiagnostic()
@@ -162,6 +167,7 @@ final class TaskLightViewModel: ObservableObject {
         uiState = nextState
         recordUIEventFlow(previous: previousState, current: nextState)
         applyAutoMeetingPresenceIfNeeded()
+        saveWidgetSnapshot(for: nextState)
         refreshRecentEventsIfNeeded()
         saveUIClientDiagnostic()
         handleAlertPlayback()
@@ -319,7 +325,8 @@ final class TaskLightViewModel: ObservableObject {
                 status: "unknown",
                 effective_remaining_percent: uiState.quota?.effective_remaining_percent,
                 is_low_quota: false,
-                summary: "Quota 数据不足"
+                summary: "Quota 数据不足",
+                confidence: .insufficient
             )
         }
         if previewMode {
@@ -335,7 +342,8 @@ final class TaskLightViewModel: ObservableObject {
                     reset_label: current.reset_label,
                     reset_at: current.reset_at,
                     warning: current.remaining_percent < 20 ? "low_quota" : nil,
-                    data_status: "preview_fixture"
+                    data_status: "preview_fixture",
+                    confidence: .stable
                 )
             }
             return QuotaBurnRateSnapshot(
@@ -343,7 +351,8 @@ final class TaskLightViewModel: ObservableObject {
                 effective_remaining_percent: quota.effective_remaining_percent,
                 is_low_quota: quotaIsCritical(),
                 windows: windows,
-                summary: quotaIsCritical() ? "预览：低额度红字" : "预览：burn-rate fixture"
+                summary: quotaIsCritical() ? "预览：低额度红字" : "预览：burn-rate fixture",
+                confidence: .stable
             )
         }
         let history = store.loadQuotaHistory()
@@ -357,21 +366,23 @@ final class TaskLightViewModel: ObservableObject {
             quota.effective_remaining_percent
         ].compactMap { $0 }
         let lowQuota = remainingValues.min().map { $0 < 20 } ?? false
+        let confidence = quotaSnapshotConfidence(windows)
         let status = lowQuota ? "warning" : (windows.contains { $0.burn_percent_per_hour != nil } ? "ok" : "insufficient_data")
         let summary: String
         if lowQuota {
             summary = "低于 20%，建议收敛高消耗任务"
         } else if let fastest = windows.compactMap(\.burn_percent_per_hour).max(), fastest > 0 {
-            summary = String(format: "当前最快 %.1f%%/h", fastest)
+            summary = String(format: "当前最快 %.1f%%/h · %@", fastest, confidence.rawValue)
         } else {
-            summary = "正在积累 burn-rate 样本"
+            summary = "正在积累 burn-rate 样本 · \(confidence.rawValue)"
         }
         return QuotaBurnRateSnapshot(
             status: status,
             effective_remaining_percent: quota.effective_remaining_percent,
             is_low_quota: lowQuota,
             windows: windows,
-            summary: summary
+            summary: summary,
+            confidence: confidence
         )
     }
 
@@ -394,6 +405,19 @@ final class TaskLightViewModel: ObservableObject {
             ]
         }
         return store.loadWorkspaceDoctorRows(limit: limit)
+    }
+
+    func workspaceHookInstallRequest(for selectedWorkspaces: Set<String>) -> WorkspaceHookInstallRequest? {
+        let rows = workspaceDoctorRows(limit: 40).filter { selectedWorkspaces.contains($0.workspace) }
+        return store.workspaceHookInstallRequest(for: rows)
+    }
+
+    func installWorkspaceHooks(request: WorkspaceHookInstallRequest, confirmed: Bool) {
+        let result = store.runWorkspaceHookInstall(request: request, confirmed: confirmed)
+        workspaceHookInstallResult = result
+        if result.status == "success" {
+            scheduleWorkspaceCoverageRefreshes()
+        }
     }
 
     func statusReplayRecords(hours: Double = 24, limit: Int = 16) -> [StatusReplayRecord] {
@@ -420,6 +444,16 @@ final class TaskLightViewModel: ObservableObject {
             threshold_points: 4,
             long_press_ms: 450
         )
+    }
+
+    func usageProviderSnapshots() -> [UsageProviderSnapshot] {
+        let adapters: [UsageProviderAdapter] = [
+            CodexUsageProviderAdapter(),
+            DisabledUsageProviderAdapter(id: "claude", displayName: "Claude"),
+            DisabledUsageProviderAdapter(id: "copilot", displayName: "Copilot"),
+            DisabledUsageProviderAdapter(id: "openai_api", displayName: "OpenAI API")
+        ]
+        return adapters.map { $0.snapshot(from: uiState) }
     }
 
     func copyBlocker() {
@@ -613,6 +647,43 @@ final class TaskLightViewModel: ObservableObject {
         store.appendQuotaHistorySample(from: quota)
     }
 
+    private func saveWidgetSnapshot(for state: TaskLightUIState) {
+        let providerSnapshots = usageProviderSnapshots()
+        let doctorRows = store.loadWorkspaceDoctorRows(limit: 200)
+        let workspaceOK = doctorRows.filter { $0.severity == "ok" }.count
+        let workspaceWarning = doctorRows.filter { $0.severity == "warning" || $0.severity == "needs_review" }.count
+        let workspaceAttention = doctorRows.filter { $0.severity == "attention" }.count
+        let workspaceUnknown = doctorRows.filter { $0.severity == "unknown" }.count
+        let quotaValues = [
+            state.quota?.short_percent,
+            state.quota?.long_percent,
+            state.quota?.effective_remaining_percent
+        ].compactMap { $0 }
+        let quotaIsLow = quotaValues.min().map { $0 < 20 } ?? false
+        let short = state.quota?.short_percent.map(String.init) ?? "?"
+        let long = state.quota?.long_percent.map(String.init) ?? state.quota?.effective_remaining_percent.map(String.init) ?? "?"
+        let snapshot = TaskLightWidgetSnapshot(
+            source: state.source,
+            global_status: state.global_status,
+            lamp_status: state.lamp_status,
+            display_title: state.global_display_title,
+            running_count: state.counts.running + state.counts.queued,
+            pending_count: state.counts.pending_verify_count,
+            observed_count: state.counts.observed_active,
+            blocked_count: state.counts.blocked + state.counts.stale,
+            done_count: state.counts.done_verified_visible,
+            quota_text: "⚡\(short)·\(long)",
+            quota_remaining_percent: state.quota?.effective_remaining_percent,
+            quota_is_low: quotaIsLow,
+            workspace_ok_count: workspaceOK,
+            workspace_warning_count: workspaceWarning,
+            workspace_attention_count: workspaceAttention,
+            workspace_unknown_count: workspaceUnknown,
+            providers: providerSnapshots
+        )
+        store.saveWidgetSnapshot(snapshot)
+    }
+
     private func applyAutoMeetingPresenceIfNeeded() {
         guard autoMeetingModeEnabled else { return }
         let names = [
@@ -718,7 +789,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func burnRateWindow(current: QuotaHistorySample, history: [QuotaHistorySample]) -> QuotaBurnRateWindow {
-        let samples = history
+        let allSamples = history
             .filter { $0.window_id == current.window_id && $0.fresh }
             .compactMap { sample -> (Date, Int)? in
                 guard let date = TaskLightTaskRecord.parseTimestamp(sample.captured_at) else {
@@ -727,6 +798,7 @@ final class TaskLightViewModel: ObservableObject {
                 return (date, sample.remaining_percent)
             }
             .sorted { $0.0 < $1.0 }
+        let samples = burnRateSegmentAfterLatestReset(allSamples)
         let label = current.label ?? current.window_id
         guard samples.count >= 3,
               let first = samples.first,
@@ -740,12 +812,14 @@ final class TaskLightViewModel: ObservableObject {
                 reset_label: current.reset_label,
                 reset_at: current.reset_at,
                 warning: current.remaining_percent < 20 ? "low_quota" : nil,
-                data_status: "insufficient_samples"
+                data_status: "insufficient_samples",
+                confidence: samples.isEmpty ? .insufficient : .warming
             )
         }
         let hours = max(0.01, last.0.timeIntervalSince(first.0) / 3600)
         let burned = max(0, first.1 - last.1)
         let burnPerHour = Double(burned) / hours
+        let confidence = quotaWindowConfidence(sampleCount: samples.count, hours: hours, latest: last.0)
         let emptyAt: String?
         if burnPerHour > 0 {
             let secondsToEmpty = Double(max(0, current.remaining_percent)) / burnPerHour * 3600
@@ -771,8 +845,44 @@ final class TaskLightViewModel: ObservableObject {
             reset_label: current.reset_label,
             reset_at: current.reset_at,
             warning: current.remaining_percent < 20 ? "low_quota" : nil,
-            data_status: burnPerHour > 0 ? "ok" : "steady_or_recovered"
+            data_status: burnPerHour > 0 ? "ok" : "steady_or_recovered",
+            confidence: confidence
         )
+    }
+
+    private func burnRateSegmentAfterLatestReset(_ samples: [(Date, Int)]) -> [(Date, Int)] {
+        guard samples.count > 1 else { return samples }
+        var startIndex = 0
+        for index in 1..<samples.count where samples[index].1 > samples[index - 1].1 + 2 {
+            startIndex = index
+        }
+        return Array(samples[startIndex...])
+    }
+
+    private func quotaWindowConfidence(sampleCount: Int, hours: Double, latest: Date) -> QuotaBurnRateConfidence {
+        if Date().timeIntervalSince(latest) > 30 * 60 {
+            return .stale
+        }
+        if sampleCount < 3 {
+            return .insufficient
+        }
+        if sampleCount < 5 || hours < 0.5 {
+            return .warming
+        }
+        return .stable
+    }
+
+    private func quotaSnapshotConfidence(_ windows: [QuotaBurnRateWindow]) -> QuotaBurnRateConfidence {
+        if windows.contains(where: { $0.confidence == .stable }) {
+            return .stable
+        }
+        if windows.contains(where: { $0.confidence == .warming }) {
+            return .warming
+        }
+        if windows.contains(where: { $0.confidence == .stale }) {
+            return .stale
+        }
+        return .insufficient
     }
 
     func luckyCatCompactStatusText() -> String {

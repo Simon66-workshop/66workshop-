@@ -30,6 +30,7 @@ public struct TaskLightConfig {
     public var uiStateURL: URL
     public var uiEventFlowURL: URL
     public var quotaHistoryURL: URL
+    public var widgetSnapshotURL: URL
     public var uiClientsDirectoryURL: URL
     public var workspaceCoverageDirectoryURL: URL
     public var workspaceCoverageRunStatusURL: URL
@@ -59,6 +60,7 @@ public struct TaskLightConfig {
         uiStateURL: URL? = nil,
         uiEventFlowURL: URL? = nil,
         quotaHistoryURL: URL? = nil,
+        widgetSnapshotURL: URL? = nil,
         uiClientsDirectoryURL: URL? = nil,
         workspaceCoverageDirectoryURL: URL? = nil
     ) {
@@ -72,6 +74,7 @@ public struct TaskLightConfig {
         self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
         self.uiEventFlowURL = uiEventFlowURL ?? stateDirectory.appendingPathComponent("ui_event_flow.jsonl")
         self.quotaHistoryURL = quotaHistoryURL ?? stateDirectory.appendingPathComponent("quota_history.jsonl")
+        self.widgetSnapshotURL = widgetSnapshotURL ?? stateDirectory.appendingPathComponent("widget_snapshot.json")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
         self.workspaceCoverageRunStatusURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("run_status.json")
@@ -103,6 +106,7 @@ public struct TaskLightConfig {
         let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
         let uiEventFlowURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_EVENT_FLOW_PATH"].map { URL(fileURLWithPath: $0) }
         let quotaHistoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_QUOTA_HISTORY_PATH"].map { URL(fileURLWithPath: $0) }
+        let widgetSnapshotURL = ProcessInfo.processInfo.environment["TASKLIGHT_WIDGET_SNAPSHOT_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
@@ -119,6 +123,7 @@ public struct TaskLightConfig {
             uiStateURL: uiStateURL,
             uiEventFlowURL: uiEventFlowURL,
             quotaHistoryURL: quotaHistoryURL,
+            widgetSnapshotURL: widgetSnapshotURL,
             uiClientsDirectoryURL: uiClientsDirectoryURL,
             workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL
         )
@@ -1472,6 +1477,7 @@ public struct QuotaBurnRateWindow: Codable, Equatable, Identifiable {
     public var reset_at: String?
     public var warning: String?
     public var data_status: String
+    public var confidence: QuotaBurnRateConfidence
 
     public init(
         id: String,
@@ -1484,7 +1490,8 @@ public struct QuotaBurnRateWindow: Codable, Equatable, Identifiable {
         reset_label: String? = nil,
         reset_at: String? = nil,
         warning: String? = nil,
-        data_status: String
+        data_status: String,
+        confidence: QuotaBurnRateConfidence = .insufficient
     ) {
         self.id = id
         self.label = label
@@ -1497,7 +1504,15 @@ public struct QuotaBurnRateWindow: Codable, Equatable, Identifiable {
         self.reset_at = reset_at
         self.warning = warning
         self.data_status = data_status
+        self.confidence = confidence
     }
+}
+
+public enum QuotaBurnRateConfidence: String, Codable, Equatable, CaseIterable {
+    case insufficient
+    case warming
+    case stable
+    case stale
 }
 
 public struct QuotaBurnRateSnapshot: Codable, Equatable {
@@ -1507,6 +1522,7 @@ public struct QuotaBurnRateSnapshot: Codable, Equatable {
     public var is_low_quota: Bool
     public var windows: [QuotaBurnRateWindow]
     public var summary: String
+    public var confidence: QuotaBurnRateConfidence
 
     public init(
         status: String,
@@ -1514,7 +1530,8 @@ public struct QuotaBurnRateSnapshot: Codable, Equatable {
         effective_remaining_percent: Int? = nil,
         is_low_quota: Bool = false,
         windows: [QuotaBurnRateWindow] = [],
-        summary: String
+        summary: String,
+        confidence: QuotaBurnRateConfidence = .insufficient
     ) {
         self.status = status
         self.generated_at = generated_at
@@ -1522,6 +1539,7 @@ public struct QuotaBurnRateSnapshot: Codable, Equatable {
         self.is_low_quota = is_low_quota
         self.windows = windows
         self.summary = summary
+        self.confidence = confidence
     }
 }
 
@@ -1625,6 +1643,224 @@ public struct InteractionRuleSelfTestResult: Codable, Equatable {
         self.double_click_opens_diagnostics = double_click_opens_diagnostics
         self.threshold_points = threshold_points
         self.long_press_ms = long_press_ms
+    }
+}
+
+public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
+    public var id: String
+    public var workspaces: [String]
+    public var created_at: String
+    public var requires_user_confirmation: Bool
+    public var manual_trust_required: Bool
+    public var command_preview: String
+
+    public init(
+        id: String = UUID().uuidString,
+        workspaces: [String],
+        created_at: String = TaskLightTaskRecord.nowString(),
+        requires_user_confirmation: Bool = true,
+        manual_trust_required: Bool = true,
+        command_preview: String
+    ) {
+        self.id = id
+        self.workspaces = workspaces
+        self.created_at = created_at
+        self.requires_user_confirmation = requires_user_confirmation
+        self.manual_trust_required = manual_trust_required
+        self.command_preview = command_preview
+    }
+}
+
+public struct WorkspaceHookInstallResult: Codable, Equatable, Identifiable {
+    public var id: String
+    public var status: String
+    public var installed_count: Int
+    public var failed_count: Int
+    public var manual_trust_required: Bool
+    public var message: String
+    public var updated_at: String
+
+    public init(
+        id: String = UUID().uuidString,
+        status: String,
+        installed_count: Int = 0,
+        failed_count: Int = 0,
+        manual_trust_required: Bool = true,
+        message: String,
+        updated_at: String = TaskLightTaskRecord.nowString()
+    ) {
+        self.id = id
+        self.status = status
+        self.installed_count = installed_count
+        self.failed_count = failed_count
+        self.manual_trust_required = manual_trust_required
+        self.message = message
+        self.updated_at = updated_at
+    }
+}
+
+public enum ProviderHealth: String, Codable, Equatable, CaseIterable {
+    case ok
+    case warning
+    case disabled
+    case unavailable
+}
+
+public struct UsageProviderSnapshot: Codable, Equatable, Identifiable {
+    public var id: String
+    public var display_name: String
+    public var health: ProviderHealth
+    public var quota_text: String
+    public var remaining_percent: Int?
+    public var is_low_quota: Bool
+    public var updated_at: String
+    public var diagnostic_only: Bool
+
+    public init(
+        id: String,
+        display_name: String,
+        health: ProviderHealth,
+        quota_text: String,
+        remaining_percent: Int? = nil,
+        is_low_quota: Bool = false,
+        updated_at: String = TaskLightTaskRecord.nowString(),
+        diagnostic_only: Bool = true
+    ) {
+        self.id = id
+        self.display_name = display_name
+        self.health = health
+        self.quota_text = quota_text
+        self.remaining_percent = remaining_percent
+        self.is_low_quota = is_low_quota
+        self.updated_at = updated_at
+        self.diagnostic_only = diagnostic_only
+    }
+}
+
+public protocol UsageProviderAdapter {
+    var id: String { get }
+    var displayName: String { get }
+    var isEnabled: Bool { get }
+    func snapshot(from uiState: TaskLightUIState) -> UsageProviderSnapshot
+}
+
+public struct CodexUsageProviderAdapter: UsageProviderAdapter {
+    public let id = "codex"
+    public let displayName = "Codex"
+    public let isEnabled = true
+
+    public init() {}
+
+    public func snapshot(from uiState: TaskLightUIState) -> UsageProviderSnapshot {
+        guard let quota = uiState.quota, quota.fresh else {
+            return UsageProviderSnapshot(
+                id: id,
+                display_name: displayName,
+                health: .unavailable,
+                quota_text: "Q?",
+                remaining_percent: uiState.quota?.effective_remaining_percent,
+                diagnostic_only: true
+            )
+        }
+        let values = [quota.short_percent, quota.long_percent, quota.effective_remaining_percent].compactMap { $0 }
+        let lowQuota = values.min().map { $0 < 20 } ?? false
+        let short = quota.short_percent.map(String.init) ?? "?"
+        let long = quota.long_percent.map(String.init) ?? quota.effective_remaining_percent.map(String.init) ?? "?"
+        return UsageProviderSnapshot(
+            id: id,
+            display_name: displayName,
+            health: lowQuota ? .warning : .ok,
+            quota_text: "⚡\(short)·\(long)",
+            remaining_percent: quota.effective_remaining_percent,
+            is_low_quota: lowQuota,
+            updated_at: quota.captured_at ?? TaskLightTaskRecord.nowString(),
+            diagnostic_only: true
+        )
+    }
+}
+
+public struct DisabledUsageProviderAdapter: UsageProviderAdapter {
+    public let id: String
+    public let displayName: String
+    public let isEnabled = false
+
+    public init(id: String, displayName: String) {
+        self.id = id
+        self.displayName = displayName
+    }
+
+    public func snapshot(from uiState: TaskLightUIState) -> UsageProviderSnapshot {
+        UsageProviderSnapshot(
+            id: id,
+            display_name: displayName,
+            health: .disabled,
+            quota_text: "disabled",
+            diagnostic_only: true
+        )
+    }
+}
+
+public struct TaskLightWidgetSnapshot: Codable, Equatable {
+    public var schema_version: String
+    public var generated_at: String
+    public var source: String
+    public var global_status: String
+    public var lamp_status: String
+    public var display_title: String
+    public var running_count: Int
+    public var pending_count: Int
+    public var observed_count: Int
+    public var blocked_count: Int
+    public var done_count: Int
+    public var quota_text: String
+    public var quota_remaining_percent: Int?
+    public var quota_is_low: Bool
+    public var workspace_ok_count: Int
+    public var workspace_warning_count: Int
+    public var workspace_attention_count: Int
+    public var workspace_unknown_count: Int
+    public var providers: [UsageProviderSnapshot]
+
+    public init(
+        schema_version: String = "0.1",
+        generated_at: String = TaskLightTaskRecord.nowString(),
+        source: String,
+        global_status: String,
+        lamp_status: String,
+        display_title: String,
+        running_count: Int,
+        pending_count: Int,
+        observed_count: Int,
+        blocked_count: Int,
+        done_count: Int,
+        quota_text: String,
+        quota_remaining_percent: Int?,
+        quota_is_low: Bool,
+        workspace_ok_count: Int,
+        workspace_warning_count: Int,
+        workspace_attention_count: Int,
+        workspace_unknown_count: Int,
+        providers: [UsageProviderSnapshot]
+    ) {
+        self.schema_version = schema_version
+        self.generated_at = generated_at
+        self.source = source
+        self.global_status = global_status
+        self.lamp_status = lamp_status
+        self.display_title = display_title
+        self.running_count = running_count
+        self.pending_count = pending_count
+        self.observed_count = observed_count
+        self.blocked_count = blocked_count
+        self.done_count = done_count
+        self.quota_text = quota_text
+        self.quota_remaining_percent = quota_remaining_percent
+        self.quota_is_low = quota_is_low
+        self.workspace_ok_count = workspace_ok_count
+        self.workspace_warning_count = workspace_warning_count
+        self.workspace_attention_count = workspace_attention_count
+        self.workspace_unknown_count = workspace_unknown_count
+        self.providers = providers
     }
 }
 
