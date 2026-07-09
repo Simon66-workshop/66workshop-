@@ -23,7 +23,10 @@ struct TaskLightWidgetProvider: TimelineProvider {
     }
 
     private func loadSnapshot() -> TaskLightWidgetSnapshot? {
-        TaskLightStore(config: .fromEnvironment()).loadWidgetSnapshot()
+        if let shared = TaskLightStore(config: .fromEnvironment()).loadWidgetSnapshotFromAppGroup() {
+            return shared
+        }
+        return TaskLightStore(config: .fromEnvironment()).loadWidgetSnapshot()
     }
 }
 
@@ -46,7 +49,7 @@ struct TaskLightWidgetView: View {
 }
 
 struct TaskLightWidget: Widget {
-    let kind = "66TaskLightWidget"
+    let kind = TaskLightWidgetBridge.widgetKind
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TaskLightWidgetProvider()) { entry in
@@ -58,4 +61,3 @@ struct TaskLightWidget: Widget {
     }
 }
 #endif
-

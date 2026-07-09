@@ -254,11 +254,37 @@ public final class TaskLightStore {
     public func saveWidgetSnapshot(_ snapshot: TaskLightWidgetSnapshot) {
         ensureLayout()
         try? writeJSONAtomic(snapshot, to: config.widgetSnapshotURL)
+        saveWidgetSnapshotToAppGroup(snapshot)
     }
 
     public func loadWidgetSnapshot() -> TaskLightWidgetSnapshot? {
         ensureLayout()
+        if let shared = loadWidgetSnapshotFromAppGroup() {
+            return shared
+        }
         return try? readJSON(from: config.widgetSnapshotURL)
+    }
+
+    public func loadWidgetSnapshotFromAppGroup() -> TaskLightWidgetSnapshot? {
+        guard let url = TaskLightWidgetBridge.appGroupSnapshotURL(),
+              let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return TaskLightWidgetBridge.decodeSnapshot(raw)
+    }
+
+    private func saveWidgetSnapshotToAppGroup(_ snapshot: TaskLightWidgetSnapshot) {
+        guard !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--tasklight-") }),
+              let raw = TaskLightWidgetBridge.encodeSnapshot(snapshot) else {
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            guard let url = TaskLightWidgetBridge.appGroupSnapshotURL() else {
+                return
+            }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? raw.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     public func loadWorkspaceDoctorRows(limit: Int = 12) -> [WorkspaceDoctorRow] {

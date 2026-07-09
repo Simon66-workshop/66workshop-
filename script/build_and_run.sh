@@ -21,6 +21,7 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$BINARY_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ASSETS_DIR="$PACKAGE_DIR/AppAssets"
+APP_ENTITLEMENTS="$PACKAGE_DIR/WidgetKitScaffold/66TaskLightApp.entitlements"
 
 kill_existing() {
   pkill -x "$BINARY_NAME" >/dev/null 2>&1 || true
@@ -77,7 +78,11 @@ stage_bundle() {
 </plist>
 PLIST
   xattr -dr com.apple.quarantine "$APP_BUNDLE" >/dev/null 2>&1 || true
-  codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
+  if [ -f "$APP_ENTITLEMENTS" ]; then
+    codesign --force --deep --sign - --entitlements "$APP_ENTITLEMENTS" "$APP_BUNDLE" >/dev/null
+  else
+    codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
+  fi
 }
 
 stage_runtime_bundle() {

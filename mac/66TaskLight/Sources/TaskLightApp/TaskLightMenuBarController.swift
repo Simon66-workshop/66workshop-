@@ -37,11 +37,13 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         configurePopover()
         bindViewModel()
         updateStatusItem()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            self?.prepareTaskRadarController()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.prepareVisualMatrixController()
+        if shouldPrewarmHeavyPanels {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                self?.prepareTaskRadarController()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+                self?.prepareVisualMatrixController()
+            }
         }
     }
 
@@ -442,6 +444,11 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         let controller = makeTaskRadarWindowController()
         radarWindowController = controller
         controller.window?.contentView?.layoutSubtreeIfNeeded()
+    }
+
+    private var shouldPrewarmHeavyPanels: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return !arguments.contains { $0.hasPrefix("--tasklight-") }
     }
 
     private func makeTaskRadarWindowController() -> NSWindowController {

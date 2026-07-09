@@ -1864,6 +1864,33 @@ public struct TaskLightWidgetSnapshot: Codable, Equatable {
     }
 }
 
+public enum TaskLightWidgetBridge {
+    public static let widgetKind = "66TaskLightWidget"
+    public static let appGroupID = "group.com.66tasklight.widget"
+    public static let snapshotFileName = "widget_snapshot.json"
+
+    public static func appGroupSnapshotURL() -> URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
+            .appendingPathComponent(snapshotFileName)
+    }
+
+    public static func encodeSnapshot(_ snapshot: TaskLightWidgetSnapshot) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(snapshot) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeSnapshot(_ raw: String?) -> TaskLightWidgetSnapshot? {
+        guard let raw,
+              let data = raw.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(TaskLightWidgetSnapshot.self, from: data)
+    }
+}
+
 public struct TaskLightUIState: Codable, Equatable {
     public var schema_version: String
     public var source: String

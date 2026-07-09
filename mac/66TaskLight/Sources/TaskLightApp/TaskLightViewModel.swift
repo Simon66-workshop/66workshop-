@@ -3,6 +3,9 @@ import Combine
 import Darwin
 import Foundation
 import TaskLightCore
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 enum TaskRadarDiagnosticSeverity: String {
     case ok
@@ -73,6 +76,8 @@ final class TaskLightViewModel: ObservableObject {
     private var lastUIEventFlowFingerprint: String?
     private var lastUIStateRefreshSignature: String?
     private var lastQuotaHistorySignature: String?
+    private var lastWidgetSnapshotSignature: String?
+    private var lastWidgetTimelineReloadAt: Date?
     private var autoMeetingApplied = false
     private var suppressCompactTapUntil: Date?
 
@@ -681,7 +686,30 @@ final class TaskLightViewModel: ObservableObject {
             workspace_unknown_count: workspaceUnknown,
             providers: providerSnapshots
         )
+        guard let signature = TaskLightWidgetBridge.encodeSnapshot(snapshot) else {
+            store.saveWidgetSnapshot(snapshot)
+            return
+        }
+        let changed = signature != lastWidgetSnapshotSignature
+        lastWidgetSnapshotSignature = signature
         store.saveWidgetSnapshot(snapshot)
+        if changed {
+            reloadWidgetTimelineIfNeeded()
+        }
+    }
+
+    private func reloadWidgetTimelineIfNeeded() {
+        #if canImport(WidgetKit)
+        guard !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--tasklight-") }) else {
+            return
+        }
+        let now = Date()
+        if let lastWidgetTimelineReloadAt, now.timeIntervalSince(lastWidgetTimelineReloadAt) < 30 {
+            return
+        }
+        lastWidgetTimelineReloadAt = now
+        WidgetCenter.shared.reloadTimelines(ofKind: TaskLightWidgetBridge.widgetKind)
+        #endif
     }
 
     private func applyAutoMeetingPresenceIfNeeded() {
