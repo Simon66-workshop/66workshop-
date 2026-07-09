@@ -6,6 +6,7 @@ TYPES="$ROOT_DIR/mac/66TaskLight/Sources/TaskLightCore/TaskLightTypes.swift"
 STORE="$ROOT_DIR/mac/66TaskLight/Sources/TaskLightCore/TaskLightStore.swift"
 VM="$ROOT_DIR/mac/66TaskLight/Sources/TaskLightApp/TaskLightViewModel.swift"
 RADAR="$ROOT_DIR/mac/66TaskLight/Sources/TaskLightApp/Screens/TaskRadarPopoverView.swift"
+DOC="$ROOT_DIR/docs/CODEX_QUOTA_WIDGET.md"
 
 fail() {
   echo "smoke_quota_burn_rate_maturity: $*" >&2
@@ -19,6 +20,8 @@ done
 rg -q "burnRateSegmentAfterLatestReset" "$VM" || fail "quota reset/recovery baseline logic is missing"
 rg -q "pruneQuotaHistoryIfNeeded" "$STORE" || fail "quota history retention is missing"
 rg -q "confidence" "$RADAR" "$VM" || fail "quota confidence is not surfaced"
+rg -q "Burn-Rate Prediction" "$DOC" || fail "quota burn-rate documentation is missing"
+rg -q "insufficient.*warming.*stable.*stale" "$DOC" || fail "quota confidence documentation is incomplete"
 
 if rg -n "global_status.*quota|lamp_status.*quota|quota.*global_status|quota.*lamp_status" "$VM" "$STORE" "$TYPES" >/tmp/66tasklight-quota-main-lamp-risk.txt; then
   cat /tmp/66tasklight-quota-main-lamp-risk.txt
@@ -27,4 +30,3 @@ fi
 
 echo "smoke_quota_burn_rate_maturity=ok"
 echo "STATUS=ok"
-

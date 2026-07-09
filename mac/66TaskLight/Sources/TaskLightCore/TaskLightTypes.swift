@@ -1653,6 +1653,8 @@ public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
     public var requires_user_confirmation: Bool
     public var manual_trust_required: Bool
     public var command_preview: String
+    public var risk_summary: String
+    public var post_install_next_action: String
 
     public init(
         id: String = UUID().uuidString,
@@ -1660,7 +1662,9 @@ public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
         created_at: String = TaskLightTaskRecord.nowString(),
         requires_user_confirmation: Bool = true,
         manual_trust_required: Bool = true,
-        command_preview: String
+        command_preview: String,
+        risk_summary: String = "Installs hooks only; never auto-trusts workspace hooks.",
+        post_install_next_action: String = "Open each Codex workspace and manually trust hooks in the Codex UI."
     ) {
         self.id = id
         self.workspaces = workspaces
@@ -1668,6 +1672,8 @@ public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
         self.requires_user_confirmation = requires_user_confirmation
         self.manual_trust_required = manual_trust_required
         self.command_preview = command_preview
+        self.risk_summary = risk_summary
+        self.post_install_next_action = post_install_next_action
     }
 }
 

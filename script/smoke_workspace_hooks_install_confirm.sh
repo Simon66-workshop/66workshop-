@@ -14,6 +14,8 @@ fail() {
 
 rg -q "struct WorkspaceHookInstallRequest" "$TYPES" || fail "install request type is missing"
 rg -q "requires_user_confirmation" "$TYPES" "$STORE" || fail "install request must require confirmation"
+rg -q "risk_summary" "$TYPES" "$STORE" "$RADAR" || fail "install preview risk summary is missing"
+rg -q "post_install_next_action" "$TYPES" "$STORE" "$RADAR" || fail "post-install manual trust action is missing"
 rg -q "confirmationDialog" "$RADAR" || fail "UI confirmation dialog is missing"
 rg -q "install_hooks_for_workspaces\\.sh" "$STORE" || fail "installer script is not wired"
 rg -q "manual Trust|手动 Trust" "$STORE" "$RADAR" || fail "manual Trust reminder is missing"
@@ -25,4 +27,3 @@ fi
 
 echo "smoke_workspace_hooks_install_confirm=ok"
 echo "STATUS=ok"
-

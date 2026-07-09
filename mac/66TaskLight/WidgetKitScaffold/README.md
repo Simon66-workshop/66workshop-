@@ -15,6 +15,24 @@ with the same App Group:
 - Shared group: `group.com.66tasklight.widget`
 - Snapshot file: `widget_snapshot.json`
 
+Implementation status:
+
+- Done: sanitized `TaskLightWidgetSnapshot` export.
+- Done: App Group shared-container read/write bridge.
+- Done: WidgetKit `TimelineProvider`, `WidgetBundle`, small layout, medium layout.
+- Done: local app bundle ad-hoc signing includes `66TaskLightApp.entitlements`.
+- Remaining: create an Xcode app wrapper that embeds the widget extension target.
+- Remaining: configure a real Team ID / provisioning profile for App Group signing.
+- Remaining: install the signed app and add the widget from macOS Desktop widgets.
+
+Desktop acceptance gates:
+
+1. Main app and widget extension both carry `group.com.66tasklight.widget`.
+2. The widget reads only `widget_snapshot.json` from the shared container.
+3. Removing the snapshot shows placeholder content, not a crash.
+4. Updating app state refreshes the widget timeline within the expected window.
+5. Quota remains display-only and never mutates `global_status` or `lamp_status`.
+
 Safety rules:
 
 - Read only `TaskLightWidgetSnapshot`.

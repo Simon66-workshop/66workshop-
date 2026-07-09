@@ -32,19 +32,71 @@ struct TaskLightWidgetProvider: TimelineProvider {
 
 struct TaskLightWidgetView: View {
     let entry: TaskLightWidgetEntry
+    @Environment(\.widgetFamily) private var family
 
     var body: some View {
+        Group {
+            switch family {
+            case .systemMedium:
+                mediumBody
+            default:
+                smallBody
+            }
+        }
+        .containerBackground(.thinMaterial, for: .widget)
+    }
+
+    private var smallBody: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.snapshot?.display_title ?? "66TaskLight")
-                .font(.system(size: 16, weight: .black, design: .rounded))
-            Text("Run \(entry.snapshot?.running_count ?? 0) · Pend \(entry.snapshot?.pending_count ?? 0)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+            statusTitle
             Text(entry.snapshot?.quota_text ?? "Q?")
                 .font(.system(size: 15, weight: .black, design: .rounded))
+                .foregroundStyle(entry.snapshot?.quota_is_low == true ? .red : .primary)
                 .monospacedDigit()
+            Text("Run \(entry.snapshot?.running_count ?? 0) · Pend \(entry.snapshot?.pending_count ?? 0)")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
         }
         .padding()
-        .containerBackground(.thinMaterial, for: .widget)
+    }
+
+    private var mediumBody: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                statusTitle
+                Text(entry.snapshot?.quota_text ?? "Q?")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(entry.snapshot?.quota_is_low == true ? .red : .primary)
+                    .monospacedDigit()
+                Text("Quota stays display-only")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 6) {
+                metric("Run", entry.snapshot?.running_count ?? 0)
+                metric("Pend", entry.snapshot?.pending_count ?? 0)
+                metric("Hooks", (entry.snapshot?.workspace_warning_count ?? 0) + (entry.snapshot?.workspace_attention_count ?? 0))
+            }
+        }
+        .padding()
+    }
+
+    private var statusTitle: some View {
+        Text(entry.snapshot?.display_title ?? "66TaskLight")
+            .font(.system(size: 16, weight: .black, design: .rounded))
+            .lineLimit(1)
+    }
+
+    private func metric(_ label: String, _ value: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .monospacedDigit()
+        }
     }
 }
 
@@ -58,6 +110,13 @@ struct TaskLightWidget: Widget {
         .configurationDisplayName("66TaskLight")
         .description("Codex status, task counts, quota, and workspace health from sanitized local snapshot.")
         .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+@main
+struct TaskLightWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        TaskLightWidget()
     }
 }
 #endif

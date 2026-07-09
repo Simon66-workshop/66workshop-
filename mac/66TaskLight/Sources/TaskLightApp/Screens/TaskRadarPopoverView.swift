@@ -111,7 +111,7 @@ struct TaskRadarPopoverView: View {
             }
             Button("取消", role: .cancel) {}
         } message: { request in
-            Text("将安装 \(request.workspaces.count) 个 workspace 的 hooks。安装后仍需要在 Codex UI 手动 Trust。")
+            Text("将安装 \(request.workspaces.count) 个 workspace 的 hooks。\n\(request.risk_summary)\n\(request.post_install_next_action)\n\(request.command_preview)")
         }
     }
 
@@ -224,38 +224,78 @@ struct TaskRadarPopoverView: View {
 
     private var hooksDoctorSection: some View {
         let rows = viewModel.workspaceDoctorRows()
+        let installableRows = rows.filter(workspaceDoctorInstallable)
         let selectedCount = rows.filter { selectedHookWorkspaces.contains($0.workspace) }.count
         return VStack(alignment: .leading, spacing: 9) {
             sectionHeader("Hooks Doctor", subtitle: rows.isEmpty ? "no report" : "\(rows.count)")
-            HStack(spacing: 7) {
-                Button("巡检") {
-                    viewModel.runWorkspaceCoverageReport()
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 7) {
+                    Button("巡检") {
+                        viewModel.runWorkspaceCoverageReport()
+                    }
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Button("报告") {
+                        viewModel.openWorkspaceCoverageReport()
+                    }
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Button("安装说明") {
+                        viewModel.openWorkspaceHooksGuide()
+                    }
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .miniRadarButtonStyle()
-                Button("报告") {
-                    viewModel.openWorkspaceCoverageReport()
+                HStack(spacing: 7) {
+                    Button("选需处理") {
+                        selectedHookWorkspaces = Set(installableRows.map(\.workspace))
+                    }
+                    .disabled(installableRows.isEmpty)
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Button("清空") {
+                        selectedHookWorkspaces.removeAll()
+                        pendingHookInstallRequest = nil
+                    }
+                    .disabled(selectedHookWorkspaces.isEmpty)
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Button("安装选中") {
+                        pendingHookInstallRequest = viewModel.workspaceHookInstallRequest(for: selectedHookWorkspaces)
+                        showsHookInstallConfirm = pendingHookInstallRequest != nil
+                    }
+                    .disabled(selectedCount == 0)
+                    .buttonStyle(.plain)
+                    .miniRadarButtonStyle()
+                    Text("已选 \(selectedCount)")
+                        .font(LuckyCatTokens.Typography.taskMeta)
+                        .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .miniRadarButtonStyle()
-                Button("安装说明") {
-                    viewModel.openWorkspaceHooksGuide()
-                }
-                .buttonStyle(.plain)
-                .miniRadarButtonStyle()
-                Button("安装选中") {
-                    pendingHookInstallRequest = viewModel.workspaceHookInstallRequest(for: selectedHookWorkspaces)
-                    showsHookInstallConfirm = pendingHookInstallRequest != nil
-                }
-                .disabled(selectedCount == 0)
-                .buttonStyle(.plain)
-                .miniRadarButtonStyle()
-                Spacer(minLength: 0)
             }
             .accessibilityLabel("Hooks Doctor actions")
             if rows.isEmpty {
                 emptyRow("Run Workspace 巡检 to build doctor report")
             } else {
+                if let request = viewModel.workspaceHookInstallRequest(for: selectedHookWorkspaces) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("安装预览 · \(request.workspaces.count) 个 workspace")
+                            .font(LuckyCatTokens.Typography.taskTitle)
+                            .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                        Text(request.command_preview)
+                            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                            .lineLimit(3)
+                            .textSelection(.enabled)
+                        Text("\(request.risk_summary) · \(request.post_install_next_action)")
+                            .font(LuckyCatTokens.Typography.taskMeta)
+                            .foregroundStyle(LuckyCatTokens.Palette.amber)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(glassCard(cornerRadius: 14))
+                }
                 ForEach(rows.prefix(5)) { row in
                     workspaceDoctorRow(row)
                 }
@@ -414,6 +454,9 @@ struct TaskRadarPopoverView: View {
                 Text("reset \(window.reset_label ?? "--") · samples \(window.samples)")
                     .font(LuckyCatTokens.Typography.taskMeta)
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                Text("\(window.confidence.rawValue) · \(window.data_status)")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(window.confidence == .stable ? LuckyCatTokens.Palette.green : LuckyCatTokens.Palette.amber)
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 3) {
@@ -424,6 +467,9 @@ struct TaskRadarPopoverView: View {
                 Text(window.burn_percent_per_hour.map { String(format: "%.1f%%/h", $0) } ?? "warming")
                     .font(LuckyCatTokens.Typography.taskMeta)
                     .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                Text(window.estimated_empty_at.map { "empty \(shortTime($0))" } ?? "no ETA")
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary.opacity(0.82))
             }
         }
         .padding(10)

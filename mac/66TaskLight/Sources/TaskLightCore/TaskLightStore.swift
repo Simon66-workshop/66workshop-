@@ -259,13 +259,13 @@ public final class TaskLightStore {
 
     public func loadWidgetSnapshot() -> TaskLightWidgetSnapshot? {
         ensureLayout()
-        if let shared = loadWidgetSnapshotFromAppGroup() {
-            return shared
-        }
         return try? readJSON(from: config.widgetSnapshotURL)
     }
 
     public func loadWidgetSnapshotFromAppGroup() -> TaskLightWidgetSnapshot? {
+        guard !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--tasklight-") }) else {
+            return nil
+        }
         guard let url = TaskLightWidgetBridge.appGroupSnapshotURL(),
               let raw = try? String(contentsOf: url, encoding: .utf8) else {
             return nil
@@ -309,7 +309,20 @@ public final class TaskLightStore {
             .filter { !$0.isEmpty }
         guard !workspaces.isEmpty else { return nil }
         let preview = "script/install_hooks_for_workspaces.sh " + workspaces.map { "--workspace \"\($0)\"" }.joined(separator: " ")
-        return WorkspaceHookInstallRequest(workspaces: workspaces, command_preview: preview)
+        let statusCounts = Dictionary(grouping: rows, by: \.coverage_status).mapValues(\.count)
+        let riskSummary = [
+            statusCounts["missing_hooks"].map { "missing=\($0)" },
+            statusCounts["invalid_hooks"].map { "invalid=\($0)" },
+            statusCounts["needs_trust"].map { "needs_trust=\($0)" },
+            statusCounts["stale"].map { "stale=\($0)" },
+            statusCounts["notLoaded"].map { "notLoaded=\($0)" }
+        ].compactMap { $0 }.joined(separator: " · ")
+        return WorkspaceHookInstallRequest(
+            workspaces: workspaces,
+            command_preview: preview,
+            risk_summary: riskSummary.isEmpty ? "Selected workspaces need hooks attention." : riskSummary,
+            post_install_next_action: "安装完成后重新打开对应 Codex workspace，并在 Codex UI 手动 Trust hooks。"
+        )
     }
 
     public func runWorkspaceHookInstall(request: WorkspaceHookInstallRequest, confirmed: Bool) -> WorkspaceHookInstallResult {

@@ -64,6 +64,38 @@ M3.7 adds a small compact freshness dot:
 
 Expanded dashboard also shows `captured_at`, `bucket_id`, probe mode, and raw bucket count so the value can be compared against the Codex Usage UI.
 
+## Burn-Rate Prediction
+
+M4/M5 adds a display-only burn-rate panel in Task Radar. It uses sanitized
+samples from `~/.66tasklight/quota_history.jsonl`:
+
+- `captured_at`
+- `window_id`
+- `bucket_id`
+- `remaining_percent`
+- `reset_label` / `reset_at`
+- `source`
+- `fresh`
+
+Prediction rules:
+
+1. At least 3 valid samples are required before showing `%/hour`.
+2. If remaining percent increases after a reset, the baseline restarts from that
+   newer sample.
+3. Estimated empty time is capped at the next reset time when reset metadata is
+   available.
+4. Confidence is surfaced as `insufficient`, `warming`, `stable`, or `stale`.
+5. Low quota warnings affect only quota text/chips, never the main lamp.
+
+Confidence semantics:
+
+```text
+insufficient  fewer than 3 usable samples
+warming       enough to estimate, but too new or sparse
+stable        enough samples over a wider window
+stale         newest sample is older than the freshness window
+```
+
 Quota health:
 
 ```text
