@@ -2,7 +2,7 @@
 
 - Task ID: `M3.4c-sample`
 - Task Types: `hook_bridge, state_projector`
-- Generated At: `2026-06-16T08:46:20Z`
+- Generated At: `2026-07-10T01:33:17Z`
 - Recommended Decision: `PASS`
 
 ## Recommended Include Paths

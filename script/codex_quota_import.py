@@ -9,7 +9,7 @@ import os
 import re
 import subprocess
 import tempfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ WINDOW_RE = re.compile(
     r"(?P<label>\d+\s*(?:分钟|小时|天|周))\s+(?P<percent>\d{1,3})%\s*(?P<reset>(?:\d{1,2}:\d{2})|(?:\d{1,2}月\d{1,2}日))?"
 )
 RESET_RE = re.compile(r"(?P<count>\d+)\s*次\s*可用\s*重置")
+RESET_CREDIT_STATUSES = {"available", "redeemed", "redeeming", "expired", "used"}
 
 
 def state_dir() -> Path:
@@ -114,6 +115,272 @@ def parse_reset_at(label: str | None) -> str | None:
             candidate = candidate.replace(year=candidate.year + 1)
         return candidate.isoformat()
     return None
+
+
+def parse_date_like(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=datetime.now().astimezone().tzinfo).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    match = re.match(r"^(?P<date>\d{4}-\d{2}-\d{2})", text)
+    if match:
+        return match.group("date")
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone().date().isoformat()
+    except ValueError:
+        return text
+
+
+def parse_datetime_like(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=datetime.now().astimezone().tzinfo).replace(microsecond=0).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+        return text
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone().replace(microsecond=0).isoformat()
+    except ValueError:
+        return parse_date_like(text)
+
+
+def normalize_redeemed(value: Any, status: str | None = None) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        lowered = (status or "").lower()
+        if lowered in {"redeemed", "used"}:
+            return True
+        if lowered in {"available", "expired"}:
+            return False
+        return None
+    lowered = str(value).strip().lower()
+    if lowered in {"yes", "y", "true", "1", "redeemed", "used"}:
+        return True
+    if lowered in {"no", "n", "false", "0", "available", "unredeemed"}:
+        return False
+    return None
+
+
+def normalize_reset_credit(raw: dict[str, Any], index: int = 0) -> dict[str, Any]:
+    status = str(raw.get("status") or raw.get("state") or ("redeemed" if raw.get("redeemed") else "available")).strip().lower()
+    issued_source = (
+        raw.get("issued_date")
+        or raw.get("issuedAt")
+        or raw.get("issued_at")
+        or raw.get("grantedAt")
+        or raw.get("granted_at")
+        or raw.get("createdAt")
+        or raw.get("created_at")
+    )
+    issued_at = parse_datetime_like(issued_source)
+    issued = parse_date_like(issued_source)
+    expiry_source = (
+        raw.get("expiry_date")
+        or raw.get("expiresAt")
+        or raw.get("expires_at")
+        or raw.get("expiryAt")
+        or raw.get("expiry_at")
+        or raw.get("expiration")
+        or raw.get("expiredAt")
+        or raw.get("expired_at")
+    )
+    expires_at = parse_datetime_like(expiry_source)
+    expiry = parse_date_like(expiry_source)
+    redeemed = normalize_redeemed(
+        raw.get("redeemed")
+        if raw.get("redeemed") is not None
+        else raw.get("is_redeemed")
+        if raw.get("is_redeemed") is not None
+        else raw.get("redeemed_at"),
+        status,
+    )
+    return {
+        "id": raw.get("id") or raw.get("creditId") or f"reset_credit_{index + 1}",
+        "status": status,
+        "issued_at": issued_at,
+        "issued_date": issued,
+        "expires_at": expires_at,
+        "expiry_date": expiry,
+        "redeemed": redeemed,
+        "reset_type": raw.get("resetType") or raw.get("reset_type") or raw.get("type"),
+    }
+
+
+def parse_normalized_datetime(value: Any) -> datetime | None:
+    text = parse_datetime_like(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        parsed_date = parse_normalized_date(text)
+        if parsed_date is None:
+            return None
+        return datetime.combine(parsed_date, datetime.max.time()).astimezone()
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()
+    return parsed.astimezone()
+
+
+def parse_normalized_date(value: Any) -> date | None:
+    text = parse_date_like(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def reset_credit_is_used(credit: dict[str, Any]) -> bool:
+    status = str(credit.get("status") or "").lower()
+    return credit.get("redeemed") is True or status in {"redeemed", "used", "claimed"}
+
+
+def reset_credit_is_expired(credit: dict[str, Any], today: date | None = None) -> bool:
+    if reset_credit_is_used(credit):
+        return False
+    expiry_dt = parse_normalized_datetime(credit.get("expires_at") or credit.get("expiry_date") or credit.get("expiresAt") or credit.get("expires_at"))
+    if expiry_dt is not None:
+        return expiry_dt <= datetime.now().astimezone()
+    expiry_date = parse_normalized_date(credit.get("expiry_date") or credit.get("expiresAt") or credit.get("expires_at"))
+    if expiry_date is None:
+        return False
+    return expiry_date <= (today or datetime.now().astimezone().date())
+
+
+def reset_credit_is_available(credit: dict[str, Any], today: date | None = None) -> bool:
+    status = str(credit.get("status") or "").lower()
+    if status != "available" or credit.get("redeemed") is True:
+        return False
+    expiry_dt = parse_normalized_datetime(credit.get("expires_at") or credit.get("expiry_date") or credit.get("expiresAt") or credit.get("expires_at"))
+    if expiry_dt is not None:
+        return expiry_dt > datetime.now().astimezone()
+    expiry_date = parse_normalized_date(credit.get("expiry_date") or credit.get("expiresAt") or credit.get("expires_at"))
+    return expiry_date is None or expiry_date > (today or datetime.now().astimezone().date())
+
+
+def derive_reset_credit_summary(credits: list[dict[str, Any]], today: date | None = None) -> dict[str, Any]:
+    today = today or datetime.now().astimezone().date()
+    available = [credit for credit in credits if reset_credit_is_available(credit, today)]
+    used_count = sum(1 for credit in credits if reset_credit_is_used(credit))
+    expired_count = sum(1 for credit in credits if reset_credit_is_expired(credit, today))
+    expiring = sorted(
+        (
+            (
+                parse_normalized_datetime(credit.get("expires_at") or credit.get("expiry_date")),
+                credit.get("expires_at") or credit.get("expiry_date"),
+            )
+            for credit in available
+            if parse_normalized_datetime(credit.get("expires_at") or credit.get("expiry_date")) is not None
+        ),
+        key=lambda item: item[0] or datetime.max.replace(tzinfo=datetime.now().astimezone().tzinfo),
+    )
+    return {
+        "total_count": len(credits),
+        "available_count": len(available),
+        "used_count": used_count,
+        "expired_count": expired_count,
+        "next_expiry": expiring[0][1] if expiring else None,
+    }
+
+
+def available_reset_credit_count(credits: list[dict[str, Any]]) -> int:
+    return int(derive_reset_credit_summary(credits)["available_count"])
+
+
+def coerce_reset_credit_items(raw: Any) -> list[dict[str, Any]]:
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    if not isinstance(raw, dict):
+        return []
+    for key in ("credits", "items", "data", "results", "rateLimitResetCredits", "resetCredits", "reset_credits"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def parse_reset_credit_table(text: str) -> list[dict[str, Any]]:
+    credits: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or "---" in stripped:
+            continue
+        cells = [cell.strip().strip("`") for cell in stripped.strip("|").split("|")]
+        if len(cells) < 4:
+            continue
+        status = cells[0].lower()
+        if status not in RESET_CREDIT_STATUSES:
+            continue
+        credits.append(
+            normalize_reset_credit(
+                {
+                    "status": status,
+                    "issued_date": cells[1],
+                    "expiry_date": cells[2],
+                    "redeemed": cells[3],
+                },
+                index=len(credits),
+            )
+        )
+    return credits
+
+
+def normalize_reset_credits_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, (dict, list)):
+        return {
+            "available_count": None,
+            "label": None,
+            "total_count": None,
+            "used_count": None,
+            "expired_count": None,
+            "next_expiry": None,
+            "credits": [],
+            "detail_count": 0,
+        }
+    raw_dict = raw if isinstance(raw, dict) else {"credits": raw}
+    raw_credits = coerce_reset_credit_items(raw)
+    credits = [
+        normalize_reset_credit(item, index)
+        for index, item in enumerate(raw_credits or [])
+        if isinstance(item, dict)
+    ]
+    summary = derive_reset_credit_summary(credits)
+    explicit_count = raw_dict.get("availableCount")
+    if explicit_count is None:
+        explicit_count = raw_dict.get("available_count")
+    try:
+        available_count = int(explicit_count) if explicit_count is not None else summary["available_count"]
+    except (TypeError, ValueError):
+        available_count = summary["available_count"] if credits else None
+    total_count = raw_dict.get("totalCount", raw_dict.get("total_count", summary["total_count"]))
+    used_count = raw_dict.get("usedCount", raw_dict.get("used_count", summary["used_count"]))
+    expired_count = raw_dict.get("expiredCount", raw_dict.get("expired_count", summary["expired_count"]))
+    next_expiry = raw_dict.get("nextExpiry", raw_dict.get("next_expiry", summary["next_expiry"]))
+    return {
+        "available_count": available_count,
+        "label": f"{available_count}次可用重置" if available_count is not None else None,
+        "total_count": total_count,
+        "used_count": used_count,
+        "expired_count": expired_count,
+        "next_expiry": next_expiry,
+        "credits": credits,
+        "detail_count": len(credits),
+    }
 
 
 def window_selection_reason(window: dict[str, Any], *, selected: bool = False, candidate_count: int = 1) -> str:
@@ -212,11 +479,64 @@ def build_quota_state(*, source: str, source_confidence: float, windows: list[di
         "raw_windows": raw_windows,
         "display_windows": display_windows,
         "windows": display_windows,
-        "manual_resets": manual_resets or {"available_count": None, "label": None},
+        "manual_resets": manual_resets or {"available_count": None, "label": None, "credits": []},
         "effective_remaining_percent": effective,
         "recommendation": recommendation_for_status(quota_status),
         "warnings": merged_warnings,
     }
+
+
+def appserver_quota_payload_usable(payload: Any) -> bool:
+    if not isinstance(payload, dict) or payload.get("fresh") is not True:
+        return False
+    windows = payload.get("display_windows")
+    if not isinstance(windows, list) or not windows:
+        return False
+    for window in windows:
+        if not isinstance(window, dict):
+            return False
+        percent = window.get("remaining_percent")
+        if not isinstance(percent, int) or percent < 0 or percent > 100:
+            return False
+    return isinstance(payload.get("effective_remaining_percent"), int)
+
+
+def appserver_unusable_reason(payload: dict[str, Any]) -> str:
+    schema_status = str(payload.get("source_schema_status") or "")
+    if schema_status != "supported":
+        return "appserver_schema_changed"
+    return "appserver_no_usable_codex_quota"
+
+
+def preserve_last_known_good_appserver_quota(payload: dict[str, Any], output: Path, reason: str | None = None) -> dict[str, Any]:
+    """Fail closed while retaining a visibly stale local-only quota snapshot.
+
+    App-server response shapes can change during ChatGPT Work upgrades. Never
+    replace a valid local snapshot with an empty or unrecognized response, and
+    never label cached values as fresh.
+    """
+    if appserver_quota_payload_usable(payload):
+        return payload
+    try:
+        existing = json.loads(output.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return payload
+    if not isinstance(existing, dict) or str(existing.get("source") or "") not in {"codex_appserver", "codex_appserver_cached"}:
+        return payload
+    if not appserver_quota_payload_usable({**existing, "fresh": True}):
+        return payload
+    cached = dict(existing)
+    cached["source"] = "codex_appserver_cached"
+    cached["source_confidence"] = min(float(existing.get("source_confidence") or 0.95), 0.25)
+    cached["fresh"] = False
+    cached["source_schema_status"] = "degraded"
+    cached["last_source_check_at"] = now_iso()
+    warnings = [item for item in existing.get("warnings", []) if isinstance(item, str)]
+    warning = reason or appserver_unusable_reason(payload)
+    if warning not in warnings:
+        warnings.append(warning)
+    cached["warnings"] = warnings
+    return cached
 
 
 def parse_usage_text(text: str, source: str) -> dict[str, Any]:
@@ -245,10 +565,16 @@ def parse_usage_text(text: str, source: str) -> dict[str, Any]:
                 }
             )
     reset_match = RESET_RE.search(text)
-    manual_resets = {"available_count": None, "label": None}
+    manual_resets = normalize_reset_credits_payload(None)
+    reset_credits = parse_reset_credit_table(text)
     if reset_match:
         count = int(reset_match.group("count"))
         manual_resets = {"available_count": count, "label": f"{count}次可用重置"}
+    elif reset_credits:
+        count = available_reset_credit_count(reset_credits)
+        manual_resets = {"available_count": count, "label": f"{count}次可用重置"}
+    if reset_credits:
+        manual_resets = normalize_reset_credits_payload({"credits": reset_credits, **manual_resets})
     return build_quota_state(source=source, source_confidence=0.85, windows=windows, manual_resets=manual_resets, warnings=warnings)
 
 
@@ -256,8 +582,10 @@ def normalize_appserver_response(result: dict[str, Any]) -> dict[str, Any]:
     raw_buckets = result.get("rateLimitsByLimitId")
     if isinstance(raw_buckets, dict):
         buckets = list(raw_buckets.values())
+        schema = "rate_limits_by_limit_id"
     else:
         buckets = result.get("rateLimits") if isinstance(result.get("rateLimits"), list) else []
+        schema = "rate_limits_list" if isinstance(result.get("rateLimits"), list) else "unrecognized"
     windows: list[dict[str, Any]] = []
     warnings: list[str] = []
     for bucket in buckets:
@@ -311,23 +639,34 @@ def normalize_appserver_response(result: dict[str, Any]) -> dict[str, Any]:
             "source": "codex_appserver",
             "source_confidence": 0.0,
             "captured_at": now_iso(),
-            "fresh": True,
+            "fresh": False,
             "quota_status": "unknown",
             "raw_windows": [],
             "display_windows": [],
             "windows": [],
-            "manual_resets": {"available_count": None, "label": None},
+            "manual_resets": normalize_reset_credits_payload(None),
             "effective_remaining_percent": None,
             "recommendation": "normal",
-            "warnings": ["no_codex_bucket"],
+            "warnings": ["appserver_schema_unrecognized" if schema == "unrecognized" else "no_codex_bucket"],
+            "source_schema": schema,
+            "source_schema_status": "unrecognized" if schema == "unrecognized" else "supported",
         }
-    return build_quota_state(
+    payload = build_quota_state(
         source="codex_appserver",
         source_confidence=0.95 if windows else 0.0,
         windows=windows,
-        manual_resets={"available_count": None, "label": None},
+        manual_resets=normalize_reset_credits_payload(
+            result.get("rateLimitResetCredits")
+            if result.get("rateLimitResetCredits") is not None
+            else result.get("resetCredits")
+            if result.get("resetCredits") is not None
+            else result.get("reset_credits")
+        ),
         warnings=warnings,
     )
+    payload["source_schema"] = schema
+    payload["source_schema_status"] = "supported"
+    return payload
 
 
 def read_clipboard() -> str:

@@ -18,11 +18,22 @@ from typing import Any
 from tasklight_signal_bus import append_signal
 
 
-DEFAULT_CODEX = "/Applications/Codex.app/Contents/Resources/codex"
+CODEX_APP_BINARY_CANDIDATES = (
+    # ChatGPT Work ships the local Codex app-server binary inside ChatGPT.app.
+    # Check it before PATH because LaunchAgents usually receive a minimal PATH.
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "/Applications/Codex.app/Contents/Resources/codex",
+)
 
 
 def codex_bin() -> str:
-    return os.environ.get("CODEX_BIN") or (DEFAULT_CODEX if Path(DEFAULT_CODEX).exists() else shutil.which("codex") or "codex")
+    configured = os.environ.get("TASKLIGHT_CODEX_BIN") or os.environ.get("CODEX_BIN")
+    if configured:
+        return configured
+    for candidate in CODEX_APP_BINARY_CANDIDATES:
+        if Path(candidate).is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return shutil.which("codex") or "codex"
 
 
 def event_name(event: dict[str, Any]) -> str:

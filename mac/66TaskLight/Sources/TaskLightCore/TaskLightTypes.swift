@@ -19,7 +19,7 @@ public enum TaskLightSourceHealth: String, Codable {
     case reconstructed
 }
 
-public struct TaskLightConfig {
+public struct TaskLightConfig: Sendable {
     public var stateDirectory: URL
     public var stateURL: URL
     public var tasksDirectoryURL: URL
@@ -96,7 +96,7 @@ public struct TaskLightConfig {
         let stateDirectory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TASKLIGHT_STATE_DIR"] ?? home.appendingPathComponent(".66tasklight").path)
         let ttlSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_TTL_SECONDS"].flatMap(Double.init) ?? 300)
         let verificationTTLSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_VERIFICATION_TTL_SECONDS"].flatMap(Double.init) ?? 900)
-        let refreshSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_REFRESH_SECONDS"].flatMap(Double.init) ?? 1)
+        let refreshSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_REFRESH_SECONDS"].flatMap(Double.init) ?? 5)
         let blockedSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_BLOCKED_SOUND"] ?? "Basso"
         let doneSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_DONE_SOUND"] ?? "Submarine"
         let staleSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_STALE_SOUND"] ?? "Funk"
@@ -959,6 +959,33 @@ public struct TaskLightUITask: Codable, Equatable, Identifiable {
 
     public var id: String { task_id }
 
+    enum CodingKeys: String, CodingKey {
+        case task_id
+        case short_task_id
+        case title
+        case turn_id
+        case canonical_identity
+        case binding_aliases
+        case source
+        case raw_status
+        case effective_status
+        case display_scope
+        case last_signal_age_sec
+        case state_cause
+        case fresh
+        case phase
+        case progress
+        case reason
+        case message
+        case summary
+        case started_at
+        case updated_at
+        case done_at
+        case verified_at
+        case file_path
+        case confidence
+    }
+
     public init(
         task_id: String,
         short_task_id: String? = nil,
@@ -1009,6 +1036,51 @@ public struct TaskLightUITask: Codable, Equatable, Identifiable {
         self.verified_at = verified_at
         self.file_path = file_path
         self.confidence = confidence
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedTaskID = try Self.decodeLossyString(container, forKey: .task_id) ?? ""
+        self.task_id = decodedTaskID
+        self.short_task_id = try Self.decodeLossyString(container, forKey: .short_task_id)
+        self.title = try Self.decodeLossyString(container, forKey: .title) ?? decodedTaskID
+        self.turn_id = try Self.decodeLossyString(container, forKey: .turn_id)
+        self.canonical_identity = try Self.decodeLossyString(container, forKey: .canonical_identity)
+        self.binding_aliases = try container.decodeIfPresent([String].self, forKey: .binding_aliases)
+        self.source = try Self.decodeLossyString(container, forKey: .source)
+        self.raw_status = try Self.decodeLossyString(container, forKey: .raw_status) ?? "idle"
+        self.effective_status = try Self.decodeLossyString(container, forKey: .effective_status) ?? raw_status
+        self.display_scope = try Self.decodeLossyString(container, forKey: .display_scope) ?? "history"
+        self.last_signal_age_sec = try container.decodeIfPresent(Double.self, forKey: .last_signal_age_sec)
+        self.state_cause = try Self.decodeLossyString(container, forKey: .state_cause)
+        self.fresh = (try? container.decode(Bool.self, forKey: .fresh)) ?? false
+        self.phase = try Self.decodeLossyString(container, forKey: .phase)
+        self.progress = try container.decodeIfPresent(Double.self, forKey: .progress)
+        self.reason = try Self.decodeLossyString(container, forKey: .reason)
+        self.message = try Self.decodeLossyString(container, forKey: .message)
+        self.summary = try Self.decodeLossyString(container, forKey: .summary)
+        self.started_at = try Self.decodeLossyString(container, forKey: .started_at)
+        self.updated_at = try Self.decodeLossyString(container, forKey: .updated_at)
+        self.done_at = try Self.decodeLossyString(container, forKey: .done_at)
+        self.verified_at = try Self.decodeLossyString(container, forKey: .verified_at)
+        self.file_path = try Self.decodeLossyString(container, forKey: .file_path)
+        self.confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
+    }
+
+    private static func decodeLossyString(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> String? {
+        if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decodeIfPresent(Bool.self, forKey: key) {
+            return value ? "true" : "false"
+        }
+        return nil
     }
 
     public func asTaskSummary() -> TaskLightTaskSummary {
@@ -1311,6 +1383,7 @@ public struct CodexQuotaWindowUIState: Codable, Equatable {
     public var remaining_percent: Int?
     public var used_percent: Int?
     public var reset_label: String?
+    public var reset_at: String?
     public var window_duration_mins: Int?
     public var health: String?
     public var selection_reason: String?
@@ -1322,6 +1395,7 @@ public struct CodexQuotaWindowUIState: Codable, Equatable {
         remaining_percent: Int? = nil,
         used_percent: Int? = nil,
         reset_label: String? = nil,
+        reset_at: String? = nil,
         window_duration_mins: Int? = nil,
         health: String? = nil,
         selection_reason: String? = nil
@@ -1332,9 +1406,109 @@ public struct CodexQuotaWindowUIState: Codable, Equatable {
         self.remaining_percent = remaining_percent
         self.used_percent = used_percent
         self.reset_label = reset_label
+        self.reset_at = reset_at
         self.window_duration_mins = window_duration_mins
         self.health = health
         self.selection_reason = selection_reason
+    }
+}
+
+public struct CodexQuotaResetWindow: Codable, Equatable, Identifiable {
+    public var id: String
+    public var label: String
+    public var bucket_id: String?
+    public var remaining_percent: Int?
+    public var reset_label: String?
+    public var reset_at: String?
+    public var window_duration_mins: Int?
+    public var validity_label: String
+
+    public init(
+        id: String,
+        label: String,
+        bucket_id: String? = nil,
+        remaining_percent: Int? = nil,
+        reset_label: String? = nil,
+        reset_at: String? = nil,
+        window_duration_mins: Int? = nil,
+        validity_label: String
+    ) {
+        self.id = id
+        self.label = label
+        self.bucket_id = bucket_id
+        self.remaining_percent = remaining_percent
+        self.reset_label = reset_label
+        self.reset_at = reset_at
+        self.window_duration_mins = window_duration_mins
+        self.validity_label = validity_label
+    }
+}
+
+public struct CodexQuotaResetCreditUIState: Codable, Equatable, Identifiable {
+    public var id: String
+    public var status: String?
+    public var issued_at: String?
+    public var issued_date: String?
+    public var expires_at: String?
+    public var expiry_date: String?
+    public var redeemed: Bool?
+    public var reset_type: String?
+
+    public init(
+        id: String,
+        status: String? = nil,
+        issued_at: String? = nil,
+        issued_date: String? = nil,
+        expires_at: String? = nil,
+        expiry_date: String? = nil,
+        redeemed: Bool? = nil,
+        reset_type: String? = nil
+    ) {
+        self.id = id
+        self.status = status
+        self.issued_at = issued_at
+        self.issued_date = issued_date
+        self.expires_at = expires_at
+        self.expiry_date = expiry_date
+        self.redeemed = redeemed
+        self.reset_type = reset_type
+    }
+}
+
+public struct CodexQuotaResetSnapshot: Codable, Equatable {
+    public var status: String
+    public var manual_resets_available: Int?
+    public var manual_resets_total_count: Int?
+    public var manual_resets_used_count: Int?
+    public var manual_resets_expired_count: Int?
+    public var next_expiry: String?
+    public var manual_resets_label: String
+    public var windows: [CodexQuotaResetWindow]
+    public var credits: [CodexQuotaResetCreditUIState]
+    public var summary: String
+
+    public init(
+        status: String,
+        manual_resets_available: Int? = nil,
+        manual_resets_total_count: Int? = nil,
+        manual_resets_used_count: Int? = nil,
+        manual_resets_expired_count: Int? = nil,
+        next_expiry: String? = nil,
+        manual_resets_label: String,
+        windows: [CodexQuotaResetWindow] = [],
+        credits: [CodexQuotaResetCreditUIState] = [],
+        summary: String
+    ) {
+        self.status = status
+        self.manual_resets_available = manual_resets_available
+        self.manual_resets_total_count = manual_resets_total_count
+        self.manual_resets_used_count = manual_resets_used_count
+        self.manual_resets_expired_count = manual_resets_expired_count
+        self.next_expiry = next_expiry
+        self.manual_resets_label = manual_resets_label
+        self.windows = windows
+        self.credits = credits
+        self.summary = summary
     }
 }
 
@@ -1358,6 +1532,11 @@ public struct CodexQuotaUIState: Codable, Equatable {
     public var long_reset_label: String?
     public var long_bucket_id: String?
     public var manual_resets_available: Int?
+    public var manual_resets_total_count: Int?
+    public var manual_resets_used_count: Int?
+    public var manual_resets_expired_count: Int?
+    public var manual_resets_next_expiry: String?
+    public var manual_reset_credits: [CodexQuotaResetCreditUIState]?
     public var captured_at: String?
     public var recommendation: String?
 
@@ -1381,6 +1560,11 @@ public struct CodexQuotaUIState: Codable, Equatable {
         long_reset_label: String? = nil,
         long_bucket_id: String? = nil,
         manual_resets_available: Int? = nil,
+        manual_resets_total_count: Int? = nil,
+        manual_resets_used_count: Int? = nil,
+        manual_resets_expired_count: Int? = nil,
+        manual_resets_next_expiry: String? = nil,
+        manual_reset_credits: [CodexQuotaResetCreditUIState]? = nil,
         captured_at: String? = nil,
         recommendation: String? = nil
     ) {
@@ -1403,6 +1587,11 @@ public struct CodexQuotaUIState: Codable, Equatable {
         self.long_reset_label = long_reset_label
         self.long_bucket_id = long_bucket_id
         self.manual_resets_available = manual_resets_available
+        self.manual_resets_total_count = manual_resets_total_count
+        self.manual_resets_used_count = manual_resets_used_count
+        self.manual_resets_expired_count = manual_resets_expired_count
+        self.manual_resets_next_expiry = manual_resets_next_expiry
+        self.manual_reset_credits = manual_reset_credits
         self.captured_at = captured_at
         self.recommendation = recommendation
     }
@@ -1646,7 +1835,7 @@ public struct InteractionRuleSelfTestResult: Codable, Equatable {
     }
 }
 
-public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
+public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var workspaces: [String]
     public var created_at: String
@@ -1677,7 +1866,7 @@ public struct WorkspaceHookInstallRequest: Codable, Equatable, Identifiable {
     }
 }
 
-public struct WorkspaceHookInstallResult: Codable, Equatable, Identifiable {
+public struct WorkspaceHookInstallResult: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var status: String
     public var installed_count: Int
@@ -1721,6 +1910,9 @@ public struct UsageProviderSnapshot: Codable, Equatable, Identifiable {
     public var is_low_quota: Bool
     public var updated_at: String
     public var diagnostic_only: Bool
+    public var source_label: String?
+    public var freshness_label: String?
+    public var conflict_label: String?
 
     public init(
         id: String,
@@ -1730,7 +1922,10 @@ public struct UsageProviderSnapshot: Codable, Equatable, Identifiable {
         remaining_percent: Int? = nil,
         is_low_quota: Bool = false,
         updated_at: String = TaskLightTaskRecord.nowString(),
-        diagnostic_only: Bool = true
+        diagnostic_only: Bool = true,
+        source_label: String = "local presentation",
+        freshness_label: String = "unknown freshness",
+        conflict_label: String? = nil
     ) {
         self.id = id
         self.display_name = display_name
@@ -1740,6 +1935,9 @@ public struct UsageProviderSnapshot: Codable, Equatable, Identifiable {
         self.is_low_quota = is_low_quota
         self.updated_at = updated_at
         self.diagnostic_only = diagnostic_only
+        self.source_label = source_label
+        self.freshness_label = freshness_label
+        self.conflict_label = conflict_label
     }
 }
 
@@ -1758,29 +1956,57 @@ public struct CodexUsageProviderAdapter: UsageProviderAdapter {
     public init() {}
 
     public func snapshot(from uiState: TaskLightUIState) -> UsageProviderSnapshot {
-        guard let quota = uiState.quota, quota.fresh else {
+        guard let quota = uiState.quota else {
             return UsageProviderSnapshot(
                 id: id,
                 display_name: displayName,
                 health: .unavailable,
                 quota_text: "Q?",
                 remaining_percent: uiState.quota?.effective_remaining_percent,
-                diagnostic_only: true
+                diagnostic_only: true,
+                source_label: "no local quota snapshot",
+                freshness_label: "unavailable"
             )
         }
         let values = [quota.short_percent, quota.long_percent, quota.effective_remaining_percent].compactMap { $0 }
         let lowQuota = values.min().map { $0 < 20 } ?? false
         let short = quota.short_percent.map(String.init) ?? "?"
         let long = quota.long_percent.map(String.init) ?? quota.effective_remaining_percent.map(String.init) ?? "?"
+        let source = quota.source ?? "unknown local source"
+        let sourceLabel: String
+        switch source {
+        case "codex_appserver":
+            sourceLabel = "ChatGPT Work local app-server"
+        case "codex_appserver_cached":
+            sourceLabel = "Last valid ChatGPT Work snapshot"
+        default:
+            sourceLabel = source
+        }
+        let freshness = quota.fresh
+            ? quota.captured_age_sec.map { "fresh \(Int($0.rounded()))s" } ?? "fresh"
+            : "stale"
+        let conflict = quota.warnings?.first(where: {
+            $0.localizedCaseInsensitiveContains("conflict")
+                || $0.localizedCaseInsensitiveContains("schema_changed")
+                || $0.localizedCaseInsensitiveContains("probe_error")
+        }).map { warning in
+            warning.contains("schema_changed") || warning.contains("probe_error")
+                ? "Source changed; using the last valid local snapshot"
+                : warning
+        }
+        let health: ProviderHealth = !quota.fresh ? .unavailable : (lowQuota || conflict != nil ? .warning : .ok)
         return UsageProviderSnapshot(
             id: id,
             display_name: displayName,
-            health: lowQuota ? .warning : .ok,
+            health: health,
             quota_text: "⚡\(short)·\(long)",
             remaining_percent: quota.effective_remaining_percent,
             is_low_quota: lowQuota,
             updated_at: quota.captured_at ?? TaskLightTaskRecord.nowString(),
-            diagnostic_only: true
+            diagnostic_only: true,
+            source_label: sourceLabel,
+            freshness_label: freshness,
+            conflict_label: conflict
         )
     }
 }

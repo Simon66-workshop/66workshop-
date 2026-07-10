@@ -16,6 +16,8 @@ fail() {
 rg -q "struct StatusReplayRecord" "$TYPES" || fail "StatusReplayRecord type is missing"
 rg -q "loadStatusReplayRecords" "$STORE" "$VM" || fail "status replay reader is missing"
 rg -q "uiEventFlowURL" "$STORE" || fail "status replay must reuse ui_event_flow.jsonl"
+rg -q "statusReplayCache" "$STORE" || fail "status replay must cache unchanged event flow"
+rg -q "readTextTail" "$STORE" || fail "status replay must use a bounded event-flow tail"
 rg -q "statusReplayRecords\\(hours: 24" "$RADAR" "$VM" || fail "status replay must default to 24h surface"
 rg -q "24h Status Replay" "$RADAR" || fail "task radar must render 24h Status Replay"
 for marker in process_only old_writer multiple_projector stale_launch_agent runtime_score_below_threshold fallback_reason; do

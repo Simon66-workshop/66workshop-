@@ -14,7 +14,7 @@ manual text / clipboard / file fallback
         -> LuckyCat compact + expanded dashboard
 ```
 
-The preferred source is local Codex App Server. The short probe reads `account/rateLimits/read`; the watcher prefers `account/rateLimits/updated` and falls back to bounded polling when local notifications are unavailable. Manual and clipboard import exist as fallback. OCR, cookie scraping, keychain reads, `~/.codex/auth.json`, purchases, and automatic resets are out of scope.
+The preferred source is local Codex App Server. The short probe reads `account/rateLimits/read`; the watcher prefers `account/rateLimits/updated` and falls back to bounded polling when local notifications are unavailable. Manual and clipboard import exist as fallback. OCR, cookie scraping, keychain reads, auth-file reads, external API calls, purchases, and automatic resets are out of scope.
 
 ## Commands
 
@@ -25,6 +25,7 @@ python3 script/codex_quota_appserver_watcher.py --watch
 ./script/install_codex_quota_watcher_launch_agent.sh
 ./script/check_codex_quota_watcher_launch_agent.sh
 ./script/uninstall_codex_quota_watcher_launch_agent.sh
+python3 script/codex_quota_reset_credits_probe.py --fixture /path/to/sanitized-reset-credits.json
 python3 script/codex_quota_import.py --text "5小时 93% 11:44
 1周 42% 6月18日
 1次可用重置"
@@ -63,6 +64,36 @@ M3.7 adds a small compact freshness dot:
 - the dot does not affect `RUNNING`, `BLOCKED`, `PENDING`, or `DONE`.
 
 Expanded dashboard also shows `captured_at`, `bucket_id`, probe mode, and raw bucket count so the value can be compared against the Codex Usage UI.
+
+## Reset Credits
+
+M5 adds a sanitized reset-credit fixture importer for the Codex reset counter.
+It accepts only a local sanitized fixture and normalizes records to stable display fields:
+
+- `status`
+- `issued_at`
+- `issued_date`
+- `expires_at`
+- `expiry_date`
+- `redeemed`
+
+Derived fields:
+
+- `total_count`
+- `available_count`
+- `used_count`
+- `expired_count`
+- `next_expiry`
+
+`expires_at` is kept as the precise local ISO timestamp and is the source for
+the UI's "最迟有效期 M月d日 HH:mm" display. `expiry_date` remains only a date
+compatibility field and must not be used when the precise timestamp exists.
+
+Only normalized reset metadata is saved under `manual_resets`; tokens, account
+ids, prompts, responses, auth material, and raw API bodies are never read or
+written by this importer. Reset credits are diagnostic quota
+metadata only; they do not affect `global_status`, `lamp_status`, task status,
+or any reset/redeem action.
 
 ## Burn-Rate Prediction
 

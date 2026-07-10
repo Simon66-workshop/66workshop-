@@ -15,6 +15,8 @@ fail() {
 
 rg -q "struct QuotaBurnRateSnapshot" "$TYPES" || fail "QuotaBurnRateSnapshot type is missing"
 rg -q "struct QuotaBurnRateWindow" "$TYPES" || fail "QuotaBurnRateWindow type is missing"
+rg -q "struct CodexQuotaResetSnapshot" "$TYPES" || fail "Codex quota reset snapshot type is missing"
+rg -q "struct CodexQuotaResetWindow" "$TYPES" || fail "Codex quota reset window type is missing"
 rg -q "struct QuotaHistorySample" "$TYPES" || fail "QuotaHistorySample type is missing"
 rg -q "quotaHistoryURL" "$TYPES" || fail "quota_history path is not configured"
 rg -q "quota_history\\.jsonl" "$TYPES" || fail "quota history must use sanitized jsonl"
@@ -25,6 +27,16 @@ rg -q "burn_percent_per_hour" "$TYPES" "$VM" "$RADAR" || fail "burn-rate per hou
 rg -q "estimated_empty_at" "$TYPES" "$VM" || fail "estimated empty time field is missing"
 rg -q "low_quota" "$VM" "$RADAR" || fail "low quota warning path is missing"
 rg -q "Quota Pace" "$RADAR" || fail "task radar must render Quota Pace"
+rg -q "Codex Reset" "$RADAR" || fail "task radar must render Codex Reset"
+rg -q "quotaResetSnapshot" "$VM" "$RADAR" || fail "quota reset snapshot helper is missing"
+rg -q "manual_resets_available" "$TYPES" "$VM" "$RADAR" || fail "manual reset count must be surfaced"
+rg -q "manual_reset_credits" "$TYPES" "$VM" "$RADAR" "$ROOT_DIR/script/state_projector.py" || fail "reset credit rows must be surfaced"
+rg -q "manual_resets_next_expiry" "$TYPES" "$VM" "$ROOT_DIR/script/state_projector.py" || fail "reset credit next expiry must be surfaced"
+rg -q "expires_at" "$TYPES" "$RADAR" "$ROOT_DIR/script/codex_quota_import.py" "$ROOT_DIR/script/state_projector.py" || fail "reset credit precise expiry time must be preserved"
+rg -q "最迟有效期" "$RADAR" || fail "reset credit UI must label expiry as latest valid time"
+rg -q "CodexQuotaResetCreditUIState" "$TYPES" "$RADAR" || fail "reset credit UI row type is missing"
+rg -q "reset_at" "$TYPES" "$VM" "$ROOT_DIR/script/state_projector.py" || fail "quota reset_at must be preserved"
+rg -q "validity_label" "$TYPES" "$VM" "$RADAR" || fail "quota window validity label must be surfaced"
 
 if rg -n "global_status|lamp_status" "$STORE" "$VM" | rg "quotaBurnRateSnapshot|burnRateWindow|appendQuotaHistorySample|quotaHistory" >/tmp/66tasklight-quota-main-lamp.txt; then
   cat /tmp/66tasklight-quota-main-lamp.txt

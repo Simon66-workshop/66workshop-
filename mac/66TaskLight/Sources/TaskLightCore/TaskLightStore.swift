@@ -5,6 +5,8 @@ public final class TaskLightStore {
     public let config: TaskLightConfig
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private var workspaceDoctorRowsCache: (fingerprint: String, rows: [WorkspaceDoctorRow])?
+    private var statusReplayCache: (fingerprint: String, records: [StatusReplayRecord])?
 
     public init(config: TaskLightConfig = .fromEnvironment()) {
         self.config = config
@@ -221,6 +223,7 @@ public final class TaskLightStore {
             write(fd, pointer, strlen(pointer))
         }
         fsync(fd)
+        statusReplayCache = nil
     }
 
     public func appendQuotaHistorySample(from quota: CodexQuotaUIState?) {
@@ -289,17 +292,24 @@ public final class TaskLightStore {
 
     public func loadWorkspaceDoctorRows(limit: Int = 12) -> [WorkspaceDoctorRow] {
         ensureLayout()
-        guard limit > 0,
-              let raw = try? Data(contentsOf: config.workspaceCoverageLatestJSONURL),
-              let payload = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-              let items = payload["workspaces"] as? [[String: Any]] else {
+        guard limit > 0 else {
             return []
         }
-        return items
+        let fingerprint = fileFingerprint(for: config.workspaceCoverageLatestJSONURL)
+        if let cached = workspaceDoctorRowsCache, cached.fingerprint == fingerprint {
+            return Array(cached.rows.prefix(limit))
+        }
+        guard let raw = try? Data(contentsOf: config.workspaceCoverageLatestJSONURL),
+              let payload = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+              let items = payload["workspaces"] as? [[String: Any]] else {
+            workspaceDoctorRowsCache = (fingerprint, [])
+            return []
+        }
+        let rows = items
             .compactMap(workspaceDoctorRow)
             .sorted(by: workspaceDoctorSort)
-            .prefix(limit)
-            .map { $0 }
+        workspaceDoctorRowsCache = (fingerprint, rows)
+        return Array(rows.prefix(limit))
     }
 
     public func workspaceHookInstallRequest(for rows: [WorkspaceDoctorRow]) -> WorkspaceHookInstallRequest? {
@@ -381,23 +391,33 @@ public final class TaskLightStore {
 
     public func loadStatusReplayRecords(since: Date, limit: Int = 80) -> [StatusReplayRecord] {
         ensureLayout()
-        guard limit > 0,
-              let raw = try? String(contentsOf: config.uiEventFlowURL, encoding: .utf8),
-              !raw.isEmpty else {
-            return []
-        }
-        var records: [StatusReplayRecord] = []
-        for line in raw.split(whereSeparator: \.isNewline).suffix(800) {
-            guard let data = String(line).data(using: .utf8),
-                  let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let record = statusReplayRecord(from: payload),
-                  let recordedAt = TaskLightTaskRecord.parseTimestamp(record.recorded_at),
-                  recordedAt >= since else {
-                continue
+        guard limit > 0 else { return [] }
+        let fingerprint = fileFingerprint(for: config.uiEventFlowURL)
+        let records: [StatusReplayRecord]
+        if let cached = statusReplayCache, cached.fingerprint == fingerprint {
+            records = cached.records
+        } else {
+            guard let raw = readTextTail(from: config.uiEventFlowURL, maxBytes: TaskLightUIPerformanceBudget.statusReplayTailReadMaxBytes),
+                  !raw.isEmpty else {
+                statusReplayCache = (fingerprint, [])
+                return []
             }
-            records.append(record)
+            records = raw
+                .split(whereSeparator: \.isNewline)
+                .suffix(800)
+                .compactMap { line -> StatusReplayRecord? in
+                    guard let data = String(line).data(using: .utf8),
+                          let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    else { return nil }
+                    return statusReplayRecord(from: payload)
+                }
+                .sorted { $0.recorded_at > $1.recorded_at }
+            statusReplayCache = (fingerprint, records)
         }
-        return Array(records.sorted { $0.recorded_at > $1.recorded_at }.prefix(limit))
+        return Array(records.lazy.filter {
+            guard let recordedAt = TaskLightTaskRecord.parseTimestamp($0.recorded_at) else { return false }
+            return recordedAt >= since
+        }.prefix(limit))
     }
 
     public func clear(taskID: String) {
@@ -544,6 +564,7 @@ public final class TaskLightStore {
                     bucket_id: window.bucket_id ?? quota.bucket_id,
                     remaining_percent: remaining,
                     reset_label: window.reset_label,
+                    reset_at: window.reset_at,
                     window_duration_mins: window.window_duration_mins
                 )
             }
@@ -765,6 +786,7 @@ public final class TaskLightStore {
         var remaining_percent: Int?
         var used_percent: Int?
         var reset_label: String?
+        var reset_at: String?
         var window_duration_mins: Int?
         var health: String?
         var selection_reason: String?
@@ -772,6 +794,11 @@ public final class TaskLightStore {
 
     private struct QuotaFallbackResets: Decodable {
         var available_count: Int?
+        var total_count: Int?
+        var used_count: Int?
+        var expired_count: Int?
+        var next_expiry: String?
+        var credits: [CodexQuotaResetCreditUIState]?
     }
 
     private func isUIStateFresh(_ uiState: TaskLightUIState) -> Bool {
@@ -781,11 +808,7 @@ public final class TaskLightStore {
         guard uiState.projector_version == "M3.7" else {
             return false
         }
-        if let writerStatus = uiState.diagnostics.writer_status,
-           ["old_writer", "multiple_writers", "error"].contains(writerStatus) {
-            return false
-        }
-        guard TaskLightTaskRecord.parseTimestamp(uiState.projector_generated_at) != nil else {
+        guard !uiState.projector_generated_at.isEmpty else {
             return false
         }
         return true
@@ -960,6 +983,7 @@ public final class TaskLightStore {
                     remaining_percent: window.remaining_percent,
                     used_percent: window.used_percent,
                     reset_label: window.reset_label,
+                    reset_at: window.reset_at,
                     window_duration_mins: window.window_duration_mins,
                     health: window.health,
                     selection_reason: window.selection_reason
@@ -979,6 +1003,11 @@ public final class TaskLightStore {
             long_reset_label: long?.reset_label,
             long_bucket_id: long?.bucket_id,
             manual_resets_available: raw.manual_resets?.available_count,
+            manual_resets_total_count: raw.manual_resets?.total_count,
+            manual_resets_used_count: raw.manual_resets?.used_count,
+            manual_resets_expired_count: raw.manual_resets?.expired_count,
+            manual_resets_next_expiry: raw.manual_resets?.next_expiry,
+            manual_reset_credits: raw.manual_resets?.credits,
             captured_at: raw.captured_at,
             recommendation: raw.recommendation
         )
@@ -1522,6 +1551,34 @@ public final class TaskLightStore {
             return 7
         default:
             return 8
+        }
+    }
+
+    private func fileFingerprint(for url: URL) -> String {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return "missing"
+        }
+        let modifiedAt = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+        return "\(modifiedAt):\(size)"
+    }
+
+    private func readTextTail(from url: URL, maxBytes: Int) -> String? {
+        guard maxBytes > 0, let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let fileSize = (try? handle.seekToEnd()) ?? 0
+        guard fileSize > 0 else { return "" }
+        let bytesToRead = min(UInt64(maxBytes), fileSize)
+        let startOffset = fileSize - bytesToRead
+        do {
+            try handle.seek(toOffset: startOffset)
+            guard let data = try handle.readToEnd(), var text = String(data: data, encoding: .utf8) else { return nil }
+            if startOffset > 0, let firstNewline = text.firstIndex(where: \.isNewline) {
+                text = String(text[text.index(after: firstNewline)...])
+            }
+            return text
+        } catch {
+            return nil
         }
     }
 

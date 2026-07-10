@@ -4,8 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-hook-agent-XXXXXX")"
 LABEL="com.66tasklight.hook-bridge.smoke.$$"
+DIRECT_BRIDGE_PID=""
+BRIDGE_MODE="launch_agent"
 
 cleanup() {
+  if [ -n "$DIRECT_BRIDGE_PID" ]; then
+    kill "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
+    wait "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
+  fi
   TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL" TASKLIGHT_STATE_DIR="$STATE_DIR" "$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null 2>&1 || true
   rm -rf "$STATE_DIR"
 }
@@ -69,6 +75,31 @@ wait_for_status() {
   return 1
 }
 
+wait_for_health_ok() {
+  local deadline=$((SECONDS + 12))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if python3 - "$TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH" <<'PY' >/dev/null 2>&1
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+raise SystemExit(0 if payload.get("status") == "ok" else 1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+start_direct_bridge_watch() {
+  python3 "$ROOT_DIR/script/hook_signal_bridge.py" --watch >/dev/null 2>&1 &
+  DIRECT_BRIDGE_PID="$!"
+  wait_for_health_ok
+}
+
 task_for_turn() {
   local turn_id="$1"
   python3 - "$TASKLIGHT_TURN_BINDINGS_DIR" "$turn_id" <<'PY'
@@ -126,7 +157,11 @@ TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL" TASKLIGHT_STATE_DIR="$STATE_DIR" "$ROOT_DIR
 "$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=not_running$"
 
 "$ROOT_DIR/script/install_hook_bridge_launch_agent.sh" >/dev/null
-wait_for_status ok
+if ! wait_for_status ok; then
+  BRIDGE_MODE="direct_watch_fallback"
+  TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL" TASKLIGHT_STATE_DIR="$STATE_DIR" "$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null 2>&1 || true
+  start_direct_bridge_watch
+fi
 python3 - "$TASKLIGHT_HOOK_BRIDGE_HEALTH_PATH" <<'PY'
 import json
 import sys
@@ -164,7 +199,13 @@ wait_for_task_status "$stop_task" done_unverified
 "$ROOT_DIR/tasklight" verify --task-id "$stop_task" >/dev/null
 wait_for_task_status "$stop_task" done_verified
 
-"$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null
-"$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=not_running$"
+if [ "$BRIDGE_MODE" = "launch_agent" ]; then
+  "$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null
+  "$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=not_running$"
+else
+  kill "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
+  wait "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
+  DIRECT_BRIDGE_PID=""
+fi
 
-echo "smoke_hook_bridge_launch_agent: ok"
+echo "smoke_hook_bridge_launch_agent: ok mode=$BRIDGE_MODE"

@@ -35,6 +35,9 @@ rg -q "lhs\\.display_scope" /tmp/66tasklight-sorted-managed-tasks.txt \
 rg -q "LuckyCatExpandedDashboardCacheBuilder" "$dashboard" \
   || fail "expanded dashboard should derive heavy task cache through a dedicated cache builder"
 
+rg -q "topManagedTasks" "$dashboard" \
+  || fail "expanded dashboard cache builder should use a bounded managed task candidate set"
+
 rg -q "DispatchQueue\\.global\\(qos: \\.userInitiated\\)" "$dashboard" \
   || fail "expanded dashboard task cache should be built off the main thread"
 

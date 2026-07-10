@@ -16,6 +16,7 @@ APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 RUNTIME_DIR="${TMPDIR:-/tmp}/66tasklight-runtime"
 RUNTIME_BUNDLE="$RUNTIME_DIR/$APP_NAME.app"
 DESKTOP_BUNDLE="$HOME/Desktop/$APP_NAME.app"
+REFRESH_DESKTOP_BUNDLE="${TASKLIGHT_REFRESH_DESKTOP_BUNDLE:-0}"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$BINARY_NAME"
@@ -92,6 +93,10 @@ stage_runtime_bundle() {
 }
 
 refresh_desktop_bundle() {
+  if [ "$REFRESH_DESKTOP_BUNDLE" != "1" ]; then
+    return 0
+  fi
+
   if [ -e "$DESKTOP_BUNDLE" ] || [ -L "$DESKTOP_BUNDLE" ]; then
     if ! rm -rf "$DESKTOP_BUNDLE" >/dev/null 2>&1; then
       echo "warning: could not replace desktop app at $DESKTOP_BUNDLE" >&2
@@ -103,6 +108,15 @@ refresh_desktop_bundle() {
     echo "warning: could not install desktop app at $DESKTOP_BUNDLE" >&2
     return 0
   fi
+}
+
+install_desktop_bundle() {
+  build_app
+  stage_bundle
+  stage_runtime_bundle
+  REFRESH_DESKTOP_BUNDLE=1 refresh_desktop_bundle
+  echo "desktop_bundle_path=$DESKTOP_BUNDLE"
+  echo "desktop_bundle_status=updated"
 }
 
 open_app() {
@@ -371,6 +385,8 @@ emit("expanded_panel_content_expanded", payload.get("content_expanded", "missing
 emit("expanded_panel_managed_task_count", payload.get("managed_task_count", "missing"))
 emit("expanded_panel_open_apply_ms", payload.get("open_apply_ms", "missing"))
 emit("expanded_panel_visible_apply_ms", payload.get("visible_apply_ms", "missing"))
+emit("expanded_panel_main_queue_probe_delay_ms", payload.get("main_queue_probe_delay_ms", "missing"))
+emit("expanded_panel_main_queue_responsive", payload.get("main_queue_responsive", "missing"))
 emit("expanded_panel_frame", payload.get("frame", {}))
 
 if payload.get("status") != "ok":
@@ -478,8 +494,10 @@ case "$MODE" in
     build_app
     stage_bundle
     stage_runtime_bundle
-    refresh_desktop_bundle
     open_app
+    ;;
+  --install-desktop|install-desktop|refresh-desktop)
+    install_desktop_bundle
     ;;
   --debug|debug)
     kill_existing
@@ -539,7 +557,7 @@ case "$MODE" in
     launch_expanded_panel_self_test
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test|--visual-matrix-self-test|--menu-bar-self-test|--expanded-panel-self-test]" >&2
+    echo "usage: $0 [run|install-desktop|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test|--visual-matrix-self-test|--menu-bar-self-test|--expanded-panel-self-test]" >&2
     exit 2
     ;;
 esac

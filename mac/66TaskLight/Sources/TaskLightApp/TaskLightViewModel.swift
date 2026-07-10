@@ -93,7 +93,7 @@ final class TaskLightViewModel: ObservableObject {
         self.edgeCollapsed = false
         defaults.set(false, forKey: TaskLightLedgerKeys.edgeCollapsed)
         self.presenceMode = TaskLightPresenceMode(rawValue: defaults.string(forKey: TaskLightLedgerKeys.presenceMode) ?? "") ?? .normal
-        self.autoMeetingModeEnabled = defaults.bool(forKey: TaskLightLedgerKeys.autoMeetingMode)
+        self.autoMeetingModeEnabled = Self.frontmostAppDetectionAllowed() && defaults.bool(forKey: TaskLightLedgerKeys.autoMeetingMode)
         self.edgeCollapseRequestID = 0
         self.edgeRestoreRequestID = 0
         self.contentExpanded = false
@@ -165,18 +165,23 @@ final class TaskLightViewModel: ObservableObject {
         let nextState = store.loadProjectedUIState()
         recordQuotaHistoryIfNeeded(nextState.quota)
         let nextSignature = Self.uiStateRefreshSignature(for: nextState, config: config)
-        if nextSignature != lastUIStateRefreshSignature || nextState != previousState {
+        let presentationChanged = nextSignature != lastUIStateRefreshSignature
+        if presentationChanged {
             uiStateRevision += 1
         }
         lastUIStateRefreshSignature = nextSignature
-        uiState = nextState
-        recordUIEventFlow(previous: previousState, current: nextState)
-        applyAutoMeetingPresenceIfNeeded()
-        saveWidgetSnapshot(for: nextState)
+        if presentationChanged {
+            uiState = nextState
+            recordUIEventFlow(previous: previousState, current: nextState)
+            applyAutoMeetingPresenceIfNeeded()
+            saveWidgetSnapshot(for: nextState)
+        }
         refreshRecentEventsIfNeeded()
         saveUIClientDiagnostic()
         handleAlertPlayback()
-        persistUIState()
+        if presentationChanged {
+            persistUIState()
+        }
     }
 
     func shutdown() {
@@ -300,7 +305,22 @@ final class TaskLightViewModel: ObservableObject {
         setPresenceMode(enabled ? .menuBarOnly : .normal)
     }
 
+    var autoMeetingDetectionAvailable: Bool {
+        isFrontmostAppDetectionAllowed
+    }
+
     func setAutoMeetingModeEnabled(_ enabled: Bool) {
+        guard isFrontmostAppDetectionAllowed else {
+            autoMeetingModeEnabled = false
+            UserDefaults.standard.set(false, forKey: TaskLightLedgerKeys.autoMeetingMode)
+            if autoMeetingApplied {
+                autoMeetingApplied = false
+                if presenceMode == .focusCapsule {
+                    setPresenceMode(.normal)
+                }
+            }
+            return
+        }
         guard autoMeetingModeEnabled != enabled else { return }
         autoMeetingModeEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: TaskLightLedgerKeys.autoMeetingMode)
@@ -391,6 +411,50 @@ final class TaskLightViewModel: ObservableObject {
         )
     }
 
+    func quotaResetSnapshot() -> CodexQuotaResetSnapshot {
+        guard let quota = uiState.quota, quota.fresh else {
+            return CodexQuotaResetSnapshot(
+                status: "unknown",
+                manual_resets_label: "可用重置：未知",
+                summary: "Codex reset 数据不足"
+            )
+        }
+        let windows = quotaResetWindows(from: quota)
+        let credits = quota.manual_reset_credits ?? []
+        let availableCount = quota.manual_resets_available ?? credits.filter { credit in
+            (credit.status ?? "").lowercased() == "available" && credit.redeemed != true
+        }.count
+        let resetsLabel: String
+        if quota.manual_resets_available != nil || !credits.isEmpty {
+            resetsLabel = "可用重置 \(availableCount) 次"
+        } else {
+            resetsLabel = "可用重置：未提供"
+        }
+        let creditSummary: String
+        if let total = quota.manual_resets_total_count {
+            let used = quota.manual_resets_used_count ?? 0
+            let expired = quota.manual_resets_expired_count ?? 0
+            let expiry = quota.manual_resets_next_expiry.map { " · 最近到期 \($0)" } ?? ""
+            creditSummary = "总 \(total) · 已用 \(used) · 过期 \(expired)\(expiry)"
+        } else if !credits.isEmpty {
+            creditSummary = "显示每次 reset 的最迟有效期"
+        } else {
+            creditSummary = "等待 reset credit 明细"
+        }
+        return CodexQuotaResetSnapshot(
+            status: quota.status,
+            manual_resets_available: availableCount,
+            manual_resets_total_count: quota.manual_resets_total_count,
+            manual_resets_used_count: quota.manual_resets_used_count,
+            manual_resets_expired_count: quota.manual_resets_expired_count,
+            next_expiry: quota.manual_resets_next_expiry,
+            manual_resets_label: resetsLabel,
+            windows: windows,
+            credits: credits,
+            summary: "\(resetsLabel) · \(creditSummary)"
+        )
+    }
+
     func workspaceDoctorRows(limit: Int = 8) -> [WorkspaceDoctorRow] {
         if previewMode {
             return [
@@ -418,10 +482,28 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func installWorkspaceHooks(request: WorkspaceHookInstallRequest, confirmed: Bool) {
-        let result = store.runWorkspaceHookInstall(request: request, confirmed: confirmed)
-        workspaceHookInstallResult = result
-        if result.status == "success" {
-            scheduleWorkspaceCoverageRefreshes()
+        guard confirmed, request.requires_user_confirmation else {
+            workspaceHookInstallResult = store.runWorkspaceHookInstall(request: request, confirmed: confirmed)
+            return
+        }
+
+        // The installer can run an external process and a coverage refresh. Keep
+        // that work off the main actor so the radar and menu remain responsive.
+        workspaceHookInstallResult = WorkspaceHookInstallResult(
+            status: "running",
+            message: "正在安装 hooks..."
+        )
+        let config = store.config
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let installer = TaskLightStore(config: config)
+            let result = installer.runWorkspaceHookInstall(request: request, confirmed: true)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.workspaceHookInstallResult = result
+                if result.status == "success" {
+                    self.scheduleWorkspaceCoverageRefreshes()
+                }
+            }
         }
     }
 
@@ -713,7 +795,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func applyAutoMeetingPresenceIfNeeded() {
-        guard autoMeetingModeEnabled else { return }
+        guard autoMeetingModeEnabled, isFrontmostAppDetectionAllowed else { return }
         let names = [
             NSWorkspace.shared.frontmostApplication?.localizedName,
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier
@@ -729,6 +811,15 @@ final class TaskLightViewModel: ObservableObject {
             autoMeetingApplied = false
             setPresenceMode(.normal)
         }
+    }
+
+    private var isFrontmostAppDetectionAllowed: Bool {
+        Self.frontmostAppDetectionAllowed()
+    }
+
+    private static func frontmostAppDetectionAllowed() -> Bool {
+        let raw = ProcessInfo.processInfo.environment["TASKLIGHT_ENABLE_FRONTMOST_APP_DETECTION"] ?? ""
+        return ["1", "true", "yes", "on"].contains(raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 
     private func projectDocumentationURL(_ filename: String) -> URL {
@@ -767,6 +858,7 @@ final class TaskLightViewModel: ObservableObject {
                     bucket_id: window.bucket_id ?? quota.bucket_id,
                     remaining_percent: remaining,
                     reset_label: window.reset_label,
+                    reset_at: window.reset_at,
                     window_duration_mins: window.window_duration_mins
                 )
             }
@@ -876,6 +968,83 @@ final class TaskLightViewModel: ObservableObject {
             data_status: burnPerHour > 0 ? "ok" : "steady_or_recovered",
             confidence: confidence
         )
+    }
+
+    private func quotaResetWindows(from quota: CodexQuotaUIState) -> [CodexQuotaResetWindow] {
+        if let windows = quota.display_windows, !windows.isEmpty {
+            return windows.enumerated().map { index, window in
+                let label = window.label ?? quotaResetWindowLabel(durationMins: window.window_duration_mins, fallback: window.id ?? "window \(index + 1)")
+                return CodexQuotaResetWindow(
+                    id: window.id ?? "\(window.bucket_id ?? quota.bucket_id ?? "quota"):\(window.window_duration_mins ?? index)",
+                    label: label,
+                    bucket_id: window.bucket_id ?? quota.bucket_id,
+                    remaining_percent: window.remaining_percent,
+                    reset_label: window.reset_label,
+                    reset_at: window.reset_at,
+                    window_duration_mins: window.window_duration_mins,
+                    validity_label: quotaValidityLabel(minutes: window.window_duration_mins)
+                )
+            }
+        }
+        var output: [CodexQuotaResetWindow] = []
+        if let short = quota.short_percent {
+            output.append(
+                CodexQuotaResetWindow(
+                    id: [quota.short_bucket_id ?? quota.bucket_id ?? "quota", quota.short_label ?? "short"].joined(separator: ":"),
+                    label: quota.short_label ?? "短窗口",
+                    bucket_id: quota.short_bucket_id ?? quota.bucket_id,
+                    remaining_percent: short,
+                    reset_label: quota.short_reset_label,
+                    reset_at: nil,
+                    window_duration_mins: nil,
+                    validity_label: quota.short_label ?? "有效期未知"
+                )
+            )
+        }
+        if let long = quota.long_percent {
+            output.append(
+                CodexQuotaResetWindow(
+                    id: [quota.long_bucket_id ?? quota.bucket_id ?? "quota", quota.long_label ?? "long"].joined(separator: ":"),
+                    label: quota.long_label ?? "长窗口",
+                    bucket_id: quota.long_bucket_id ?? quota.bucket_id,
+                    remaining_percent: long,
+                    reset_label: quota.long_reset_label,
+                    reset_at: nil,
+                    window_duration_mins: nil,
+                    validity_label: quota.long_label ?? "有效期未知"
+                )
+            )
+        }
+        return output
+    }
+
+    private func quotaResetWindowLabel(durationMins: Int?, fallback: String) -> String {
+        guard let durationMins else { return fallback }
+        switch durationMins {
+        case 300:
+            return "5小时"
+        case 10080:
+            return "1周"
+        default:
+            return quotaValidityLabel(minutes: durationMins)
+        }
+    }
+
+    private func quotaValidityLabel(minutes: Int?) -> String {
+        guard let minutes, minutes > 0 else {
+            return "有效期未知"
+        }
+        if minutes % 10080 == 0 {
+            let weeks = minutes / 10080
+            return weeks == 1 ? "1周有效期" : "\(weeks)周有效期"
+        }
+        if minutes % 1440 == 0 {
+            return "\(minutes / 1440)天有效期"
+        }
+        if minutes % 60 == 0 {
+            return "\(minutes / 60)小时有效期"
+        }
+        return "\(minutes)分钟有效期"
     }
 
     private func burnRateSegmentAfterLatestReset(_ samples: [(Date, Int)]) -> [(Date, Int)] {
@@ -1084,6 +1253,10 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func taskRadarActiveTasks() -> [TaskLightTaskSummary] {
+        taskRadarActiveTasks(limit: 6)
+    }
+
+    func taskRadarActiveTasks(limit: Int?) -> [TaskLightTaskSummary] {
         let activeScopes = Set(["open_blocker", "stale_blocker", "active_execution", "pending_verify"])
         let activeStatuses = Set([
             TaskLightStatus.blocked.rawValue,
@@ -1093,7 +1266,7 @@ final class TaskLightViewModel: ObservableObject {
             TaskLightStatus.done_unverified.rawValue,
             TaskLightStatus.invalid_json.rawValue
         ])
-        return uiState.tasks
+        let sortedTasks = uiState.tasks
             .filter { task in
                 activeScopes.contains(task.display_scope) || activeStatuses.contains(task.effective_status)
             }
@@ -1108,11 +1281,16 @@ final class TaskLightViewModel: ObservableObject {
                 }
                 return lhs.task_id < rhs.task_id
             }
-            .map { $0.asTaskSummary() }
+        let cappedTasks = limit.map { Array(sortedTasks.prefix($0)) } ?? sortedTasks
+        return cappedTasks.map { $0.asTaskSummary() }
     }
 
     func taskRadarObservedThreads() -> [TaskLightObservationRecord] {
-        visibleObservedThreads()
+        taskRadarObservedThreads(limit: 4)
+    }
+
+    func taskRadarObservedThreads(limit: Int?) -> [TaskLightObservationRecord] {
+        visibleObservedThreads(limit: limit)
     }
 
     func taskRadarDiagnosticRows() -> [TaskRadarDiagnosticRow] {
@@ -1212,7 +1390,7 @@ final class TaskLightViewModel: ObservableObject {
             self?.refresh()
         }
         pendingStateFileRefresh = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: workItem)
     }
 
     private func scheduleWorkspaceCoverageRefreshes() {
@@ -1573,15 +1751,43 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private static func uiStateRefreshSignature(for state: TaskLightUIState, config: TaskLightConfig) -> String {
-        let fileAttributes = try? FileManager.default.attributesOfItem(atPath: config.uiStateURL.path)
-        let modifiedAt = (fileAttributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        let size = (fileAttributes?[.size] as? NSNumber)?.intValue ?? 0
         let reason = state.diagnostics.projector_reason?.joined(separator: ",") ?? "none"
+        let tasks = state.tasks.map {
+            [
+                $0.task_id,
+                $0.effective_status,
+                $0.display_scope,
+                $0.phase ?? "",
+                $0.progress.map { String(format: "%.3f", $0) } ?? "",
+                $0.reason ?? "",
+                $0.message ?? "",
+                $0.summary ?? "",
+                $0.fresh ? "1" : "0"
+            ].joined(separator: ":")
+        }.joined(separator: "|")
+        let observations = state.observations.map {
+            [
+                $0.observation_id,
+                $0.status,
+                $0.display_scope,
+                $0.fresh ? "1" : "0",
+                String(format: "%.3f", $0.confidence)
+            ].joined(separator: ":")
+        }.joined(separator: "|")
+        let quota = state.quota
+        var quotaParts = [quota?.fresh == true ? "1" : "0"]
+        quotaParts.append(quota?.status ?? "")
+        quotaParts.append(quota?.short_percent.map { String($0) } ?? "")
+        quotaParts.append(quota?.long_percent.map { String($0) } ?? "")
+        quotaParts.append(quota?.effective_remaining_percent.map { String($0) } ?? "")
+        quotaParts.append(quota?.manual_resets_available.map { String($0) } ?? "")
+        quotaParts.append(quota?.manual_resets_total_count.map { String($0) } ?? "")
+        quotaParts.append(quota?.manual_resets_used_count.map { String($0) } ?? "")
+        quotaParts.append(quota?.manual_resets_expired_count.map { String($0) } ?? "")
+        quotaParts.append(quota?.manual_resets_next_expiry ?? "")
+        let quotaSignature = quotaParts.joined(separator: ":")
         return [
-            String(format: "%.6f", modifiedAt),
-            "\(size)",
             state.source,
-            state.projector_generated_at,
             state.global_status,
             state.lamp_status,
             TaskLightProjectedPresentation.displayTitle(from: state),
@@ -1592,7 +1798,14 @@ final class TaskLightViewModel: ObservableObject {
             "\(state.counts.pending_verify_count)",
             "\(state.counts.done_verified_visible)",
             "\(state.counts.observed_active)",
-            reason
+            reason,
+            state.diagnostics.writer_status ?? "",
+            state.diagnostics.hook_bridge_status ?? "",
+            state.diagnostics.signal_bus_status ?? "",
+            state.diagnostics.quota_probe_status ?? "",
+            quotaSignature,
+            tasks,
+            observations
         ].joined(separator: "|")
     }
 

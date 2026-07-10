@@ -61,8 +61,14 @@ rg -q "toggleExpandedFromMenuBar" "$panel" "$controller" \
 rg -q "closeExpandedFromMenuBar" "$panel" \
   || fail "menu bar expanded panel close action is missing"
 
-rg -q "viewModel\\.expanded \\? \"关闭完整面板\" : \"打开完整面板\"" "$controller" \
-  || fail "expanded panel menu title should switch between open and close"
+rg -q "expandedPanelVisibleForMenu.*\\? \"关闭完整面板\" : \"打开完整面板\"" "$controller" \
+  || fail "expanded panel menu title should switch from real panel visibility"
+
+rg -q "refreshMenuTitlesSoon" "$controller" \
+  || fail "menu window actions should refresh open/close titles immediately"
+
+rg -q "var expandedPanelVisibleForMenu" "$panel" \
+  || fail "panel controller should expose real expanded visibility for menu titles"
 
 rg -q "#selector\\(toggleExpandedPanel\\)" "$controller" \
   || fail "expanded panel menu item should call the toggle selector"

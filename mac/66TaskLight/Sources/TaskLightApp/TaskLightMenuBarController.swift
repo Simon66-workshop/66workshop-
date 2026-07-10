@@ -106,7 +106,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         let output = NSMutableAttributedString(
             string: title,
             attributes: [
-                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold),
+                .font: NSFont.systemFont(ofSize: 13, weight: .medium),
                 .foregroundColor: NSColor.labelColor
             ]
         )
@@ -188,11 +188,16 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
 
     private func updateStatusMenuTitles() {
         let visibilityTitle = panelController?.anyTaskLightPanelVisible == true ? "隐藏小猫" : "显示小猫"
-        let expandedPanelTitle = viewModel.expanded ? "关闭完整面板" : "打开完整面板"
+        let expandedPanelTitle = panelController?.expandedPanelVisibleForMenu == true ? "关闭完整面板" : "打开完整面板"
         let visualMatrixTitle = isVisualMatrixVisible ? "关闭视觉矩阵" : "打开视觉矩阵"
         let focusTitle = viewModel.presenceMode == .focusCapsule ? "退出 Focus 模式" : "Focus 模式"
         let menuOnlyTitle = viewModel.presenceMode == .menuBarOnly ? "退出菜单栏 Only" : "只留菜单栏"
-        let autoMeetingTitle = viewModel.autoMeetingModeEnabled ? "关闭会议自动降存在感" : "开启会议自动降存在感"
+        let autoMeetingTitle: String
+        if !viewModel.autoMeetingDetectionAvailable {
+            autoMeetingTitle = "会议自动降存在感（已禁用）"
+        } else {
+            autoMeetingTitle = viewModel.autoMeetingModeEnabled ? "关闭会议自动降存在感" : "开启会议自动降存在感"
+        }
         visibilityMenuItem?.title = visibilityTitle
         edgeRailMenuItem?.title = viewModel.edgeCollapsed ? "恢复完整小猫" : "切换胶囊态"
         expandedPanelMenuItem?.title = expandedPanelTitle
@@ -200,6 +205,14 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         focusMenuItem?.title = focusTitle
         menuBarOnlyMenuItem?.title = menuOnlyTitle
         autoMeetingMenuItem?.title = autoMeetingTitle
+        autoMeetingMenuItem?.isEnabled = viewModel.autoMeetingDetectionAvailable
+    }
+
+    private func refreshMenuTitlesSoon() {
+        updateStatusMenuTitles()
+        DispatchQueue.main.async { [weak self] in
+            self?.updateStatusMenuTitles()
+        }
     }
 
     @objc private func openTaskRadar() {
@@ -212,6 +225,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         appendMenuTrace("action.toggleCatVisibility.begin")
         panelController?.togglePanelVisibilityFromMenuBar()
         appendMenuTrace("action.toggleCatVisibility.end")
+        refreshMenuTitlesSoon()
         writeManualLatency(source: "menu", action: "toggleCatVisibility", startedAt: startedAt)
     }
 
@@ -220,6 +234,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         appendMenuTrace("action.toggleEdgeRail.begin")
         panelController?.toggleEdgeRailFromMenuBar()
         appendMenuTrace("action.toggleEdgeRail.end")
+        refreshMenuTitlesSoon()
         writeManualLatency(source: "menu", action: "toggleEdgeRail", startedAt: startedAt)
     }
 
@@ -228,6 +243,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         appendMenuTrace("action.toggleExpanded.begin")
         panelController?.toggleExpandedFromMenuBar()
         appendMenuTrace("action.toggleExpanded.end")
+        refreshMenuTitlesSoon()
         writeManualLatency(source: "menu", action: "toggleExpandedPanel", startedAt: startedAt)
     }
 
@@ -281,6 +297,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             presentVisualMatrixWindow(source: "menu")
         }
         appendMenuTrace("action.toggleVisualMatrix.end")
+        refreshMenuTitlesSoon()
         writeManualLatency(source: "menu", action: "toggleVisualMatrix", startedAt: startedAt)
     }
 
@@ -344,8 +361,11 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         rebuildStatusMenu()
         let openExpandedItem = statusMenu.items.first { $0.title == "打开完整面板" }
         let openExpandedReady = openExpandedItem?.target === self && openExpandedItem?.action == #selector(toggleExpandedPanel)
-        viewModel.expanded = true
-        rebuildStatusMenu()
+        if openExpandedReady, let openExpandedItem, let action = openExpandedItem.action {
+            NSApp.sendAction(action, to: openExpandedItem.target, from: openExpandedItem)
+        }
+        let expandedWindowVisible = panelController?.expandedPanelVisibleForMenu == true
+        refreshMenuTitlesSoon()
         let closeExpandedItem = statusMenu.items.first { $0.title == "关闭完整面板" }
         let closeExpandedReady = closeExpandedItem?.target === self && closeExpandedItem?.action == #selector(toggleExpandedPanel)
         if closeExpandedReady, let closeExpandedItem {
@@ -372,6 +392,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             && hasPopoverContent
             && openExpandedReady
             && closeExpandedReady
+            && expandedWindowVisible
             && expandedToggleClosed
             && matrixOpenTitleReady
             && matrixCloseTitleReady
@@ -383,6 +404,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             "popover_content_ready": hasPopoverContent,
             "expanded_open_title_ready": openExpandedReady,
             "expanded_close_title_ready": closeExpandedReady,
+            "expanded_menu_action_visible": expandedWindowVisible,
             "expanded_toggle_closed": expandedToggleClosed,
             "matrix_menu_action_ready": matrixOpenTitleReady,
             "matrix_open_title_ready": matrixOpenTitleReady,
@@ -514,12 +536,14 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             NSApp.activate(ignoringOtherApps: true)
         }
         appendMenuTrace("visualMatrix.open.\(source).visible=\(window.isVisible)")
+        refreshMenuTitlesSoon()
     }
 
     private func closeVisualMatrixWindow(source: String) {
         guard let window = visualMatrixWindowController?.window else { return }
         window.close()
         appendMenuTrace("visualMatrix.close.\(source).visible=\(window.isVisible)")
+        refreshMenuTitlesSoon()
     }
 
     private func prepareVisualMatrixController() {

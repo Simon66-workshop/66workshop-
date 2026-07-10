@@ -7,17 +7,22 @@ public enum TaskLightUIPerformanceBudget {
     public static let expandedScrollAvoidsPerCardMaterial = true
     public static let expandedOverviewManagedTaskInitialRenderLimit = 4
     public static let expandedOverviewManagedTaskRenderLimit = 16
-    public static let expandedTaskInitialRenderLimit = 10
-    public static let expandedManagedTaskRenderLimit = 80
-    public static let expandedManagedTaskCachePageSize = 80
-    public static let expandedManagedTaskCacheHardLimit = 480
+    public static let expandedTaskInitialRenderLimit = 8
+    public static let expandedManagedTaskRenderLimit = 48
+    public static let expandedManagedTaskCachePageSize = 48
+    public static let expandedManagedTaskCacheHardLimit = 240
     public static let expandedTaskRenderBatchSize = 12
-    public static let expandedInvalidTaskRenderLimit = 40
-    public static let expandedObservedThreadRenderLimit = 40
+    public static let expandedInvalidTaskRenderLimit = 24
+    public static let expandedObservedThreadRenderLimit = 24
     public static let expandedRecentEventInitialRenderLimit = 12
     public static let expandedRecentEventLimit = 40
     public static let alertPlaybackRecentEventLimit = 240
-    public static let eventTailReadMaxBytes = 512 * 1024
+    // Alert playback only needs the newest records. Keeping this tail bounded
+    // avoids repeatedly splitting a half-megabyte JSONL buffer on the UI path.
+    public static let eventTailReadMaxBytes = 96 * 1024
+    // The radar only needs recent transitions. Read a bounded tail and reuse it
+    // until the event-flow file changes, rather than decoding full history.
+    public static let statusReplayTailReadMaxBytes = 160 * 1024
 
     public static func renderingScore(
         bellUsesCompositedAnimation: Bool,

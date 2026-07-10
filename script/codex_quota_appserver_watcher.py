@@ -18,8 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from codex_appserver_bridge import codex_bin, send_jsonrpc
-from codex_quota_appserver_probe import read_rate_limits
-from codex_quota_import import atomic_write_json, normalize_appserver_response, now_iso, quota_state_path
+from codex_quota_appserver_probe import preserve_existing_manual_resets, read_rate_limits
+from codex_quota_import import (
+    atomic_write_json,
+    normalize_appserver_response,
+    now_iso,
+    preserve_last_known_good_appserver_quota,
+    quota_state_path,
+)
 
 
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
@@ -130,6 +136,7 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
     mode = "event"
     last_event_at = None
     last_error = None
+    previous_health = load_json(health_path)
     try:
         if args.fixture:
             result = fixture_payload(Path(args.fixture).expanduser())
@@ -142,22 +149,51 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
             else:
                 mode = "poll_fallback"
                 result = read_rate_limits(args.timeout)
-        quota_payload = normalize_appserver_response(result)
+        quota_payload = preserve_existing_manual_resets(normalize_appserver_response(result), output)
+        quota_payload = preserve_last_known_good_appserver_quota(quota_payload, output)
         atomic_write_json(output, quota_payload)
+        fresh = quota_payload.get("fresh") is True
         health = {
             "schema_version": SCHEMA_VERSION,
-            "status": "ok",
+            "status": "ok" if fresh else "degraded",
             "source": "codex_appserver",
             "mode": mode,
             "last_event_at": last_event_at,
             "last_probe_at": now_iso(),
             "quota_status": quota_payload.get("quota_status"),
             "effective_remaining_percent": quota_payload.get("effective_remaining_percent"),
-            "last_error": None,
+            "compatibility_status": quota_payload.get("source_schema_status", "unknown"),
+            "fallback_active": not fresh,
+            "last_success_at": now_iso() if fresh else (previous_health.get("last_success_at") if isinstance(previous_health, dict) else None),
+            "last_error": None if fresh else ",".join(quota_payload.get("warnings") or [])[:240],
             "updated_at": now_iso(),
         }
     except Exception as exc:
         last_error = str(exc)[:240]
+        fallback_payload = preserve_last_known_good_appserver_quota(
+            normalize_appserver_response({}),
+            output,
+            "appserver_probe_error_cached_snapshot",
+        )
+        if fallback_payload.get("source") == "codex_appserver_cached":
+            atomic_write_json(output, fallback_payload)
+            health = {
+                "schema_version": SCHEMA_VERSION,
+                "status": "degraded",
+                "source": "codex_appserver",
+                "mode": mode,
+                "last_event_at": last_event_at,
+                "last_probe_at": now_iso(),
+                "quota_status": fallback_payload.get("quota_status"),
+                "effective_remaining_percent": fallback_payload.get("effective_remaining_percent"),
+                "compatibility_status": "degraded",
+                "fallback_active": True,
+                "last_success_at": previous_health.get("last_success_at") if isinstance(previous_health, dict) else None,
+                "last_error": last_error,
+                "updated_at": now_iso(),
+            }
+            write_health(health_path, health)
+            return health
         health = {
             "schema_version": SCHEMA_VERSION,
             "status": "error",
@@ -167,6 +203,9 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
             "last_probe_at": now_iso(),
             "quota_status": "unknown",
             "effective_remaining_percent": None,
+            "compatibility_status": "error",
+            "fallback_active": False,
+            "last_success_at": previous_health.get("last_success_at") if isinstance(previous_health, dict) else None,
             "last_error": last_error,
             "updated_at": now_iso(),
         }

@@ -77,6 +77,117 @@ OBSERVED_EXCLUDE_SNIPPETS = (
 )
 
 
+# The projector reevaluates TTL-based status once per second, but most source
+# directories are unchanged between ticks. Cache immutable decoded snapshots by
+# directory/file metadata so status freshness stays responsive without decoding
+# thousands of historical task and binding files on every pass.
+_READ_SNAPSHOT_CACHE: dict[str, tuple[tuple[int, int], Any]] = {}
+_LAST_UI_PAYLOAD_SIGNATURE: str | None = None
+_LAST_UI_PAYLOAD_WRITE_AT = 0.0
+UI_STATE_HEARTBEAT_SECONDS = max(1.0, float(os.environ.get("TASKLIGHT_UI_STATE_HEARTBEAT_SECONDS", "4")))
+
+
+def path_fingerprint(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size
+    except OSError:
+        return 0, 0
+
+
+def cached_snapshot(key: str, fingerprint: tuple[int, int]) -> Any | None:
+    entry = _READ_SNAPSHOT_CACHE.get(key)
+    if entry is None or entry[0] != fingerprint:
+        return None
+    return entry[1]
+
+
+def remember_snapshot(key: str, fingerprint: tuple[int, int], value: Any) -> Any:
+    _READ_SNAPSHOT_CACHE[key] = (fingerprint, value)
+    return value
+
+
+def ui_payload_semantic_signature(payload: dict[str, Any]) -> str:
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+    quota = payload.get("quota") if isinstance(payload.get("quota"), dict) else {}
+    tasks = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
+    observations = payload.get("observations") if isinstance(payload.get("observations"), list) else []
+    runtime_candidates = payload.get("runtime_candidates") if isinstance(payload.get("runtime_candidates"), list) else []
+    stable = {
+        "global_status": payload.get("global_status"),
+        "lamp_status": payload.get("lamp_status"),
+        "global_display_title": payload.get("global_display_title"),
+        "counts": payload.get("counts"),
+        "tasks": [
+            {
+                "id": task.get("task_id"),
+                "raw": task.get("raw_status"),
+                "effective": task.get("effective_status"),
+                "scope": task.get("display_scope"),
+                "fresh": task.get("fresh"),
+                "phase": task.get("phase"),
+                "progress": task.get("progress"),
+                "reason": task.get("reason"),
+                "message": task.get("message"),
+                "summary": task.get("summary"),
+            }
+            for task in tasks
+            if isinstance(task, dict)
+        ],
+        "observations": [
+            {
+                "id": record.get("observation_id"),
+                "status": record.get("status"),
+                "scope": record.get("display_scope"),
+                "fresh": record.get("fresh"),
+                "confidence": record.get("confidence"),
+            }
+            for record in observations
+            if isinstance(record, dict)
+        ],
+        "quota": {
+            key: quota.get(key)
+            for key in (
+                "fresh", "status", "effective_remaining_percent", "short_percent", "long_percent",
+                "manual_resets_available", "manual_resets_total_count", "manual_resets_used_count",
+                "manual_resets_expired_count", "manual_resets_next_expiry", "display_windows",
+            )
+        },
+        "diagnostics": {
+            key: diagnostics.get(key)
+            for key in (
+                "writer_status", "hook_bridge_status", "signal_bus_status", "quota_status",
+                "quota_probe_status", "quota_probe_mode", "projector_reason", "fallback_reason",
+                "current_thread_signal_status", "current_thread_fusion_decision", "runtime_candidate_count",
+            )
+        },
+        "runtime_candidates": [
+            {
+                "id": candidate.get("candidate_id"),
+                "scope": candidate.get("display_scope"),
+                "cause": candidate.get("state_cause"),
+                "why_active": candidate.get("why_active"),
+                "why_ignored": candidate.get("why_ignored"),
+            }
+            for candidate in runtime_candidates
+            if isinstance(candidate, dict)
+        ],
+    }
+    return json.dumps(stable, ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def write_ui_state_if_needed(path: Path, payload: dict[str, Any]) -> bool:
+    global _LAST_UI_PAYLOAD_SIGNATURE, _LAST_UI_PAYLOAD_WRITE_AT
+    signature = ui_payload_semantic_signature(payload)
+    now = time.monotonic()
+    if signature == _LAST_UI_PAYLOAD_SIGNATURE and now - _LAST_UI_PAYLOAD_WRITE_AT < UI_STATE_HEARTBEAT_SECONDS:
+        return False
+    atomic_write_json(path, payload)
+    _LAST_UI_PAYLOAD_SIGNATURE = signature
+    _LAST_UI_PAYLOAD_WRITE_AT = now
+    return True
+
+
 def load_params_file(name: str) -> dict[str, Any]:
     path = PROJECT_ROOT / "design" / "state-projector" / "params" / name
     payload = load_json(path, {})
@@ -204,6 +315,20 @@ def output_path(root: Path) -> Path:
     return Path(os.environ.get("TASKLIGHT_UI_STATE_PATH", str(root / "ui_state.json"))).expanduser()
 
 
+def ui_task_limit() -> int:
+    try:
+        return max(20, int(os.environ.get("TASKLIGHT_UI_TASK_LIMIT", "180")))
+    except ValueError:
+        return 180
+
+
+def task_scan_limit() -> int:
+    try:
+        return max(100, int(os.environ.get("TASKLIGHT_PROJECTOR_TASK_SCAN_LIMIT", "600")))
+    except ValueError:
+        return 600
+
+
 def health_path(root: Path) -> Path:
     return Path(os.environ.get("TASKLIGHT_STATE_PROJECTOR_HEALTH_PATH", str(root / "state_projector_health.json"))).expanduser()
 
@@ -295,6 +420,11 @@ def load_signal_bus(root: Path, max_records: int) -> tuple[list[dict[str, Any]],
     path = normalized_signals_path(root)
     if not path.exists():
         return [], "missing"
+    cache_key = f"signal_bus:{path}:{max_records}"
+    fingerprint = path_fingerprint(path)
+    cached = cached_snapshot(cache_key, fingerprint)
+    if cached is not None:
+        return cached
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -315,7 +445,7 @@ def load_signal_bus(root: Path, max_records: int) -> tuple[list[dict[str, Any]],
         if signal_ts is not None and signal_ts < cutoff:
             continue
         signals.append(signal)
-    return signals, "readable"
+    return remember_snapshot(cache_key, fingerprint, (signals, "readable"))
 
 
 def load_tasks(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -324,7 +454,20 @@ def load_tasks(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     invalid: list[dict[str, Any]] = []
     if not tasks_dir.exists():
         return valid, invalid
-    for path in sorted(tasks_dir.glob("*.json")):
+    cache_key = f"tasks:{tasks_dir}:{task_scan_limit()}"
+    fingerprint = path_fingerprint(tasks_dir)
+    cached = cached_snapshot(cache_key, fingerprint)
+    if cached is not None:
+        return cached
+    def task_file_mtime(item: Path) -> float:
+        try:
+            return item.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    candidates = list(tasks_dir.glob("*.json"))
+    candidates.sort(key=task_file_mtime, reverse=True)
+    for path in candidates[:task_scan_limit()]:
         payload = load_json(path, None)
         if isinstance(payload, dict) and payload.get("task_id"):
             payload = dict(payload)
@@ -342,7 +485,7 @@ def load_tasks(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                     "state_cause": "task_json:invalid_json",
                 }
             )
-    return valid, invalid
+    return remember_snapshot(cache_key, fingerprint, (valid, invalid))
 
 
 def load_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
@@ -353,6 +496,11 @@ def load_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, dict
     all_bindings: list[dict[str, Any]] = []
     if not bindings_dir.exists():
         return by_task, by_turn, by_identity, all_bindings
+    cache_key = f"bindings:{bindings_dir}"
+    fingerprint = path_fingerprint(bindings_dir)
+    cached = cached_snapshot(cache_key, fingerprint)
+    if cached is not None:
+        return cached
     for path in sorted(bindings_dir.glob("*.json")):
         payload = load_json(path, {})
         if not isinstance(payload, dict):
@@ -374,7 +522,7 @@ def load_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, dict
         for alias in aliases:
             if alias:
                 by_identity[str(alias)] = payload
-    return by_task, by_turn, by_identity, all_bindings
+    return remember_snapshot(cache_key, fingerprint, (by_task, by_turn, by_identity, all_bindings))
 
 
 def load_thread_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
@@ -384,6 +532,11 @@ def load_thread_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[st
     all_bindings: list[dict[str, Any]] = []
     if not bindings_dir.exists():
         return by_task, by_thread, all_bindings
+    cache_key = f"thread_bindings:{bindings_dir}"
+    fingerprint = path_fingerprint(bindings_dir)
+    cached = cached_snapshot(cache_key, fingerprint)
+    if cached is not None:
+        return cached
     for path in sorted(bindings_dir.glob("*.json")):
         payload = load_json(path, {})
         if not isinstance(payload, dict):
@@ -397,7 +550,7 @@ def load_thread_bindings(root: Path) -> tuple[dict[str, dict[str, Any]], dict[st
             by_task[str(task_id)] = payload
         if thread_id:
             by_thread[str(thread_id)] = payload
-    return by_task, by_thread, all_bindings
+    return remember_snapshot(cache_key, fingerprint, (by_task, by_thread, all_bindings))
 
 
 def load_observation_catalog(root: Path) -> list[dict[str, Any]]:
@@ -413,13 +566,18 @@ def load_ui_clients(root: Path) -> list[dict[str, Any]]:
     clients: list[dict[str, Any]] = []
     if not clients_dir.exists():
         return clients
+    cache_key = f"ui_clients:{clients_dir}"
+    fingerprint = path_fingerprint(clients_dir)
+    cached = cached_snapshot(cache_key, fingerprint)
+    if cached is not None:
+        return cached
     for path in sorted(clients_dir.glob("*.json")):
         payload = load_json(path, {})
         if isinstance(payload, dict):
             payload = dict(payload)
             payload["file_path"] = str(path)
             clients.append(payload)
-    return clients
+    return remember_snapshot(cache_key, fingerprint, clients)
 
 
 def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
@@ -433,9 +591,10 @@ def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
     payload: dict[str, Any]
     try:
         from codex_quota_appserver_probe import read_rate_limits
-        from codex_quota_import import normalize_appserver_response
+        from codex_quota_import import normalize_appserver_response, preserve_last_known_good_appserver_quota
 
         quota_payload = normalize_appserver_response(read_rate_limits(quota_autoprobe_timeout_seconds()))
+        quota_payload = preserve_last_known_good_appserver_quota(quota_payload, quota_state_path(root))
         atomic_write_json(quota_state_path(root), quota_payload)
         payload = {
             "schema_version": SCHEMA_VERSION,
@@ -514,7 +673,7 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
         return None, diagnostics
     captured_at = payload.get("captured_at")
     age = age_seconds(captured_at, now_ts)
-    stale = age is None or age > quota_max_age_seconds()
+    stale = payload.get("fresh") is not True or age is None or age > quota_max_age_seconds()
     warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
     raw_windows = payload.get("raw_windows") if isinstance(payload.get("raw_windows"), list) else []
     legacy_windows = payload.get("windows") if isinstance(payload.get("windows"), list) else []
@@ -524,6 +683,7 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
     short = valid_windows[0] if valid_windows else {}
     long = valid_windows[-1] if len(valid_windows) > 1 else {}
     resets = payload.get("manual_resets") if isinstance(payload.get("manual_resets"), dict) else {}
+    reset_credits = resets.get("credits") if isinstance(resets.get("credits"), list) else []
     status = "unknown" if stale else str(payload.get("quota_status") or "unknown")
     if stale:
         maybe_autoprobe_quota(root, now_ts)
@@ -551,6 +711,7 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
             "remaining_percent": None if stale else window.get("remaining_percent"),
             "used_percent": window.get("used_percent"),
             "reset_label": window.get("reset_label"),
+            "reset_at": window.get("reset_at"),
             "window_duration_mins": window.get("window_duration_mins"),
             "health": "unknown" if stale else window.get("health"),
             "selection_reason": window.get("selection_reason"),
@@ -577,6 +738,24 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
         "long_reset_label": long.get("reset_label"),
         "long_bucket_id": long.get("bucket_id"),
         "manual_resets_available": None if stale else resets.get("available_count"),
+        "manual_resets_total_count": None if stale else resets.get("total_count"),
+        "manual_resets_used_count": None if stale else resets.get("used_count"),
+        "manual_resets_expired_count": None if stale else resets.get("expired_count"),
+        "manual_resets_next_expiry": None if stale else resets.get("next_expiry"),
+        "manual_reset_credits": [] if stale else [
+            {
+                "id": credit.get("id"),
+                "status": credit.get("status"),
+                "issued_at": credit.get("issued_at"),
+                "issued_date": credit.get("issued_date"),
+                "expires_at": credit.get("expires_at"),
+                "expiry_date": credit.get("expiry_date"),
+                "redeemed": credit.get("redeemed"),
+                "reset_type": credit.get("reset_type"),
+            }
+            for credit in reset_credits
+            if isinstance(credit, dict)
+        ],
         "captured_at": captured_at,
         "recommendation": payload.get("recommendation"),
     }
@@ -1864,6 +2043,10 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         ),
         reverse=False,
     )
+    total_projected_task_count = len(projected_tasks)
+    task_limit = ui_task_limit()
+    ui_projected_tasks = projected_tasks[:task_limit]
+    ui_tasks_truncated = total_projected_task_count > len(ui_projected_tasks)
 
     signal_ages = [
         age_seconds(signal.get("occurred_at"), now_ts)
@@ -1887,7 +2070,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         "global_display_title": display_title,
         "state_confidence": round(confidence, 2),
         "counts": counts,
-        "tasks": projected_tasks,
+        "tasks": ui_projected_tasks,
         "observations": observations,
         "runtime_candidates": runtime_candidates,
         "quota": quota,
@@ -1942,12 +2125,16 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
             "build_id": (client or {}).get("build_id"),
             "projector_reason": reasons,
             "observed_false_positive_count": observed_false_positive_count,
+            "projected_task_count": total_projected_task_count,
+            "ui_task_count": len(ui_projected_tasks),
+            "ui_tasks_truncated": ui_tasks_truncated,
+            "ui_task_limit": task_limit,
             "active_thread_bindings": sum(1 for binding in thread_bindings if binding.get("status") == "active"),
             "binding_identity_count": len(by_identity),
             **quota_diagnostics,
         },
     }
-    atomic_write_json(output_path(root), payload)
+    write_ui_state_if_needed(output_path(root), payload)
     return payload
 
 

@@ -172,6 +172,7 @@ do {
 	                    bucket_id: "manual",
 	                    remaining_percent: 93,
 	                    reset_label: "11:44",
+	                    reset_at: "2026-06-18T11:44:00+08:00",
 	                    window_duration_mins: 300,
 	                    health: "ok",
 	                    selection_reason: "selected_manual_or_unknown_bucket_from_1_candidate"
@@ -182,6 +183,7 @@ do {
 	                    bucket_id: "manual",
 	                    remaining_percent: 42,
 	                    reset_label: "6月18日",
+	                    reset_at: "2026-06-18T00:00:00+08:00",
 	                    window_duration_mins: 10080,
 	                    health: "watch",
 	                    selection_reason: "selected_manual_or_unknown_bucket_from_1_candidate"
@@ -201,6 +203,15 @@ do {
 	            long_reset_label: "6月18日",
 	            long_bucket_id: "manual",
 	            manual_resets_available: 1,
+	            manual_resets_total_count: 3,
+	            manual_resets_used_count: 0,
+	            manual_resets_expired_count: 0,
+	            manual_resets_next_expiry: "2026-07-18",
+	            manual_reset_credits: [
+	                CodexQuotaResetCreditUIState(id: "reset_credit_1", status: "available", issued_at: "2026-06-18T08:28:29+08:00", issued_date: "2026-06-18", expires_at: "2026-07-18T08:28:29+08:00", expiry_date: "2026-07-18", redeemed: false),
+	                CodexQuotaResetCreditUIState(id: "reset_credit_2", status: "available", issued_at: "2026-06-27T07:12:43+08:00", issued_date: "2026-06-26", expires_at: "2026-07-27T07:12:43+08:00", expiry_date: "2026-07-26", redeemed: false),
+	                CodexQuotaResetCreditUIState(id: "reset_credit_3", status: "available", issued_at: "2026-07-02T03:46:38+08:00", issued_date: "2026-07-01", expires_at: "2026-08-01T03:46:38+08:00", expiry_date: "2026-07-31", redeemed: false)
+	            ],
 	            captured_at: uiNow,
 	            recommendation: "watch_usage"
 	        ),
@@ -277,7 +288,12 @@ do {
 	    check(loadedUIState.quota?.short_percent == 93, "ui_state quota short percent decodes")
 	    check(loadedUIState.quota?.long_percent == 42, "ui_state quota long percent decodes")
 	    check(loadedUIState.quota?.manual_resets_available == 1, "ui_state quota reset count decodes")
+	    check(loadedUIState.quota?.manual_resets_total_count == 3, "ui_state quota reset total decodes")
+	    check(loadedUIState.quota?.manual_resets_next_expiry == "2026-07-18", "ui_state quota reset next expiry decodes")
+	    check(loadedUIState.quota?.manual_reset_credits?.count == 3, "ui_state quota reset credits decode")
+	    check(loadedUIState.quota?.manual_reset_credits?.first?.expires_at == "2026-07-18T08:28:29+08:00", "ui_state quota reset precise expiry decodes")
 	    check(loadedUIState.quota?.display_windows?.count == 2, "ui_state quota display windows decode")
+	    check(loadedUIState.quota?.display_windows?.first?.reset_at == "2026-06-18T11:44:00+08:00", "ui_state quota reset_at decodes")
 	    check(loadedUIState.quota?.raw_window_count == 2, "ui_state quota raw window count decodes")
 	    check(loadedUIState.quota?.bucket_id == "manual", "ui_state quota bucket id decodes")
 	    check(loadedUIState.diagnostics.quota_status == "watch", "ui_state diagnostics decode quota status")
@@ -296,6 +312,27 @@ do {
 	    check(loadedUIState.diagnostics.binding_identity_count == 3, "ui_state diagnostics decode binding identity count")
 	    check(loadedUIState.diagnostics.runtime_candidate_count == 1, "ui_state diagnostics decode runtime candidate count")
 	    check(loadedUIState.diagnostics.top_runtime_candidates?.first?.why_ignored == "runtime_score_below_threshold", "ui_state diagnostics decode runtime ignored reason")
+
+        var appServerQuotaUIState = loadedUIState
+        appServerQuotaUIState.quota?.source = "codex_appserver"
+        appServerQuotaUIState.quota?.captured_age_sec = 3
+        let providerSnapshot = CodexUsageProviderAdapter().snapshot(from: appServerQuotaUIState)
+        check(providerSnapshot.source_label == "ChatGPT Work local app-server", "provider exposes local ChatGPT Work source")
+        check(providerSnapshot.freshness_label == "fresh 3s", "provider exposes quota freshness")
+        check(providerSnapshot.conflict_label == nil, "provider has no synthetic source conflict")
+        var cachedProviderUIState = appServerQuotaUIState
+        cachedProviderUIState.quota?.source = "codex_appserver_cached"
+        cachedProviderUIState.quota?.fresh = false
+        cachedProviderUIState.quota?.warnings = ["appserver_schema_changed"]
+        let cachedProviderSnapshot = CodexUsageProviderAdapter().snapshot(from: cachedProviderUIState)
+        check(cachedProviderSnapshot.source_label == "Last valid ChatGPT Work snapshot", "provider labels cached app-server data")
+        check(cachedProviderSnapshot.freshness_label == "stale", "provider marks cached app-server data stale")
+        check(cachedProviderSnapshot.conflict_label == "Source changed; using the last valid local snapshot", "provider exposes schema defense")
+        let legacyProviderJSON = """
+        {"id":"codex","display_name":"Codex","health":"ok","quota_text":"⚡42·93","remaining_percent":42,"is_low_quota":false,"updated_at":"2026-07-10T00:00:00Z","diagnostic_only":true}
+        """
+        let legacyProvider = try JSONDecoder().decode(UsageProviderSnapshot.self, from: Data(legacyProviderJSON.utf8))
+        check(legacyProvider.source_label == nil && legacyProvider.freshness_label == nil, "legacy provider snapshots remain decodable")
 
     var mismatchedTitleUIState = projectedUIState
     mismatchedTitleUIState.global_status = "running"
@@ -325,13 +362,25 @@ do {
       "effective_remaining_percent": 41,
       "captured_at": "\(uiNow)",
       "recommendation": "watch_usage",
-      "manual_resets": { "available_count": null },
+      "manual_resets": {
+        "available_count": 3,
+        "total_count": 3,
+        "used_count": 0,
+        "expired_count": 0,
+        "next_expiry": "2026-07-18",
+        "credits": [
+          { "id": "reset_credit_1", "status": "available", "issued_date": "2026-06-18", "expiry_date": "2026-07-18", "redeemed": false },
+          { "id": "reset_credit_2", "status": "available", "issued_date": "2026-06-26", "expiry_date": "2026-07-26", "redeemed": false },
+          { "id": "reset_credit_3", "status": "available", "issued_date": "2026-07-01", "expiry_date": "2026-07-31", "redeemed": false }
+        ]
+      },
       "raw_windows": [
         {
           "bucket_id": "codex_bengalfox",
           "label": "5小时",
           "remaining_percent": 97,
           "reset_label": "15:18",
+          "reset_at": "2026-06-18T15:18:00+08:00",
           "window_duration_mins": 300,
           "selection_reason": "raw_model_specific_codex_bucket"
         },
@@ -340,6 +389,7 @@ do {
           "label": "5小时",
           "remaining_percent": 98,
           "reset_label": "16:45",
+          "reset_at": "2026-06-18T16:45:00+08:00",
           "window_duration_mins": 300,
           "selection_reason": "raw_account_codex_bucket"
         },
@@ -348,6 +398,7 @@ do {
           "label": "1周",
           "remaining_percent": 43,
           "reset_label": "6月18日",
+          "reset_at": "2026-06-18T00:00:00+08:00",
           "window_duration_mins": 10080,
           "selection_reason": "raw_model_specific_codex_bucket"
         },
@@ -356,6 +407,7 @@ do {
           "label": "1周",
           "remaining_percent": 40,
           "reset_label": "6月18日",
+          "reset_at": "2026-06-18T00:00:00+08:00",
           "window_duration_mins": 10080,
           "selection_reason": "raw_account_codex_bucket"
         }
@@ -367,6 +419,7 @@ do {
           "label": "5小时",
           "remaining_percent": 98,
           "reset_label": "16:45",
+          "reset_at": "2026-06-18T16:45:00+08:00",
           "window_duration_mins": 300,
           "selection_reason": "selected_account_codex_bucket_from_2_candidates"
         },
@@ -376,6 +429,7 @@ do {
           "label": "1周",
           "remaining_percent": 40,
           "reset_label": "6月18日",
+          "reset_at": "2026-06-18T00:00:00+08:00",
           "window_duration_mins": 10080,
           "selection_reason": "selected_account_codex_bucket_from_2_candidates"
         }
@@ -386,6 +440,7 @@ do {
           "label": "5小时",
           "remaining_percent": 97,
           "reset_label": "15:18",
+          "reset_at": "2026-06-18T15:18:00+08:00",
           "window_duration_mins": 300
         },
         {
@@ -393,6 +448,7 @@ do {
           "label": "5小时",
           "remaining_percent": 98,
           "reset_label": "16:45",
+          "reset_at": "2026-06-18T16:45:00+08:00",
           "window_duration_mins": 300
         },
         {
@@ -400,6 +456,7 @@ do {
           "label": "1周",
           "remaining_percent": 43,
           "reset_label": "6月18日",
+          "reset_at": "2026-06-18T00:00:00+08:00",
           "window_duration_mins": 10080
         },
         {
@@ -407,6 +464,7 @@ do {
           "label": "1周",
           "remaining_percent": 40,
           "reset_label": "6月18日",
+          "reset_at": "2026-06-18T00:00:00+08:00",
           "window_duration_mins": 10080
         }
       ]
@@ -420,6 +478,10 @@ do {
     check(quotaFallbackUIState.quota?.short_percent == 98, "fallback ui_state prefers account-level short quota bucket")
     check(quotaFallbackUIState.quota?.long_percent == 40, "fallback ui_state prefers account-level long quota bucket")
     check(quotaFallbackUIState.quota?.raw_window_count == 4, "fallback ui_state records raw quota window count")
+    check(quotaFallbackUIState.quota?.display_windows?.first?.reset_at == "2026-06-18T16:45:00+08:00", "fallback ui_state exposes quota reset_at")
+    check(quotaFallbackUIState.quota?.manual_resets_available == 3, "fallback ui_state exposes reset credit available count")
+    check(quotaFallbackUIState.quota?.manual_resets_next_expiry == "2026-07-18", "fallback ui_state exposes reset credit next expiry")
+    check(quotaFallbackUIState.quota?.manual_reset_credits?.count == 3, "fallback ui_state exposes sanitized reset credits")
     check(quotaFallbackUIState.quota?.short_bucket_id == "codex", "fallback ui_state exposes short quota bucket")
     check(quotaFallbackUIState.diagnostics.quota_status == "watch", "fallback diagnostics records quota status")
 
@@ -654,6 +716,25 @@ do {
     let combined = store.loadFallbackDashboard()
     check(combined.observations_state?.counts.active == 1, "observations state merges into dashboard")
     check(combined.observations_state?.observations.first?.observation_id == observation.observation_id, "observation record decodes")
+
+    let replayTime = TaskLightTaskRecord.nowString()
+    store.appendUIEventFlowRecord([
+        "recorded_at": replayTime,
+        "previous_global_status": "idle",
+        "global_status": "running",
+        "lamp_status": "running",
+        "counts": ["running": 1, "pending_verify_count": 0, "blocked": 0, "observed_active": 0],
+        "projector_reason": ["active_execution"],
+        "writer_status": "ok",
+        "hook_bridge_status": "ok",
+        "current_thread_signal_status": "running",
+        "current_thread_fusion_decision": "refresh_managed_heartbeat"
+    ])
+    let replaySince = Date().addingTimeInterval(-60)
+    let firstReplayRead = store.loadStatusReplayRecords(since: replaySince, limit: 8)
+    let secondReplayRead = store.loadStatusReplayRecords(since: replaySince, limit: 8)
+    check(firstReplayRead.contains(where: { $0.to_status == "running" }), "status replay reads recent bounded event tail")
+    check(firstReplayRead == secondReplayRead, "status replay reuses unchanged event-flow cache")
 
     var ledger = TaskLightPlayedEventsLedger()
     let event = TaskLightEventRecord(

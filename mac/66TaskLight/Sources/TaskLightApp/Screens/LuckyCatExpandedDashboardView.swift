@@ -1013,29 +1013,69 @@ private enum LuckyCatExpandedDashboardCacheBuilder {
         let invalidLimit = TaskLightUIPerformanceBudget.expandedInvalidTaskRenderLimit
         let observedLimit = TaskLightUIPerformanceBudget.expandedObservedThreadRenderLimit
 
-        let sortedManaged = state.tasks
-            .sorted(by: taskSort)
-            .prefix(managedLimit)
-            .map { $0.asTaskSummary() }
-
-        let invalidTasks = state.tasks
-            .filter { $0.display_scope == "invalid" }
-            .map { $0.asTaskSummary() }
-            .sorted { lhs, rhs in (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id) }
-
-        let visibleObserved = state.observations
-            .filter { ["active_execution", "observed_active_high_confidence", "observed_only"].contains($0.display_scope) }
-            .map { $0.asObservationRecord() }
+        let sortedManaged = topManagedTasks(state.tasks, limit: managedLimit)
+        let invalidPayload = visibleInvalidTasks(state.tasks, limit: invalidLimit)
+        let observedPayload = visibleObservedThreads(state.observations, limit: observedLimit)
 
         return LuckyCatExpandedDashboardCachePayload(
-            managedTasks: Array(sortedManaged),
-            invalidTasks: Array(invalidTasks.prefix(invalidLimit)),
-            observedThreads: Array(visibleObserved.prefix(observedLimit)),
+            managedTasks: sortedManaged,
+            invalidTasks: invalidPayload.records,
+            observedThreads: observedPayload.records,
             events: events,
             managedTaskTotal: state.tasks.count,
-            invalidTaskTotal: invalidTasks.count,
-            observedThreadTotal: visibleObserved.count
+            invalidTaskTotal: invalidPayload.total,
+            observedThreadTotal: observedPayload.total
         )
+    }
+
+    private static func topManagedTasks(_ tasks: [TaskLightUITask], limit: Int) -> [TaskLightTaskSummary] {
+        let candidateCap = max(limit * 5, limit)
+        var candidates: [TaskLightUITask] = []
+        candidates.reserveCapacity(min(tasks.count, candidateCap))
+        for task in tasks {
+            let rank = taskSortRank(task.display_scope)
+            if rank <= 5 || candidates.count < candidateCap {
+                candidates.append(task)
+            }
+        }
+        return candidates
+            .sorted(by: taskSort)
+            .prefix(limit)
+            .map { $0.asTaskSummary() }
+    }
+
+    private static func visibleInvalidTasks(_ tasks: [TaskLightUITask], limit: Int) -> (records: [TaskLightTaskSummary], total: Int) {
+        let candidateCap = max(limit * 4, limit)
+        var total = 0
+        var records: [TaskLightTaskSummary] = []
+        records.reserveCapacity(limit)
+        for task in tasks where task.display_scope == "invalid" {
+            total += 1
+            if records.count < candidateCap {
+                records.append(task.asTaskSummary())
+            }
+        }
+        let visible = records
+            .sorted { lhs, rhs in (lhs.title, lhs.task_id) < (rhs.title, rhs.task_id) }
+            .prefix(limit)
+        return (Array(visible), total)
+    }
+
+    private static func visibleObservedThreads(
+        _ observations: [TaskLightUIObservation],
+        limit: Int
+    ) -> (records: [TaskLightObservationRecord], total: Int) {
+        let visibleScopes: Set<String> = ["active_execution", "observed_active_high_confidence", "observed_only"]
+        var total = 0
+        var records: [TaskLightObservationRecord] = []
+        records.reserveCapacity(limit)
+        for observation in observations where visibleScopes.contains(observation.display_scope) {
+            total += 1
+            if records.count < limit {
+                records.append(observation.asObservationRecord())
+            }
+        }
+        return (records, total)
     }
 
     private static func taskSort(_ lhs: TaskLightUITask, _ rhs: TaskLightUITask) -> Bool {

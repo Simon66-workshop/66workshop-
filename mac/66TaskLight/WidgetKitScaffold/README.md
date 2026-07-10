@@ -6,14 +6,15 @@ extension target. The shipped runtime exports a sanitized `widget_snapshot.json`
 and also writes the same payload into the App Group shared container when the app
 is signed with `66TaskLightApp.entitlements`.
 
-Desktop-ready integration still needs an Xcode app wrapper that embeds
-`66TaskLightWidget.swift` as a WidgetKit extension and signs both app and widget
-with the same App Group:
+Desktop-ready integration is scaffolded through `../project.yml`, an XcodeGen
+spec that creates a main app target and embeds `66TaskLightWidget.swift` as a
+WidgetKit extension. Both app and widget must be signed with the same App Group:
 
 - Main app: `66TaskLightApp.entitlements`
 - Widget extension: `66TaskLightWidgetExtension.entitlements`
 - Shared group: `group.com.66tasklight.widget`
 - Snapshot file: `widget_snapshot.json`
+- Xcode wrapper app Info.plist: `../XcodeWrapper/AppInfo.plist`
 
 Implementation status:
 
@@ -21,9 +22,16 @@ Implementation status:
 - Done: App Group shared-container read/write bridge.
 - Done: WidgetKit `TimelineProvider`, `WidgetBundle`, small layout, medium layout.
 - Done: local app bundle ad-hoc signing includes `66TaskLightApp.entitlements`.
-- Remaining: create an Xcode app wrapper that embeds the widget extension target.
+- Done: XcodeGen wrapper spec for app + embedded WidgetKit extension.
 - Remaining: configure a real Team ID / provisioning profile for App Group signing.
 - Remaining: install the signed app and add the widget from macOS Desktop widgets.
+
+Generate the Xcode project when XcodeGen is available:
+
+```bash
+cd mac/66TaskLight
+xcodegen generate
+```
 
 Desktop acceptance gates:
 

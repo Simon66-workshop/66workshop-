@@ -9,6 +9,7 @@ LOG_DIR="${TASKLIGHT_QUOTA_WATCH_LOG_DIR:-$STATE_DIR/logs}"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
 POLL_SECONDS="${TASKLIGHT_QUOTA_WATCH_POLL_SECONDS:-30}"
 EVENT_TIMEOUT="${TASKLIGHT_QUOTA_WATCH_EVENT_TIMEOUT_SECONDS:-1.5}"
+CODEX_BIN="${TASKLIGHT_CODEX_BIN:-${CODEX_BIN:-}}"
 DRY_RUN=0
 
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -16,6 +17,19 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 mkdir -p "$(dirname "$PLIST_PATH")" "$LOG_DIR" "$STATE_DIR"
+
+if [[ -z "$CODEX_BIN" ]]; then
+  for candidate in \
+    "/Applications/ChatGPT.app/Contents/Resources/codex" \
+    "/Applications/Codex.app/Contents/Resources/codex" \
+    "$(command -v codex 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      CODEX_BIN="$candidate"
+      break
+    fi
+  done
+fi
 
 cat >"$PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,6 +54,8 @@ cat >"$PLIST_PATH" <<PLIST
   <dict>
     <key>TASKLIGHT_STATE_DIR</key>
     <string>${STATE_DIR}</string>
+    <key>CODEX_BIN</key>
+    <string>${CODEX_BIN}</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

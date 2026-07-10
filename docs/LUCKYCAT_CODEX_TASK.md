@@ -113,6 +113,14 @@ After implementation, run:
 ./script/build_and_run.sh --verify
 ```
 
+Normal `build_and_run.sh` runs from a temporary runtime bundle and does not
+refresh the Desktop app copy. Use this explicit mode only when the Desktop
+shortcut itself must be replaced:
+
+```bash
+./script/build_and_run.sh install-desktop
+```
+
 ## Acceptance
 
 1. App launches and compact panel shows LuckyCat UI.

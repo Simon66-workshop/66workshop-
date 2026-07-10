@@ -326,6 +326,10 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             || expandedPanel?.isVisible == true
     }
 
+    var expandedPanelVisibleForMenu: Bool {
+        viewModel.expanded || expandedPanel?.isVisible == true
+    }
+
     private func panelIsInteractivelyVisible(_ panel: TaskLightPanel?) -> Bool {
         guard let panel else { return false }
         return panel.isVisible && panel.alphaValue > 0.05 && !panel.ignoresMouseEvents
@@ -599,22 +603,32 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         let startedAt = CACurrentMediaTime()
         openExpandedFromMenuBar()
         let openApplyMs = (CACurrentMediaTime() - startedAt) * 1000
+        var mainQueueProbeDelayMs: Double = -1
+        let probeDelay: TimeInterval = 0.24
+        let probeScheduledAt = CACurrentMediaTime()
+        DispatchQueue.main.asyncAfter(deadline: .now() + probeDelay) {
+            mainQueueProbeDelayMs = ((CACurrentMediaTime() - probeScheduledAt) - probeDelay) * 1000
+        }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.46) { [weak self] in
             guard let self else { return }
             let visibleApplyMs = (CACurrentMediaTime() - startedAt) * 1000
             let panel = self.expandedPanel
             let visible = self.panelIsInteractivelyVisible(panel)
-            let status = visible && self.viewModel.expanded && self.viewModel.contentExpanded ? "ok" : "fail"
+            let mainQueueResponsive = mainQueueProbeDelayMs >= 0 && mainQueueProbeDelayMs <= 160
+            let status = visible && self.viewModel.expanded && self.viewModel.contentExpanded && mainQueueResponsive ? "ok" : "fail"
             completion([
                 "status": status,
-                "reason": status == "ok" ? "expanded_panel_visible" : "expanded_panel_not_visible",
+                "reason": status == "ok" ? "expanded_panel_visible_and_responsive" : "expanded_panel_not_visible_or_responsive",
                 "open_apply_ms": openApplyMs,
                 "expanded": self.viewModel.expanded,
                 "content_expanded": self.viewModel.contentExpanded,
                 "visible": visible,
                 "managed_task_count": self.viewModel.managedCount(),
+                "main_queue_probe_delay_ms": mainQueueProbeDelayMs,
+                "main_queue_responsive": mainQueueResponsive,
                 "visible_apply_ms": visibleApplyMs,
+                "post_cache_apply_ms": visibleApplyMs,
                 "frame": self.framePayload(panel?.frame)
             ])
         }
