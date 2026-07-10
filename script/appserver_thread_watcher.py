@@ -124,9 +124,9 @@ def should_emit(signal: dict[str, Any], previous: dict[str, Any] | None, *, now_
         return True
     if prev_ts is None or curr_ts is None:
         return True
-    if curr_ts > prev_ts:
+    if is_active_like_signal(signal) and curr_ts > prev_ts:
         return True
-    if now_ts - prev_ts >= coalesce_seconds():
+    if is_active_like_signal(signal) and now_ts - prev_ts >= coalesce_seconds():
         return True
     return False
 

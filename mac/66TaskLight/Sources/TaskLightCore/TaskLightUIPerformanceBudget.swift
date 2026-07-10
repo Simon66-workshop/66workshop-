@@ -1,6 +1,14 @@
 import Foundation
 
 public enum TaskLightUIPerformanceBudget {
+    public static let projectorFreshnessMaxSeconds: Double = 5
+    public static let duplicateSignalRateMax: Double = 0.01
+    public static let menuOpenMaxMilliseconds: Double = 450
+    public static let radarOpenMaxMilliseconds: Double = 180
+    public static let expandedApplyMaxMilliseconds: Double = 650
+    public static let eventLogMaxBytes = 2 * 1024 * 1024
+    public static let uiEventFlowLogMaxBytes = 4 * 1024 * 1024
+    public static let retainedLogArchiveCount = 3
     public static let compactBellSwingDurationSeconds: Double = 1.8
     public static let expandedScrollUsesOptimizedCards = true
     public static let expandedScrollDisablesCardPulseAnimations = true

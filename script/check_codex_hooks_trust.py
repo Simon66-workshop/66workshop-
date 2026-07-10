@@ -250,7 +250,9 @@ def summarize(payload: dict[str, Any]) -> tuple[str, str, str]:
         return "unknown_manual_required", "untrusted_or_not_loaded", "open Codex UI and trust project hooks"
     if appserver == "not_loaded":
         return "likely_not_loaded", "untrusted_or_not_loaded", "reload Codex project thread, then trust project hooks if prompted"
-    return "unknown_manual_required", "trusted_possible", "open Codex UI and trust project hooks if prompted"
+    if appserver in {"unavailable", "skipped"}:
+        return "probe_unavailable", "probe_unavailable", "retry the local app-server probe later"
+    return "unknown_manual_required", "trusted_possible", "inspect the loaded hook status when the local probe is available"
 
 
 def classify_visibility(payload: dict[str, Any]) -> tuple[str, str]:
@@ -266,6 +268,8 @@ def classify_visibility(payload: dict[str, Any]) -> tuple[str, str]:
         return "hidden_not_loaded", "hooks 文件已存在，但 Codex UI 还没把这个 workspace 加载进来"
     if appserver == "loaded_unknown":
         return "visible_unknown", "Codex UI 已加载这个 workspace，但 hooks 信任状态不明确"
+    if appserver in {"unavailable", "skipped"}:
+        return "probe_unavailable", "本地 app-server 探针当前不可用，保留现有 Trust 状态，不要求重新 Trust"
     return "unknown", "当前只能确认 hooks 文件存在，无法确认 Codex UI 是否已加载"
 
 

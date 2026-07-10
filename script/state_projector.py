@@ -15,13 +15,14 @@ import os
 import sys
 import tempfile
 import time
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
 SCHEMA_VERSION = "0.1"
-PROJECTOR_VERSION = "M3.7"
+PROJECTOR_VERSION = "M3.8"
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROJECTOR_INSTANCE_ID = f"{int(time.time())}-{os.getpid()}"
@@ -84,6 +85,8 @@ OBSERVED_EXCLUDE_SNIPPETS = (
 _READ_SNAPSHOT_CACHE: dict[str, tuple[tuple[int, int], Any]] = {}
 _LAST_UI_PAYLOAD_SIGNATURE: str | None = None
 _LAST_UI_PAYLOAD_WRITE_AT = 0.0
+_LAST_HISTORY_REFRESH_AT = 0.0
+_LAST_PROVIDER_REFRESH_AT = 0.0
 UI_STATE_HEARTBEAT_SECONDS = max(1.0, float(os.environ.get("TASKLIGHT_UI_STATE_HEARTBEAT_SECONDS", "4")))
 
 
@@ -188,6 +191,35 @@ def write_ui_state_if_needed(path: Path, payload: dict[str, Any]) -> bool:
     return True
 
 
+def refresh_observability_if_due(root: Path) -> dict[str, Any]:
+    global _LAST_HISTORY_REFRESH_AT
+    now = time.monotonic()
+    if now - _LAST_HISTORY_REFRESH_AT >= 15:
+        try:
+            from tasklight_history_index import refresh_history_index
+
+            refresh_history_index(root)
+        except (OSError, sqlite3.Error, ValueError):
+            pass
+        _LAST_HISTORY_REFRESH_AT = now
+    payload = load_json(root / "anomaly_summary.json", {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def refresh_provider_plugins_if_due(root: Path) -> None:
+    global _LAST_PROVIDER_REFRESH_AT
+    now = time.monotonic()
+    if now - _LAST_PROVIDER_REFRESH_AT < 60:
+        return
+    try:
+        from tasklight_provider_plugins import run_once
+
+        run_once(root)
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    _LAST_PROVIDER_REFRESH_AT = now
+
+
 def load_params_file(name: str) -> dict[str, Any]:
     path = PROJECT_ROOT / "design" / "state-projector" / "params" / name
     payload = load_json(path, {})
@@ -234,6 +266,18 @@ def runtime_ttl_config() -> dict[str, float]:
 
 def verification_ttl_seconds() -> float:
     return max(0.0, float(os.environ.get("TASKLIGHT_VERIFICATION_TTL_SECONDS", "900")))
+
+
+def hook_pending_auto_release_seconds() -> float:
+    return max(1.0, float(os.environ.get("TASKLIGHT_HOOK_PENDING_AUTO_RELEASE_SECONDS", "30")))
+
+
+def effective_hook_completion_status(status: str, done_ts: float | None, now_ts: float) -> str:
+    if status != "done_unverified" or done_ts is None:
+        return status
+    if now_ts - done_ts >= hook_pending_auto_release_seconds():
+        return "cancelled"
+    return status
 
 
 def projector_code_hash() -> str:
@@ -1079,11 +1123,14 @@ def classify_task(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     raw_status = str(task.get("raw_status") or task.get("status") or task.get("effective_status") or "idle")
     effective_status = str(task.get("effective_status") or task.get("status") or raw_status)
-    if effective_status == "done_unverified":
+    source = "codex_hook" if is_hook_projected_task(task, binding) else str(task.get("source") or "tasklight")
+    done_ts = parse_ts(done_timestamp(task))
+    if source == "codex_hook":
+        effective_status = effective_hook_completion_status(effective_status, done_ts, now_ts)
+    elif effective_status == "done_unverified":
         done_age = age_seconds(done_timestamp(task), now_ts)
         if done_age is not None and done_age > verification_ttl:
             effective_status = "stale"
-    source = "codex_hook" if is_hook_projected_task(task, binding) else str(task.get("source") or "tasklight")
     last_signal_event = (binding or {}).get("last_signal_event")
     task_signals = relevant_task_signals(
         task,
@@ -1261,13 +1308,16 @@ def classify_task(
         "file_path": task.get("file_path"),
         "confidence": confidence,
     }
+    thread_id = str((thread_binding or {}).get("thread_id") or (binding or {}).get("thread_id") or "")
+    session_id = str((latest_signal or {}).get("session_id") or (latest_signal or {}).get("sessionId") or "")
     canonical_identity, binding_aliases = task_binding_identity(task, binding)
     projected["canonical_identity"] = canonical_identity
     projected["binding_aliases"] = binding_aliases
+    projected["visible_identity"] = f"thread:{thread_id}" if thread_id else (f"session:{session_id}" if session_id else canonical_identity or f"task:{task_id}")
     signal = make_signal(
         source,
         state_cause,
-        identity={"task_id": task_id, "turn_id": projected["turn_id"], "thread_id": (binding or {}).get("thread_id"), "pid": None},
+        identity={"task_id": task_id, "turn_id": projected["turn_id"], "thread_id": thread_id or None, "pid": None},
         confidence=confidence,
         occurred_at=(latest_signal or {}).get("occurred_at") or (binding or {}).get("last_signal_at") or task_timestamp(task),
         status_hint=projected["effective_status"],
@@ -1714,18 +1764,51 @@ def runtime_candidate_id(signal: dict[str, Any]) -> tuple[str, str]:
     task_id = str(signal.get("task_id") or "")
     observation_id = str(signal.get("observation_id") or "")
     pid = signal.get("pid")
-    if turn_id:
-        return "codex_turn", f"turn:{turn_id}"
+    session_id = str(signal.get("session_id") or signal.get("sessionId") or "")
     if thread_id:
         source = str(signal.get("source") or "thread")
         return "appserver_thread" if source == "codex_appserver" else "current_thread", f"thread:{thread_id}"
+    if session_id:
+        return "current_thread", f"session:{session_id}"
     if task_id:
         return "codex_turn", f"task:{task_id}"
+    if turn_id:
+        return "codex_turn", f"turn:{turn_id}"
     if observation_id:
         return "process_observer", f"observation:{observation_id}"
     if pid is not None:
         return "process_observer", f"pid:{pid}"
     return "private_probe", "global:private_probe"
+
+
+def collapse_visible_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    visible_scopes = {"open_blocker", "stale_blocker", "active_execution", "pending_verify", "recent_done"}
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for task in tasks:
+        identity = str(task.get("visible_identity") or "")
+        if task.get("display_scope") not in visible_scopes or not identity:
+            passthrough.append(task)
+            continue
+        buckets.setdefault(identity, []).append(task)
+
+    collapsed: list[dict[str, Any]] = []
+    duplicate_count = 0
+    for identity, matches in buckets.items():
+        matches.sort(
+            key=lambda item: (
+                parse_ts(item.get("updated_at") or item.get("done_at") or item.get("started_at")) or 0.0,
+                str(item.get("task_id") or ""),
+            ),
+            reverse=True,
+        )
+        selected = dict(matches[0])
+        selected["visible_identity"] = identity
+        selected["merged_task_ids"] = sorted({str(item.get("task_id")) for item in matches if item.get("task_id")})
+        selected["merged_task_count"] = len(selected["merged_task_ids"])
+        duplicate_count += max(0, len(matches) - 1)
+        collapsed.append(selected)
+    return passthrough + collapsed, duplicate_count
 
 
 def consistency_score_for_candidate(sources: set[str], signals: list[dict[str, Any]], config: dict[str, Any]) -> float:
@@ -1911,6 +1994,8 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     appserver_thread_signals = [signal for signal in bus_signals if str(signal.get("source") or "") == "codex_appserver"]
     appserver_thread_health = load_json(appserver_thread_watcher_health_path(root), {})
     quota, quota_diagnostics = project_quota_state(root, now_ts)
+    anomaly_summary = refresh_observability_if_due(root)
+    refresh_provider_plugins_if_due(root)
     if appserver_thread_signals:
         appserver_thread_signal_status = "bus"
     elif isinstance(appserver_thread_health, dict) and appserver_thread_health.get("status"):
@@ -1967,6 +2052,7 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
                 status_hint="invalid_json",
             )
         )
+    projected_tasks, collapsed_visible_task_count = collapse_visible_tasks(projected_tasks)
     signals.extend(observation_signals)
     signals.sort(key=lambda item: str(item.get("occurred_at") or ""))
     for index, signal in enumerate(signals, start=1):
@@ -2126,11 +2212,17 @@ def project_once(root: Path, args: argparse.Namespace) -> dict[str, Any]:
             "projector_reason": reasons,
             "observed_false_positive_count": observed_false_positive_count,
             "projected_task_count": total_projected_task_count,
+            "collapsed_visible_task_count": collapsed_visible_task_count,
             "ui_task_count": len(ui_projected_tasks),
             "ui_tasks_truncated": ui_tasks_truncated,
             "ui_task_limit": task_limit,
             "active_thread_bindings": sum(1 for binding in thread_bindings if binding.get("status") == "active"),
             "binding_identity_count": len(by_identity),
+            "history_index_status": anomaly_summary.get("status", "unavailable"),
+            "history_row_count": anomaly_summary.get("history_row_count", 0),
+            "duplicate_signal_rate": anomaly_summary.get("duplicate_signal_rate"),
+            "status_transition_count_1h": anomaly_summary.get("status_transition_count_1h"),
+            "anomaly_count": len(anomaly_summary.get("anomalies") or []),
             **quota_diagnostics,
         },
     }

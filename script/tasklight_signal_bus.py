@@ -177,7 +177,8 @@ def compact_signal_bus(path: Path) -> None:
     if retention > 0:
         cutoff = datetime.now(timezone.utc).timestamp() - retention
 
-    kept: list[str] = []
+    kept_by_id: dict[str, str] = {}
+    kept_order: list[str] = []
     for raw in raw_lines[-signal_bus_max_records():]:
         if not raw.strip():
             continue
@@ -191,12 +192,16 @@ def compact_signal_bus(path: Path) -> None:
             ts = _parse_ts(payload.get("occurred_at") or payload.get("event_time") or payload.get("recorded_at"))
             if ts is not None and ts < cutoff:
                 continue
-        kept.append(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+        signal_id = str(payload.get("signal_id") or _stable_signal_id(payload))
+        encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        if signal_id not in kept_by_id:
+            kept_order.append(signal_id)
+        kept_by_id[signal_id] = encoded
 
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        for line in kept:
-            handle.write(line + "\n")
+        for signal_id in kept_order[-signal_bus_max_records():]:
+            handle.write(kept_by_id[signal_id] + "\n")
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(tmp_name, path)
@@ -213,6 +218,13 @@ def append_signal(payload: dict[str, Any], config_state_dir: Path | None = None)
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(signal, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
     with signal_bus_lock(config_state_dir):
+        if path.exists():
+            try:
+                recent = path.read_text(encoding="utf-8").splitlines()[-256:]
+                if any(f'"signal_id":"{signal["signal_id"]}"' in line.replace(" ", "") for line in recent):
+                    return signal
+            except OSError:
+                pass
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line)
             handle.flush()

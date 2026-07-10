@@ -1,5 +1,20 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
+import Foundation
 import PackageDescription
+
+let developerDirectory = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] ?? "/Library/Developer/CommandLineTools"
+let developerFrameworks = "\(developerDirectory)/Library/Developer/Frameworks"
+let developerLibraries = "\(developerDirectory)/Library/Developer/usr/lib"
+let testingSearchPath: [SwiftSetting] = FileManager.default.fileExists(atPath: developerFrameworks)
+    ? [.unsafeFlags(["-F", developerFrameworks])]
+    : []
+let testingLinkerSearchPath: [LinkerSetting] = FileManager.default.fileExists(atPath: developerFrameworks)
+    ? [.unsafeFlags([
+        "-F", developerFrameworks,
+        "-Xlinker", "-rpath", "-Xlinker", developerFrameworks,
+        "-Xlinker", "-rpath", "-Xlinker", developerLibraries
+    ])]
+    : []
 
 let package = Package(
     name: "TaskLightPackage",
@@ -20,6 +35,26 @@ let package = Package(
         .executableTarget(
             name: "TaskLightChecks",
             dependencies: ["TaskLightCore"]
+        ),
+        .target(
+            name: "TaskLightTestSuite",
+            dependencies: ["TaskLightCore"],
+            path: "Tests/TaskLightTestSuite",
+            swiftSettings: testingSearchPath,
+            linkerSettings: testingLinkerSearchPath
+        ),
+        .executableTarget(
+            name: "TaskLightTestRunner",
+            dependencies: ["TaskLightTestSuite"],
+            swiftSettings: testingSearchPath,
+            linkerSettings: testingLinkerSearchPath
+        ),
+        .testTarget(
+            name: "TaskLightCoreTests",
+            dependencies: ["TaskLightTestSuite"],
+            swiftSettings: testingSearchPath,
+            linkerSettings: testingLinkerSearchPath
         )
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

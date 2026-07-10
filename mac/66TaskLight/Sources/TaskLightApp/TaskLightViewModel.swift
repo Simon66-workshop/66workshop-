@@ -540,7 +540,10 @@ final class TaskLightViewModel: ObservableObject {
             DisabledUsageProviderAdapter(id: "copilot", displayName: "Copilot"),
             DisabledUsageProviderAdapter(id: "openai_api", displayName: "OpenAI API")
         ]
-        return adapters.map { $0.snapshot(from: uiState) }
+        let builtIn = adapters.map { $0.snapshot(from: uiState) }
+        let external = store.loadExternalUsageProviderSnapshots()
+        let externalIDs = Set(external.map(\.id))
+        return builtIn.filter { !externalIDs.contains($0.id) } + external
     }
 
     func copyBlocker() {
@@ -1301,7 +1304,19 @@ final class TaskLightViewModel: ObservableObject {
             TaskRadarDiagnosticRow(label: "Signal Bus", value: diagnostics.signal_bus_status ?? "unknown", severity: severityForHealthStatus(diagnostics.signal_bus_status)),
             TaskRadarDiagnosticRow(label: "Latest Signal", value: secondsLabel(diagnostics.latest_signal_age_sec), severity: severityForSignalAge(diagnostics.latest_signal_age_sec)),
             TaskRadarDiagnosticRow(label: "Candidates", value: "\(diagnostics.runtime_candidate_count ?? uiState.runtime_candidates?.count ?? 0)", severity: .unknown),
-            TaskRadarDiagnosticRow(label: "Quota Probe", value: diagnostics.quota_probe_status ?? "unknown", severity: severityForHealthStatus(diagnostics.quota_probe_status))
+            TaskRadarDiagnosticRow(label: "Quota Probe", value: diagnostics.quota_probe_status ?? "unknown", severity: severityForHealthStatus(diagnostics.quota_probe_status)),
+            TaskRadarDiagnosticRow(label: "History", value: "\(diagnostics.history_row_count ?? 0) rows", severity: severityForHealthStatus(diagnostics.history_index_status)),
+            TaskRadarDiagnosticRow(
+                label: "Duplicates",
+                value: diagnostics.duplicate_signal_rate.map { String(format: "%.2f%%", $0 * 100) } ?? "unknown",
+                severity: (diagnostics.duplicate_signal_rate ?? 0) < TaskLightUIPerformanceBudget.duplicateSignalRateMax ? .ok : .warning
+            ),
+            TaskRadarDiagnosticRow(
+                label: "Anomalies",
+                value: "\(diagnostics.anomaly_count ?? 0)",
+                severity: (diagnostics.anomaly_count ?? 0) == 0 ? .ok : .warning
+            ),
+            TaskRadarDiagnosticRow(label: "Transitions 1h", value: "\(diagnostics.status_transition_count_1h ?? 0)", severity: .unknown)
         ]
     }
 

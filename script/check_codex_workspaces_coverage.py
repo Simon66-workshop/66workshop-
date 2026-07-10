@@ -75,6 +75,8 @@ def classify_workspace(hook_report: dict[str, Any], thread_items: list[dict[str,
         return "invalid_hooks", "这个 workspace 的 hooks 配置不可用", "reinstall hooks for this workspace"
     if hook_status == "unknown_manual_required":
         return "installed_needs_trust", "hooks 已安装，但需要在 Codex UI 点 Trust", "open this Codex workspace and trust hooks"
+    if hook_status == "probe_unavailable" or hook_report.get("codex_appserver") == "unavailable":
+        return "probe_unavailable", "本地 app-server 探针不可用，不能据此否定已有 Trust", "retry the local app-server probe later"
     if any(item.get("decision") == "covered_running" for item in thread_items):
         return "trusted", "已有 fresh hook/appserver evidence，可以驱动状态灯", "no action"
     if any(item.get("decision") == "diagnostic_only" for item in thread_items):
@@ -181,6 +183,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "invalid_hooks": 0,
         "not_loaded": 0,
         "diagnostic_only": 0,
+        "probe_unavailable": 0,
         "unknown": 0,
     }
     for workspace in workspaces:
@@ -213,6 +216,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         status = "needs_hooks"
     elif counts["installed_needs_trust"] or counts["not_loaded"]:
         status = "needs_trust"
+    elif counts["probe_unavailable"]:
+        status = "probe_unavailable"
     elif counts["unknown"]:
         status = "unknown"
 

@@ -1,5 +1,8 @@
 import Foundation
 import Darwin
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 public final class TaskLightStore {
     public let config: TaskLightConfig
@@ -21,6 +24,7 @@ public final class TaskLightStore {
         try? FileManager.default.createDirectory(at: config.observationsDirectoryURL, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.uiClientsDirectoryURL, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: config.workspaceCoverageDirectoryURL, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: config.providersDirectoryURL.appendingPathComponent("snapshots"), withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: config.playedEventsURL.path) {
             let ledger = TaskLightPlayedEventsLedger()
             try? writeJSONAtomic(ledger, to: config.playedEventsURL)
@@ -197,6 +201,11 @@ public final class TaskLightStore {
 
     public func appendEvent(_ event: TaskLightEventRecord) {
         ensureLayout()
+        rotateJSONLIfNeeded(
+            config.eventsURL,
+            maxBytes: UInt64(TaskLightUIPerformanceBudget.eventLogMaxBytes),
+            archiveCount: TaskLightUIPerformanceBudget.retainedLogArchiveCount
+        )
         let encoded = (try? encoder.encode(event)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         let line = encoded + "\n"
         let fd = open(config.eventsURL.path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
@@ -210,6 +219,11 @@ public final class TaskLightStore {
 
     public func appendUIEventFlowRecord(_ payload: [String: Any]) {
         ensureLayout()
+        rotateJSONLIfNeeded(
+            config.uiEventFlowURL,
+            maxBytes: UInt64(TaskLightUIPerformanceBudget.uiEventFlowLogMaxBytes),
+            archiveCount: TaskLightUIPerformanceBudget.retainedLogArchiveCount
+        )
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
               let encoded = String(data: data, encoding: .utf8) else {
@@ -224,6 +238,26 @@ public final class TaskLightStore {
         }
         fsync(fd)
         statusReplayCache = nil
+    }
+
+    private func rotateJSONLIfNeeded(_ url: URL, maxBytes: UInt64, archiveCount: Int) {
+        guard maxBytes > 0, archiveCount > 0,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber,
+              size.uint64Value >= maxBytes else {
+            return
+        }
+        let manager = FileManager.default
+        for index in stride(from: archiveCount, through: 1, by: -1) {
+            let destination = URL(fileURLWithPath: url.path + ".\(index)")
+            if index == archiveCount {
+                try? manager.removeItem(at: destination)
+            }
+            let source = index == 1 ? url : URL(fileURLWithPath: url.path + ".\(index - 1)")
+            if manager.fileExists(atPath: source.path) {
+                try? manager.moveItem(at: source, to: destination)
+            }
+        }
     }
 
     public func appendQuotaHistorySample(from quota: CodexQuotaUIState?) {
@@ -276,6 +310,19 @@ public final class TaskLightStore {
         return TaskLightWidgetBridge.decodeSnapshot(raw)
     }
 
+    public func loadExternalUsageProviderSnapshots() -> [UsageProviderSnapshot] {
+        ensureLayout()
+        let directory = config.providersDirectoryURL.appendingPathComponent("snapshots")
+        let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return urls
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url in
+                try? readJSON(from: url) as UsageProviderSnapshot
+            }
+            .filter { $0.diagnostic_only }
+            .sorted { $0.id < $1.id }
+    }
+
     private func saveWidgetSnapshotToAppGroup(_ snapshot: TaskLightWidgetSnapshot) {
         guard !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--tasklight-") }),
               let raw = TaskLightWidgetBridge.encodeSnapshot(snapshot) else {
@@ -287,6 +334,9 @@ public final class TaskLightStore {
             }
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? raw.write(to: url, atomically: true, encoding: .utf8)
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadTimelines(ofKind: TaskLightWidgetBridge.widgetKind)
+            #endif
         }
     }
 
@@ -805,13 +855,26 @@ public final class TaskLightStore {
         guard uiState.source == "state_projector" else {
             return false
         }
-        guard uiState.projector_version == "M3.7" else {
+        guard ["M3.7", "M3.8"].contains(uiState.projector_version) else {
             return false
         }
-        guard !uiState.projector_generated_at.isEmpty else {
+        return Self.isProjectorTimestampFresh(
+            uiState.projector_generated_at,
+            maxAgeSeconds: config.projectorMaxAgeSeconds
+        )
+    }
+
+    public static func isProjectorTimestampFresh(
+        _ timestamp: String,
+        maxAgeSeconds: TimeInterval,
+        now: Date = Date()
+    ) -> Bool {
+        guard maxAgeSeconds > 0,
+              let generatedAt = TaskLightTaskRecord.parseTimestamp(timestamp) else {
             return false
         }
-        return true
+        let age = now.timeIntervalSince(generatedAt)
+        return age >= -1 && age <= maxAgeSeconds
     }
 
     private func projectRootURL() -> URL {

@@ -33,6 +33,7 @@ public struct TaskLightConfig: Sendable {
     public var widgetSnapshotURL: URL
     public var uiClientsDirectoryURL: URL
     public var workspaceCoverageDirectoryURL: URL
+    public var providersDirectoryURL: URL
     public var workspaceCoverageRunStatusURL: URL
     public var workspaceCoverageLatestJSONURL: URL
     public var workspaceCoverageLatestMarkdownURL: URL
@@ -42,6 +43,7 @@ public struct TaskLightConfig: Sendable {
     public var ttlSeconds: TimeInterval
     public var verificationTTLSeconds: TimeInterval
     public var refreshSeconds: TimeInterval
+    public var projectorMaxAgeSeconds: TimeInterval
     public var blockedSoundName: String
     public var doneSoundName: String
     public var staleSoundName: String
@@ -54,6 +56,7 @@ public struct TaskLightConfig: Sendable {
         blockedSoundName: String,
         doneSoundName: String,
         staleSoundName: String,
+        projectorMaxAgeSeconds: TimeInterval = 5,
         observationsDirectoryURL: URL? = nil,
         observationsStateURL: URL? = nil,
         hookBridgeHealthURL: URL? = nil,
@@ -62,7 +65,8 @@ public struct TaskLightConfig: Sendable {
         quotaHistoryURL: URL? = nil,
         widgetSnapshotURL: URL? = nil,
         uiClientsDirectoryURL: URL? = nil,
-        workspaceCoverageDirectoryURL: URL? = nil
+        workspaceCoverageDirectoryURL: URL? = nil,
+        providersDirectoryURL: URL? = nil
     ) {
         self.stateDirectory = stateDirectory
         self.stateURL = stateDirectory.appendingPathComponent("state.json")
@@ -77,6 +81,7 @@ public struct TaskLightConfig: Sendable {
         self.widgetSnapshotURL = widgetSnapshotURL ?? stateDirectory.appendingPathComponent("widget_snapshot.json")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
+        self.providersDirectoryURL = providersDirectoryURL ?? stateDirectory.appendingPathComponent("providers")
         self.workspaceCoverageRunStatusURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("run_status.json")
         self.workspaceCoverageLatestJSONURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("latest.json")
         self.workspaceCoverageLatestMarkdownURL = self.workspaceCoverageDirectoryURL.appendingPathComponent("latest.md")
@@ -86,6 +91,7 @@ public struct TaskLightConfig: Sendable {
         self.ttlSeconds = ttlSeconds
         self.verificationTTLSeconds = verificationTTLSeconds
         self.refreshSeconds = refreshSeconds
+        self.projectorMaxAgeSeconds = projectorMaxAgeSeconds
         self.blockedSoundName = blockedSoundName
         self.doneSoundName = doneSoundName
         self.staleSoundName = staleSoundName
@@ -97,6 +103,7 @@ public struct TaskLightConfig: Sendable {
         let ttlSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_TTL_SECONDS"].flatMap(Double.init) ?? 300)
         let verificationTTLSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_VERIFICATION_TTL_SECONDS"].flatMap(Double.init) ?? 900)
         let refreshSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_REFRESH_SECONDS"].flatMap(Double.init) ?? 5)
+        let projectorMaxAgeSeconds = TimeInterval(ProcessInfo.processInfo.environment["TASKLIGHT_PROJECTOR_MAX_AGE_SECONDS"].flatMap(Double.init) ?? 5)
         let blockedSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_BLOCKED_SOUND"] ?? "Basso"
         let doneSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_DONE_SOUND"] ?? "Submarine"
         let staleSoundName = ProcessInfo.processInfo.environment["TASKLIGHT_STALE_SOUND"] ?? "Funk"
@@ -109,6 +116,7 @@ public struct TaskLightConfig: Sendable {
         let widgetSnapshotURL = ProcessInfo.processInfo.environment["TASKLIGHT_WIDGET_SNAPSHOT_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
+        let providersDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_PROVIDER_PLUGIN_DIR"].map { URL(fileURLWithPath: $0) }
         return TaskLightConfig(
             stateDirectory: stateDirectory,
             ttlSeconds: ttlSeconds,
@@ -117,6 +125,7 @@ public struct TaskLightConfig: Sendable {
             blockedSoundName: blockedSoundName,
             doneSoundName: doneSoundName,
             staleSoundName: staleSoundName,
+            projectorMaxAgeSeconds: projectorMaxAgeSeconds,
             observationsDirectoryURL: observationsDirectoryURL,
             observationsStateURL: observationsStateURL,
             hookBridgeHealthURL: hookBridgeHealthURL,
@@ -125,7 +134,8 @@ public struct TaskLightConfig: Sendable {
             quotaHistoryURL: quotaHistoryURL,
             widgetSnapshotURL: widgetSnapshotURL,
             uiClientsDirectoryURL: uiClientsDirectoryURL,
-            workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL
+            workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL,
+            providersDirectoryURL: providersDirectoryURL
         )
     }
 }
@@ -1264,6 +1274,11 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
     public var quota_probe_status: String?
     public var quota_probe_health_path: String?
     public var quota_warning_count: Int?
+    public var history_index_status: String?
+    public var history_row_count: Int?
+    public var duplicate_signal_rate: Double?
+    public var status_transition_count_1h: Int?
+    public var anomaly_count: Int?
 
     public init(
         writer_status: String? = nil,
@@ -1318,7 +1333,12 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
         quota_state_path: String? = nil,
         quota_probe_status: String? = nil,
         quota_probe_health_path: String? = nil,
-        quota_warning_count: Int? = nil
+        quota_warning_count: Int? = nil,
+        history_index_status: String? = nil,
+        history_row_count: Int? = nil,
+        duplicate_signal_rate: Double? = nil,
+        status_transition_count_1h: Int? = nil,
+        anomaly_count: Int? = nil
     ) {
         self.writer_status = writer_status
         self.hook_bridge_status = hook_bridge_status
@@ -1373,6 +1393,11 @@ public struct TaskLightUIDiagnostics: Codable, Equatable {
         self.quota_probe_status = quota_probe_status
         self.quota_probe_health_path = quota_probe_health_path
         self.quota_warning_count = quota_warning_count
+        self.history_index_status = history_index_status
+        self.history_row_count = history_row_count
+        self.duplicate_signal_rate = duplicate_signal_rate
+        self.status_transition_count_1h = status_transition_count_1h
+        self.anomaly_count = anomaly_count
     }
 }
 

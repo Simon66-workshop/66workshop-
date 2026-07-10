@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATOR="$ROOT_DIR/script/self-review/generate_scope.py"
 RUNNER="$ROOT_DIR/script/self-review/run_self_review.py"
-SAMPLE_DIR="$ROOT_DIR/docs/reports/self-review/M3.4c-sample"
 
 if [ "${TASKLIGHT_SELF_REVIEW_EVIDENCE_MODE:-0}" = "1" ]; then
   echo "TASKLIGHT_SELF_REVIEW_EVIDENCE_MODE=1"
@@ -13,6 +12,7 @@ if [ "${TASKLIGHT_SELF_REVIEW_EVIDENCE_MODE:-0}" = "1" ]; then
 fi
 
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tasklight-generate-scope.XXXXXX")"
+SAMPLE_DIR="$TMP_ROOT/M3.4c-sample"
 trap 'rm -rf "$TMP_ROOT"' EXIT INT TERM
 
 make_env() {

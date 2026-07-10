@@ -24,6 +24,15 @@ func makeTempStateDirectory() throws -> URL {
     return root
 }
 
+if let expectedFallback = ProcessInfo.processInfo.environment["TASKLIGHT_CHECK_EXPECTED_FALLBACK"] {
+    let store = TaskLightStore(config: .fromEnvironment())
+    let state = store.loadProjectedUIState()
+    let fallback = state.diagnostics.fallback_reason ?? "none"
+    print("projected_source=\(state.source)")
+    print("fallback_reason=\(fallback)")
+    exit(state.source == "swift_fallback" && fallback == expectedFallback ? 0 : 1)
+}
+
 if let uiStatePath = ProcessInfo.processInfo.environment["TASKLIGHT_CHECK_UI_STATE_PATH"] {
     do {
         let data = try Data(contentsOf: URL(fileURLWithPath: uiStatePath))
@@ -350,8 +359,8 @@ do {
     staleProjectedUIState.projector_generated_at = "2020-01-01T00:00:00Z"
     try JSONEncoder().encode(staleProjectedUIState).write(to: config.uiStateURL)
     let staleLoadedUIState = store.loadProjectedUIState()
-    check(staleLoadedUIState.source == "state_projector", "readable stale ui_state remains UI truth")
-    check(staleLoadedUIState.diagnostics.fallback_reason != "projector_stale", "readable stale ui_state does not enter legacy fallback")
+    check(staleLoadedUIState.source == "swift_fallback", "readable stale ui_state stops driving the UI")
+    check(staleLoadedUIState.diagnostics.fallback_reason == "projector_stale", "stale projector reason is explicit")
 
     let fallbackQuotaJSON = """
     {

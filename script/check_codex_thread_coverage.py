@@ -221,11 +221,19 @@ def check_hook_workspace(workspace: str, *, skip_appserver: bool, appserver_time
     appserver_status = "skipped"
     if not skip_appserver:
         appserver_status, _, _ = query_appserver_hooks(root, timeout=appserver_timeout)
-    hook_status = "ok" if config_enabled and appserver_status in {"trusted", "skipped"} else "unknown_manual_required"
+    if config_enabled and appserver_status in {"trusted", "skipped"}:
+        hook_status = "ok"
+        hook_detail = "ok"
+    elif config_enabled and appserver_status == "unavailable":
+        hook_status = "probe_unavailable"
+        hook_detail = "probe_unavailable"
+    else:
+        hook_status = "unknown_manual_required"
+        hook_detail = "needs_trust_or_reload"
     return {
         "workspace": str(root),
         "hook_status": hook_status,
-        "hook_detail": "ok" if hook_status == "ok" else "needs_trust_or_reload",
+        "hook_detail": hook_detail,
         "handler": str(handler),
         "config_enabled": config_enabled,
         "codex_appserver": appserver_status,

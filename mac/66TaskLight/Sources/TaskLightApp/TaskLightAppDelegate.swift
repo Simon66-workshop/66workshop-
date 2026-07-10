@@ -6,6 +6,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = TaskLightViewModel()
     private var panelController: TaskLightPanelController?
     private var menuBarController: TaskLightMenuBarController?
+    private var globalShortcutController: TaskLightGlobalShortcutController?
     private var initialPanelPresented = false
     private var edgeToggleSelfTestScheduled = false
     private var visualMatrixSelfTestScheduled = false
@@ -18,6 +19,10 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         let controller = TaskLightPanelController(viewModel: viewModel)
         panelController = controller
         menuBarController = TaskLightMenuBarController(viewModel: viewModel, panelController: controller)
+        globalShortcutController = TaskLightGlobalShortcutController(
+            togglePanel: { [weak controller] in controller?.togglePanelVisibilityFromMenuBar() },
+            toggleExpanded: { [weak controller] in controller?.toggleExpandedFromMenuBar() }
+        )
         NSApp.activate(ignoringOtherApps: true)
         appendStartupTrace("applicationDidFinishLaunching.activate")
         DispatchQueue.main.async { [weak self] in
@@ -39,6 +44,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         appendStartupTrace("applicationWillTerminate.begin")
         menuBarController?.shutdown()
+        globalShortcutController = nil
         panelController?.shutdown()
         viewModel.shutdown()
         appendStartupTrace("applicationWillTerminate.end")

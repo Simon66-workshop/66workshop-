@@ -84,7 +84,7 @@ projector_version = ui_state.get("projector_version", "none")
 projector_hash = ui_state.get("projector_code_hash", "none")
 source = ui_state.get("source", "none")
 writer_status = diagnostics.get("writer_status", "ok")
-if source != "state_projector" or projector_version != "M3.7" or projector_hash != expected_hash:
+if source != "state_projector" or projector_version not in {"M3.7", "M3.8"} or projector_hash != expected_hash:
     writer_status = "old_writer"
 if process_count > 1:
     writer_status = "multiple_writers"

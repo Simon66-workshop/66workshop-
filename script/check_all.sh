@@ -5,10 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_DIR="$ROOT_DIR/mac/66TaskLight"
 
 python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
+(cd "$ROOT_DIR" && "$ROOT_DIR/script/swift_test_verified.sh")
 (cd "$PACKAGE_DIR" && swift build)
 (cd "$PACKAGE_DIR" && swift run TaskLightChecks)
 "$ROOT_DIR/script/smoke_ui_refresh_latency.sh"
 "$ROOT_DIR/script/smoke_signal_bus.sh"
+"$ROOT_DIR/script/smoke_reliability_m38.sh"
+"$ROOT_DIR/script/smoke_observability_m39.sh"
+"$ROOT_DIR/script/smoke_expansion_m40.sh"
 "$ROOT_DIR/script/smoke_state_projector.sh"
 "$ROOT_DIR/script/smoke_state_projector_snapshot_cache.sh"
 "$ROOT_DIR/script/smoke_codex_quota.sh"
