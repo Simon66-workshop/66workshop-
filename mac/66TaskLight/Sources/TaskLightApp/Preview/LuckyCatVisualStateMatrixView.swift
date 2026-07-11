@@ -29,28 +29,10 @@ struct LuckyCatVisualStateMatrixView: View {
 }
 
 struct LuckyCatVisualMatrixHostView: View {
-    @State private var showsMatrix = true
-
     var body: some View {
         ZStack {
             matrixBackground
-            if showsMatrix {
-                LuckyCatVisualStateMatrixView()
-                    .transition(.opacity)
-            } else {
-                VStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.large)
-                    Text("视觉矩阵")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(MacOSKitGlass.textPrimary)
-                    Text("正在载入状态预览")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(MacOSKitGlass.textSecondary)
-                }
-                .padding(22)
-                .macOSKitGlassCard(cornerRadius: 24)
-            }
+            LuckyCatVisualStateMatrixView()
         }
         .frame(minWidth: 820, minHeight: 680)
     }

@@ -41,9 +41,6 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 self?.prepareTaskRadarController()
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
-                self?.prepareVisualMatrixController()
-            }
         }
     }
 
@@ -131,7 +128,11 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         let pendingAction = pendingMenuCloseAction
         pendingMenuCloseAction = nil
         if let pendingAction {
-            pendingAction()
+            // AppKit still owns menu teardown while this delegate callback runs.
+            // Deferring the panel/window mutation keeps menu tracking responsive.
+            DispatchQueue.main.async {
+                pendingAction()
+            }
         }
         if statusNeedsRefreshAfterMenuClose {
             statusNeedsRefreshAfterMenuClose = false
@@ -223,28 +224,34 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
     @objc private func toggleCatVisibility() {
         let startedAt = CACurrentMediaTime()
         appendMenuTrace("action.toggleCatVisibility.begin")
-        panelController?.togglePanelVisibilityFromMenuBar()
-        appendMenuTrace("action.toggleCatVisibility.end")
-        refreshMenuTitlesSoon()
-        writeManualLatency(source: "menu", action: "toggleCatVisibility", startedAt: startedAt)
+        performAfterStatusMenuClose { [weak self] in
+            self?.panelController?.togglePanelVisibilityFromMenuBar()
+            self?.appendMenuTrace("action.toggleCatVisibility.end")
+            self?.refreshMenuTitlesSoon()
+            self?.writeManualLatency(source: "menu", action: "toggleCatVisibility", startedAt: startedAt)
+        }
     }
 
     @objc private func toggleEdgeRail() {
         let startedAt = CACurrentMediaTime()
         appendMenuTrace("action.toggleEdgeRail.begin")
-        panelController?.toggleEdgeRailFromMenuBar()
-        appendMenuTrace("action.toggleEdgeRail.end")
-        refreshMenuTitlesSoon()
-        writeManualLatency(source: "menu", action: "toggleEdgeRail", startedAt: startedAt)
+        performAfterStatusMenuClose { [weak self] in
+            self?.panelController?.toggleEdgeRailFromMenuBar()
+            self?.appendMenuTrace("action.toggleEdgeRail.end")
+            self?.refreshMenuTitlesSoon()
+            self?.writeManualLatency(source: "menu", action: "toggleEdgeRail", startedAt: startedAt)
+        }
     }
 
     @objc private func toggleExpandedPanel() {
         let startedAt = CACurrentMediaTime()
         appendMenuTrace("action.toggleExpanded.begin")
-        panelController?.toggleExpandedFromMenuBar()
-        appendMenuTrace("action.toggleExpanded.end")
-        refreshMenuTitlesSoon()
-        writeManualLatency(source: "menu", action: "toggleExpandedPanel", startedAt: startedAt)
+        performAfterStatusMenuClose { [weak self] in
+            self?.panelController?.toggleExpandedFromMenuBar()
+            self?.appendMenuTrace("action.toggleExpanded.end")
+            self?.refreshMenuTitlesSoon()
+            self?.writeManualLatency(source: "menu", action: "toggleExpandedPanel", startedAt: startedAt)
+        }
     }
 
     @objc private func runWorkspaceCoverage() {
@@ -265,13 +272,7 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             self.appendMenuTrace("action.\(action).shown=\(isShown)")
             self.writeManualLatency(source: "menu", action: action, startedAt: startedAt)
         }
-        if isStatusMenuOpen {
-            pendingMenuCloseAction = openAction
-        } else {
-            DispatchQueue.main.async {
-                openAction()
-            }
-        }
+        performAfterStatusMenuClose(openAction)
     }
 
     @objc private func toggleFocusMode() {
@@ -291,14 +292,25 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
     @objc private func toggleVisualMatrix() {
         let startedAt = CACurrentMediaTime()
         appendMenuTrace("action.toggleVisualMatrix.begin")
-        if isVisualMatrixVisible {
-            closeVisualMatrixWindow(source: "menu")
-        } else {
-            presentVisualMatrixWindow(source: "menu")
+        performAfterStatusMenuClose { [weak self] in
+            guard let self else { return }
+            if self.isVisualMatrixVisible {
+                self.closeVisualMatrixWindow(source: "menu")
+            } else {
+                self.presentVisualMatrixWindow(source: "menu")
+            }
+            self.appendMenuTrace("action.toggleVisualMatrix.end")
+            self.refreshMenuTitlesSoon()
+            self.writeManualLatency(source: "menu", action: "toggleVisualMatrix", startedAt: startedAt)
         }
-        appendMenuTrace("action.toggleVisualMatrix.end")
-        refreshMenuTitlesSoon()
-        writeManualLatency(source: "menu", action: "toggleVisualMatrix", startedAt: startedAt)
+    }
+
+    private func performAfterStatusMenuClose(_ action: @escaping () -> Void) {
+        guard isStatusMenuOpen else {
+            action()
+            return
+        }
+        pendingMenuCloseAction = action
     }
 
     private func openVisualMatrixFromRadar() {
@@ -317,19 +329,28 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             ])
             return
         }
-        completion([
-            "status": window.isVisible ? "ok" : "not_visible",
-            "visible": window.isVisible,
-            "key": window.isKeyWindow,
-            "title": window.title,
-            "open_apply_ms": (CFAbsoluteTimeGetCurrent() - started) * 1000,
-            "frame": [
-                "x": window.frame.origin.x,
-                "y": window.frame.origin.y,
-                "width": window.frame.width,
-                "height": window.frame.height
-            ]
-        ])
+        let openApplyMS = (CFAbsoluteTimeGetCurrent() - started) * 1000
+        let responsivenessDelay: TimeInterval = 0.48
+        let responsivenessProbeStarted = CACurrentMediaTime()
+        DispatchQueue.main.asyncAfter(deadline: .now() + responsivenessDelay) {
+            let probeDelayMS = max(0, ((CACurrentMediaTime() - responsivenessProbeStarted) - responsivenessDelay) * 1000)
+            let responsive = probeDelayMS <= 160
+            completion([
+                "status": window.isVisible && responsive ? "ok" : "not_visible_or_unresponsive",
+                "visible": window.isVisible,
+                "key": window.isKeyWindow,
+                "title": window.title,
+                "open_apply_ms": openApplyMS,
+                "main_queue_probe_delay_ms": probeDelayMS,
+                "main_queue_responsive": responsive,
+                "frame": [
+                    "x": window.frame.origin.x,
+                    "y": window.frame.origin.y,
+                    "width": window.frame.width,
+                    "height": window.frame.height
+                ]
+            ])
+        }
     }
 
     func runMenuBarSelfTest(completion: @escaping ([String: Any]) -> Void) {
@@ -349,8 +370,11 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
         let hooksDoctorStarted = CFAbsoluteTimeGetCurrent()
         openHooksDoctor()
         let hooksDoctorDeferred = pendingMenuCloseAction != nil
+        let deferredHooksDoctorAction = pendingMenuCloseAction
+        pendingMenuCloseAction = nil
         statusNeedsRefreshAfterMenuClose = true
         menuDidClose(statusMenu)
+        deferredHooksDoctorAction?()
         let hooksDoctorShownAfterMenuClose = radarWindowController?.window?.isVisible == true
         updateStatusItem()
         let hooksDoctorSurvivesStatusRefresh = radarWindowController?.window?.isVisible == true

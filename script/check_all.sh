@@ -9,6 +9,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 (cd "$PACKAGE_DIR" && swift build)
 (cd "$PACKAGE_DIR" && swift run TaskLightChecks)
 "$ROOT_DIR/script/smoke_ui_refresh_latency.sh"
+"$ROOT_DIR/script/smoke_render_snapshot_coordinator.sh"
 "$ROOT_DIR/script/smoke_signal_bus.sh"
 "$ROOT_DIR/script/smoke_reliability_m38.sh"
 "$ROOT_DIR/script/smoke_observability_m39.sh"
@@ -21,10 +22,12 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_codex_quota_watcher_launch_agent.sh"
 "$ROOT_DIR/script/smoke_widget_snapshot.sh"
 "$ROOT_DIR/script/smoke_widgetkit_xcode_wrapper.sh"
+"$ROOT_DIR/script/smoke_widgetkit_desktop_acceptance.sh"
 "$ROOT_DIR/script/smoke_permission_safe_launch.sh"
 "$ROOT_DIR/script/smoke_quota_burn_rate.sh"
 "$ROOT_DIR/script/smoke_quota_burn_rate_maturity.sh"
 "$ROOT_DIR/script/smoke_usage_provider_adapter.sh"
+"$ROOT_DIR/script/smoke_operational_insights.sh"
 "$ROOT_DIR/script/smoke_turn_runtime_arbiter.sh"
 "$ROOT_DIR/script/smoke_multitask.sh"
 "$ROOT_DIR/script/smoke_verify_gate.sh"

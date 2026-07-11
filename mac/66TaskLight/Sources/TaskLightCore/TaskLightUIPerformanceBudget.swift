@@ -6,6 +6,10 @@ public enum TaskLightUIPerformanceBudget {
     public static let menuOpenMaxMilliseconds: Double = 450
     public static let radarOpenMaxMilliseconds: Double = 180
     public static let expandedApplyMaxMilliseconds: Double = 650
+    public static let renderSnapshotLoadMaxMilliseconds: Double = 160
+    public static let renderSnapshotTelemetryMaxBytes = 512 * 1024
+    public static let statusReplayRenderLimit = 40
+    public static let workspaceDoctorRenderLimit = 48
     public static let eventLogMaxBytes = 2 * 1024 * 1024
     public static let uiEventFlowLogMaxBytes = 4 * 1024 * 1024
     public static let retainedLogArchiveCount = 3

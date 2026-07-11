@@ -230,6 +230,8 @@ emit("visual_matrix_visible", payload.get("visible", "missing"))
 emit("visual_matrix_key", payload.get("key", "missing"))
 emit("visual_matrix_title", payload.get("title", "missing"))
 emit("visual_matrix_open_apply_ms", payload.get("open_apply_ms", "missing"))
+emit("visual_matrix_main_queue_probe_delay_ms", payload.get("main_queue_probe_delay_ms", "missing"))
+emit("visual_matrix_main_queue_responsive", payload.get("main_queue_responsive", "missing"))
 emit("visual_matrix_frame", payload.get("frame", {}))
 
 if payload.get("status") != "ok":
@@ -247,6 +249,12 @@ if float(frame.get("width", 0)) < 820 or float(frame.get("height", 0)) < 640:
 
 if float(payload.get("open_apply_ms", 9999)) > 500:
     raise SystemExit("visual matrix open_apply_ms exceeded 500ms")
+
+if payload.get("main_queue_responsive") is not True:
+    raise SystemExit("visual matrix progressive render blocked the main queue")
+
+if float(payload.get("main_queue_probe_delay_ms", 9999)) > 160:
+    raise SystemExit("visual matrix main queue probe exceeded 160ms")
 PY
       return
     fi

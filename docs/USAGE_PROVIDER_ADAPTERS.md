@@ -16,6 +16,13 @@ adapter layer is display-only and must stay separate from the main task lamp.
 - Do not read prompts, responses, raw logs, cookies, or shell history.
 - Do not store provider credentials in this repo.
 - Do not call external provider APIs from the default app path.
+- External provider executables require an explicit user-owned
+  `~/.66tasklight/providers/provider_opt_in.json` allowlist before they run or
+  appear in the app. Without it, the default is disabled.
+- Provider runners receive `TASKLIGHT_PROVIDER_NETWORK=disabled`, no inherited
+  application credentials, and an empty TaskLight-owned `HOME` directory. A
+  provider that needs broader access is a separate user-approved integration,
+  not a default feature.
 - Do not let provider quota change `global_status`, `lamp_status`, task status,
   sounds, hooks, or runtime arbitration.
 
@@ -35,4 +42,3 @@ Every adapter must produce a `UsageProviderSnapshot`:
 The first non-Codex provider implementation must ship with a separate security
 review, explicit user opt-in, sanitized storage design, and a dedicated smoke
 test proving that the main lamp remains unchanged.
-

@@ -19,7 +19,7 @@ struct TaskRadarWindowHostView: View {
         .frame(width: 420, height: 640, alignment: .center)
         .onAppear {
             guard !showsRadar else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.async {
                 showsRadar = true
             }
         }
@@ -75,7 +75,6 @@ struct TaskRadarPopoverView: View {
     @State private var selectedHookWorkspaces: Set<String> = []
     @State private var pendingHookInstallRequest: WorkspaceHookInstallRequest?
     @State private var showsHookInstallConfirm = false
-    @State private var cachedStatusReplayRecords: [StatusReplayRecord] = []
 
     init(viewModel: TaskLightViewModel, onOpenVisualMatrix: (() -> Void)? = nil) {
         self.viewModel = viewModel
@@ -100,15 +99,18 @@ struct TaskRadarPopoverView: View {
             quotaCard
             ScrollView(.vertical, showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    quotaPaceSection
-                    quotaResetSection
-                    providerSection
-                    hooksDoctorSection
-                    statusReplaySection
-                    interactionRulesSection
                     taskSection
                     observedSection
                     diagnosticsSection
+                    quotaPaceSection
+                    quotaResetSection
+                    quotaCalendarSection
+                    providerSection
+                    hooksDoctorSection
+                    workspaceRepairQueueSection
+                    statusReplaySection
+                    statusExplanationSection
+                    interactionRulesSection
                 }
                 .padding(.trailing, 4)
             }
@@ -116,9 +118,6 @@ struct TaskRadarPopoverView: View {
         .padding(16)
         .frame(width: 420, height: 640, alignment: .topLeading)
         .background(radarBackground)
-        .onAppear {
-            refreshStatusReplayCache()
-        }
         .confirmationDialog(
             "安装选中的 workspace hooks？",
             isPresented: $showsHookInstallConfirm,
@@ -285,7 +284,24 @@ struct TaskRadarPopoverView: View {
                 .padding(10)
                 .background(glassCard(cornerRadius: 14))
             }
-            Text("Provider 数据只用于额度展示，不参与主灯判定；禁用 Provider 不联网、不读凭证。")
+            Text("Provider 数据只用于额度展示，不参与主灯判定；外部 Provider 必须由用户显式 opt-in，默认不联网、不读凭证。")
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+        }
+    }
+
+    private var quotaCalendarSection: some View {
+        let entries = viewModel.quotaCalendarEntries(limit: 6)
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Quota Calendar", subtitle: entries.contains { $0.severity == "attention" } ? "attention" : "upcoming")
+            if entries.isEmpty {
+                emptyRow("No reset or credit expiry time is available yet")
+            } else {
+                ForEach(entries) { entry in
+                    quotaCalendarRow(entry)
+                }
+            }
+            Text("Reset 和 expiry 只用于额度预警，不参与主灯状态。")
                 .font(LuckyCatTokens.Typography.taskMeta)
                 .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
         }
@@ -384,7 +400,7 @@ struct TaskRadarPopoverView: View {
     }
 
     private var statusReplaySection: some View {
-        let records = cachedStatusReplayRecords
+        let records = viewModel.statusReplayRecords(hours: 24, limit: 8)
         return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline) {
                 Text("24h Status Replay")
@@ -410,8 +426,62 @@ struct TaskRadarPopoverView: View {
         }
     }
 
-    private func refreshStatusReplayCache() {
-        cachedStatusReplayRecords = viewModel.statusReplayRecords(hours: 24, limit: 8)
+    private var workspaceRepairQueueSection: some View {
+        let queue = viewModel.workspaceRepairQueue(limit: 4)
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Repair Queue", subtitle: queue.isEmpty ? "clear" : "\(queue.count)")
+            if queue.isEmpty {
+                emptyRow("No workspace repair action is waiting")
+            } else {
+                ForEach(queue) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(item.name)
+                                .font(LuckyCatTokens.Typography.taskTitle)
+                                .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                            Spacer(minLength: 0)
+                            Text(item.manualTrustRequired ? "Manual Trust" : item.requiresUserConfirmation ? "Confirm install" : "Refresh")
+                                .font(LuckyCatTokens.Typography.statusPill)
+                                .foregroundStyle(workspaceSeverityColor(item.severity))
+                        }
+                        Text(item.action)
+                            .font(LuckyCatTokens.Typography.taskMeta)
+                            .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                            .lineLimit(2)
+                    }
+                    .padding(10)
+                    .background(glassCard(cornerRadius: 14))
+                }
+            }
+        }
+    }
+
+    private var statusExplanationSection: some View {
+        let explanations = viewModel.statusExplanations(limit: 4)
+        return VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("Why This Status", subtitle: explanations.isEmpty ? "stable" : "evidence")
+            if explanations.isEmpty {
+                emptyRow("No current status anomaly needs explanation")
+            } else {
+                ForEach(explanations) { explanation in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(explanation.title)
+                            .font(LuckyCatTokens.Typography.taskTitle)
+                            .foregroundStyle(severityColorForInsight(explanation.severity))
+                        Text(explanation.detail)
+                            .font(LuckyCatTokens.Typography.taskMeta)
+                            .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                            .lineLimit(2)
+                        Text(explanation.recommendedAction)
+                            .font(LuckyCatTokens.Typography.statusPill)
+                            .foregroundStyle(LuckyCatTokens.Palette.amber)
+                            .lineLimit(2)
+                    }
+                    .padding(10)
+                    .background(glassCard(cornerRadius: 14))
+                }
+            }
+        }
     }
 
     private var interactionRulesSection: some View {
@@ -606,6 +676,33 @@ struct TaskRadarPopoverView: View {
         .background(glassCard(cornerRadius: 14))
     }
 
+    private func quotaCalendarRow(_ entry: QuotaCalendarEntry) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: entry.kind == "credit_expiry" ? "hourglass" : "arrow.clockwise")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(severityColorForInsight(entry.severity))
+                .frame(width: 24, height: 24)
+                .macOSKitGlassChip()
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.title)
+                    .font(LuckyCatTokens.Typography.taskTitle)
+                    .foregroundStyle(LuckyCatTokens.Palette.textPrimary)
+                Text(entry.detail)
+                    .font(LuckyCatTokens.Typography.taskMeta)
+                    .foregroundStyle(LuckyCatTokens.Palette.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text(entry.dueAt.map { resetExpiryDisplay($0) } ?? "--")
+                .font(LuckyCatTokens.Typography.taskMeta)
+                .foregroundStyle(severityColorForInsight(entry.severity))
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(10)
+        .background(glassCard(cornerRadius: 14))
+    }
+
     private func workspaceDoctorRow(_ row: WorkspaceDoctorRow) -> some View {
         HStack(alignment: .top, spacing: 9) {
             if workspaceDoctorInstallable(row) {
@@ -722,6 +819,19 @@ struct TaskRadarPopoverView: View {
             return LuckyCatTokens.Palette.red
         default:
             return LuckyCatTokens.Palette.textSecondary.opacity(0.7)
+        }
+    }
+
+    private func severityColorForInsight(_ severity: String) -> Color {
+        switch severity {
+        case "attention":
+            return LuckyCatTokens.Palette.red
+        case "warning", "needs_review":
+            return LuckyCatTokens.Palette.amber
+        case "ok":
+            return LuckyCatTokens.Palette.green
+        default:
+            return LuckyCatTokens.Palette.textSecondary
         }
     }
 

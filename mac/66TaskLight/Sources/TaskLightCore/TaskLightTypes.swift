@@ -30,6 +30,7 @@ public struct TaskLightConfig: Sendable {
     public var uiStateURL: URL
     public var uiEventFlowURL: URL
     public var quotaHistoryURL: URL
+    public var renderTelemetryURL: URL
     public var widgetSnapshotURL: URL
     public var uiClientsDirectoryURL: URL
     public var workspaceCoverageDirectoryURL: URL
@@ -63,6 +64,7 @@ public struct TaskLightConfig: Sendable {
         uiStateURL: URL? = nil,
         uiEventFlowURL: URL? = nil,
         quotaHistoryURL: URL? = nil,
+        renderTelemetryURL: URL? = nil,
         widgetSnapshotURL: URL? = nil,
         uiClientsDirectoryURL: URL? = nil,
         workspaceCoverageDirectoryURL: URL? = nil,
@@ -78,6 +80,7 @@ public struct TaskLightConfig: Sendable {
         self.uiStateURL = uiStateURL ?? stateDirectory.appendingPathComponent("ui_state.json")
         self.uiEventFlowURL = uiEventFlowURL ?? stateDirectory.appendingPathComponent("ui_event_flow.jsonl")
         self.quotaHistoryURL = quotaHistoryURL ?? stateDirectory.appendingPathComponent("quota_history.jsonl")
+        self.renderTelemetryURL = renderTelemetryURL ?? stateDirectory.appendingPathComponent("render_telemetry.jsonl")
         self.widgetSnapshotURL = widgetSnapshotURL ?? stateDirectory.appendingPathComponent("widget_snapshot.json")
         self.uiClientsDirectoryURL = uiClientsDirectoryURL ?? stateDirectory.appendingPathComponent("ui_clients")
         self.workspaceCoverageDirectoryURL = workspaceCoverageDirectoryURL ?? stateDirectory.appendingPathComponent("workspace_coverage")
@@ -113,6 +116,7 @@ public struct TaskLightConfig: Sendable {
         let uiStateURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_STATE_PATH"].map { URL(fileURLWithPath: $0) }
         let uiEventFlowURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_EVENT_FLOW_PATH"].map { URL(fileURLWithPath: $0) }
         let quotaHistoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_QUOTA_HISTORY_PATH"].map { URL(fileURLWithPath: $0) }
+        let renderTelemetryURL = ProcessInfo.processInfo.environment["TASKLIGHT_RENDER_TELEMETRY_PATH"].map { URL(fileURLWithPath: $0) }
         let widgetSnapshotURL = ProcessInfo.processInfo.environment["TASKLIGHT_WIDGET_SNAPSHOT_PATH"].map { URL(fileURLWithPath: $0) }
         let uiClientsDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_UI_CLIENTS_DIR"].map { URL(fileURLWithPath: $0) }
         let workspaceCoverageDirectoryURL = ProcessInfo.processInfo.environment["TASKLIGHT_WORKSPACE_COVERAGE_DIR"].map { URL(fileURLWithPath: $0) }
@@ -132,6 +136,7 @@ public struct TaskLightConfig: Sendable {
             uiStateURL: uiStateURL,
             uiEventFlowURL: uiEventFlowURL,
             quotaHistoryURL: quotaHistoryURL,
+            renderTelemetryURL: renderTelemetryURL,
             widgetSnapshotURL: widgetSnapshotURL,
             uiClientsDirectoryURL: uiClientsDirectoryURL,
             workspaceCoverageDirectoryURL: workspaceCoverageDirectoryURL,

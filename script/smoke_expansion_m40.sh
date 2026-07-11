@@ -9,14 +9,27 @@ PLUGIN_DIR="$STATE_DIR/providers"
 mkdir -p "$PLUGIN_DIR/manifests"
 
 cat >"$TMP_ROOT/provider.sh" <<'SH'
-#!/usr/bin/env bash
+#!/bin/sh
 printf '%s\n' '{"health":"ok","quota_text":"Q42","remaining_percent":42,"is_low_quota":false,"source_label":"smoke provider","freshness_label":"fresh"}'
 SH
 chmod +x "$TMP_ROOT/provider.sh"
 cat >"$PLUGIN_DIR/manifests/smoke.json" <<JSON
 {"schema_version":"0.1","id":"smoke","display_name":"Smoke Provider","enabled":true,"executable":"$TMP_ROOT/provider.sh","timeout_seconds":5}
 JSON
+TASKLIGHT_STATE_DIR="$STATE_DIR" python3 "$ROOT_DIR/script/tasklight_provider_plugins.py" --once >/dev/null
+python3 - "$PLUGIN_DIR/snapshots/smoke.json" <<'PY'
+import json
+import sys
+from pathlib import Path
 
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["health"] == "disabled", payload
+assert payload["freshness_label"] == "user opt-in required", payload
+PY
+
+cat >"$PLUGIN_DIR/provider_opt_in.json" <<'JSON'
+{"schema_version":"0.1","explicit_user_opt_in":true,"provider_ids":["smoke"]}
+JSON
 TASKLIGHT_STATE_DIR="$STATE_DIR" python3 "$ROOT_DIR/script/tasklight_provider_plugins.py" --once >/dev/null
 python3 - "$PLUGIN_DIR/snapshots/smoke.json" <<'PY'
 import json

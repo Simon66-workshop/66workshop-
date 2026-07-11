@@ -36,6 +36,21 @@ def atomic_write(path: Path, payload: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def load_opt_in(providers: Path) -> set[str]:
+    """Only explicitly user-approved provider ids may run."""
+    path = providers / "provider_opt_in.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return set()
+    if not isinstance(payload, dict) or payload.get("explicit_user_opt_in") is not True:
+        return set()
+    ids = payload.get("provider_ids")
+    if not isinstance(ids, list):
+        return set()
+    return {str(item) for item in ids if isinstance(item, str)}
+
+
 def validate_manifest(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -91,6 +106,10 @@ def run_once(root: Path | None = None) -> dict[str, Any]:
     providers = provider_root(root)
     manifests = providers / "manifests"
     snapshots = providers / "snapshots"
+    sandbox_home = providers / ".plugin-home"
+    sandbox_home.mkdir(parents=True, exist_ok=True)
+    sandbox_home.chmod(0o700)
+    opted_in_ids = load_opt_in(providers)
     manifest_paths = sorted(manifests.glob("*.json")) if manifests.exists() else []
     if not manifest_paths:
         return {"schema_version": "0.1", "updated_at": now_iso(), "provider_count": 0, "providers": []}
@@ -101,7 +120,14 @@ def run_once(root: Path | None = None) -> dict[str, Any]:
             manifest = validate_manifest(path)
         except (OSError, ValueError, json.JSONDecodeError):
             continue
-        if not bool(manifest.get("enabled", False)):
+        if manifest["id"] not in opted_in_ids:
+            snapshot = normalize_snapshot(manifest, {
+                "health": "disabled",
+                "quota_text": "disabled",
+                "freshness_label": "user opt-in required",
+                "conflict_label": "Provider is disabled until the user adds it to provider_opt_in.json.",
+            })
+        elif not bool(manifest.get("enabled", False)):
             snapshot = normalize_snapshot(manifest, {"health": "disabled", "quota_text": "disabled", "freshness_label": "disabled"})
         else:
             timeout = min(10.0, max(0.2, float(manifest.get("timeout_seconds") or 2)))
@@ -112,7 +138,12 @@ def run_once(root: Path | None = None) -> dict[str, Any]:
                     capture_output=True,
                     timeout=timeout,
                     check=False,
-                    env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(Path.home())},
+                    env={
+                        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                        "HOME": str(sandbox_home),
+                        "TASKLIGHT_PROVIDER_NETWORK": "disabled",
+                        "TASKLIGHT_PROVIDER_CREDENTIALS": "unavailable",
+                    },
                 )
                 if completed.returncode != 0:
                     raise RuntimeError(f"exit {completed.returncode}")

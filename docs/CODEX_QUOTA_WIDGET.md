@@ -139,6 +139,14 @@ missing  unknown
 
 `effective_remaining_percent` is the minimum remaining percent across valid `display_windows`.
 
+## Quota Calendar
+
+M6 adds a display-only calendar in Task Radar. It orders upcoming window resets
+and each unredeemed reset credit's precise expiry time. Entries within 24 hours
+are marked `attention`; entries within 72 hours are marked `warning`. These are
+local diagnostic reminders only: they never trigger a reset, redeem a credit,
+change `global_status`, or change `lamp_status`.
+
 ## Quota State Schema
 
 `quota_state.json` stores two window sets:

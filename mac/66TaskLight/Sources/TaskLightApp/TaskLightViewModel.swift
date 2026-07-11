@@ -7,6 +7,11 @@ import TaskLightCore
 import WidgetKit
 #endif
 
+private let taskLightPresentationWriteQueue = DispatchQueue(
+    label: "com.66tasklight.presentation-write",
+    qos: .utility
+)
+
 enum TaskRadarDiagnosticSeverity: String {
     case ok
     case warning
@@ -49,11 +54,14 @@ final class TaskLightViewModel: ObservableObject {
     @Published var muted: Bool
     @Published var workspaceCoveragePresentation: TaskLightWorkspaceCoveragePresentation?
     @Published var workspaceHookInstallResult: WorkspaceHookInstallResult?
-    @Published private(set) var uiStateRevision: Int
-    @Published private var recentEventSnapshot: [TaskLightEventRecord]
+    // These are diagnostic/read-model caches. Publishing them caused every
+    // observed SwiftUI surface to redraw on cache-only refreshes.
+    private var recentEventSnapshot: [TaskLightEventRecord]
+    private var renderSnapshotTelemetry: TaskLightRenderTelemetry?
 
     let config: TaskLightConfig
     let store: TaskLightStore
+    private let renderSnapshotCoordinator: TaskLightRenderSnapshotCoordinator?
 
     private let previewMode: Bool
     private var timer: Timer?
@@ -65,11 +73,10 @@ final class TaskLightViewModel: ObservableObject {
     private var pendingWorkspaceCoverageRefreshes: [DispatchWorkItem] = []
     private var pendingWorkspaceCoverageHide: DispatchWorkItem?
     private var pendingInitialRefresh: DispatchWorkItem?
-    private var recentEventsFingerprint: String?
     private var alertEventSnapshot: [TaskLightEventRecord]
+    private var recentEventsFingerprint: String?
     private var lastAlertPlaybackFingerprint: String?
     private var lastAlertPlaybackMuted: Bool?
-    private var lastWatchedUIStateFileFingerprint: String?
     private var lastLoadedUIStateFileFingerprint: String?
     private var lastUIClientDiagnosticSignature: String?
     private var lastUIClientDiagnosticWriteAt: Date?
@@ -78,12 +85,21 @@ final class TaskLightViewModel: ObservableObject {
     private var lastQuotaHistorySignature: String?
     private var lastWidgetSnapshotSignature: String?
     private var lastWidgetTimelineReloadAt: Date?
+    private var snapshotRefreshInFlight = false
+    private var workspaceDoctorSnapshot: [WorkspaceDoctorRow] = []
+    private var statusReplaySnapshot: [StatusReplayRecord] = []
+    private var quotaHistorySnapshot: [QuotaHistorySample] = []
+    private var externalProviderSnapshot: [UsageProviderSnapshot] = []
+    private var quotaBurnRateSnapshotCache: QuotaBurnRateSnapshot?
+    private var quotaResetSnapshotCache: CodexQuotaResetSnapshot?
+    private var lastRenderTelemetryFingerprint: String?
     private var autoMeetingApplied = false
     private var suppressCompactTapUntil: Date?
 
     init(config: TaskLightConfig = .fromEnvironment(), store: TaskLightStore? = nil) {
         self.config = config
         self.store = store ?? TaskLightStore(config: config)
+        self.renderSnapshotCoordinator = TaskLightRenderSnapshotCoordinator(config: config)
         self.previewMode = false
         self.store.ensureLayout()
         let initialUIState = self.store.loadProjectedUIState()
@@ -101,15 +117,15 @@ final class TaskLightViewModel: ObservableObject {
         self.muted = self.ledger.muted
         self.recentEventSnapshot = []
         self.alertEventSnapshot = []
-        self.uiStateRevision = 0
+        self.renderSnapshotTelemetry = nil
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: initialUIState, config: config)
-        self.lastLoadedUIStateFileFingerprint = Self.fileFingerprint(for: config.uiStateURL)
     }
 
     init(previewUIState: TaskLightUIState) {
         let config = TaskLightConfig.fromEnvironment()
         self.config = config
         self.store = TaskLightStore(config: config)
+        self.renderSnapshotCoordinator = nil
         self.previewMode = true
         self.uiState = previewUIState
         self.expanded = false
@@ -123,9 +139,8 @@ final class TaskLightViewModel: ObservableObject {
         self.muted = false
         self.recentEventSnapshot = []
         self.alertEventSnapshot = []
-        self.uiStateRevision = 0
+        self.renderSnapshotTelemetry = nil
         self.lastUIStateRefreshSignature = Self.uiStateRefreshSignature(for: previewUIState, config: config)
-        self.lastLoadedUIStateFileFingerprint = "preview"
     }
 
     func start() {
@@ -149,26 +164,37 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func refresh() {
-        let uiStateFileFingerprint = Self.fileFingerprint(for: config.uiStateURL)
-        if uiStateFileFingerprint != "missing",
-           uiStateFileFingerprint == lastLoadedUIStateFileFingerprint {
-            if store.loadWidgetSnapshot() == nil {
-                saveWidgetSnapshot(for: uiState)
+        guard !previewMode else { return }
+        guard !snapshotRefreshInFlight, let renderSnapshotCoordinator else { return }
+        snapshotRefreshInFlight = true
+        renderSnapshotCoordinator.refresh { [weak self] snapshot in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.snapshotRefreshInFlight = false
+                self.applyRenderSnapshot(snapshot)
             }
-            refreshRecentEventsIfNeeded()
-            handleAlertPlayback()
-            saveUIClientDiagnostic()
-            return
         }
-        lastLoadedUIStateFileFingerprint = uiStateFileFingerprint
+    }
+
+    private func applyRenderSnapshot(_ snapshot: TaskLightRenderSnapshot) {
         let previousState = uiState
-        let nextState = store.loadProjectedUIState()
+        let nextState = snapshot.uiState
+        workspaceDoctorSnapshot = snapshot.workspaceDoctorRows
+        statusReplaySnapshot = snapshot.statusReplay
+        quotaHistorySnapshot = snapshot.quotaHistory
+        externalProviderSnapshot = snapshot.externalProviders
+        alertEventSnapshot = snapshot.recentEvents
+        recentEventSnapshot = snapshot.recentEvents
+        recentEventsFingerprint = snapshot.recentEvents.map { "\($0.event_id):\($0.created_at)" }.joined(separator: "|")
+        let telemetry = TaskLightRenderTelemetry(
+            load_milliseconds: snapshot.loadMilliseconds,
+            status: snapshot.cacheHit ? "cache_hit" : "loaded",
+            cache_hit: snapshot.cacheHit
+        )
+        renderSnapshotTelemetry = telemetry
         recordQuotaHistoryIfNeeded(nextState.quota)
         let nextSignature = Self.uiStateRefreshSignature(for: nextState, config: config)
         let presentationChanged = nextSignature != lastUIStateRefreshSignature
-        if presentationChanged {
-            uiStateRevision += 1
-        }
         lastUIStateRefreshSignature = nextSignature
         if presentationChanged {
             uiState = nextState
@@ -176,9 +202,14 @@ final class TaskLightViewModel: ObservableObject {
             applyAutoMeetingPresenceIfNeeded()
             saveWidgetSnapshot(for: nextState)
         }
-        refreshRecentEventsIfNeeded()
+        quotaBurnRateSnapshotCache = buildQuotaBurnRateSnapshot()
+        quotaResetSnapshotCache = buildQuotaResetSnapshot()
+        if !presentationChanged {
+            saveWidgetSnapshot(for: nextState)
+        }
         saveUIClientDiagnostic()
         handleAlertPlayback()
+        recordRenderTelemetry(telemetry, fingerprint: snapshot.fingerprint, status: presentationChanged ? "updated" : "cache_or_auxiliary")
         if presentationChanged {
             persistUIState()
         }
@@ -345,6 +376,10 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func quotaBurnRateSnapshot() -> QuotaBurnRateSnapshot {
+        quotaBurnRateSnapshotCache ?? buildQuotaBurnRateSnapshot()
+    }
+
+    private func buildQuotaBurnRateSnapshot() -> QuotaBurnRateSnapshot {
         guard let quota = uiState.quota, quota.fresh else {
             return QuotaBurnRateSnapshot(
                 status: "unknown",
@@ -380,7 +415,7 @@ final class TaskLightViewModel: ObservableObject {
                 confidence: .stable
             )
         }
-        let history = store.loadQuotaHistory()
+        let history = quotaHistorySnapshot
         let currentWindows = quotaBurnCurrentWindows(from: quota)
         let windows = currentWindows.map { current in
             burnRateWindow(current: current, history: history)
@@ -412,6 +447,10 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func quotaResetSnapshot() -> CodexQuotaResetSnapshot {
+        quotaResetSnapshotCache ?? buildQuotaResetSnapshot()
+    }
+
+    private func buildQuotaResetSnapshot() -> CodexQuotaResetSnapshot {
         guard let quota = uiState.quota, quota.fresh else {
             return CodexQuotaResetSnapshot(
                 status: "unknown",
@@ -473,7 +512,7 @@ final class TaskLightViewModel: ObservableObject {
                 )
             ]
         }
-        return store.loadWorkspaceDoctorRows(limit: limit)
+        return Array(workspaceDoctorSnapshot.prefix(limit))
     }
 
     func workspaceHookInstallRequest(for selectedWorkspaces: Set<String>) -> WorkspaceHookInstallRequest? {
@@ -509,7 +548,10 @@ final class TaskLightViewModel: ObservableObject {
 
     func statusReplayRecords(hours: Double = 24, limit: Int = 16) -> [StatusReplayRecord] {
         let since = Date().addingTimeInterval(-max(0.25, hours) * 3600)
-        return store.loadStatusReplayRecords(since: since, limit: limit)
+        return statusReplaySnapshot
+            .filter { TaskLightTaskRecord.parseTimestamp($0.recorded_at).map { $0 >= since } ?? false }
+            .prefix(limit)
+            .map { $0 }
     }
 
     func copyStatusReplayEvidence() {
@@ -520,6 +562,22 @@ final class TaskLightViewModel: ObservableObject {
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(lines.isEmpty ? "No status replay records in the last 24h." : lines.joined(separator: "\n"), forType: .string)
+    }
+
+    func statusExplanations(limit: Int = 4) -> [TaskLightStatusExplanation] {
+        TaskLightOperationalInsights.statusExplanations(
+            uiState: uiState,
+            replay: statusReplaySnapshot,
+            limit: limit
+        )
+    }
+
+    func workspaceRepairQueue(limit: Int = 8) -> [WorkspaceRepairQueueItem] {
+        TaskLightOperationalInsights.workspaceRepairQueue(rows: workspaceDoctorSnapshot, limit: limit)
+    }
+
+    func quotaCalendarEntries(limit: Int = 8) -> [QuotaCalendarEntry] {
+        TaskLightOperationalInsights.quotaCalendar(reset: quotaResetSnapshot(), limit: limit)
     }
 
     func interactionRulesSummary() -> InteractionRuleSelfTestResult {
@@ -541,7 +599,7 @@ final class TaskLightViewModel: ObservableObject {
             DisabledUsageProviderAdapter(id: "openai_api", displayName: "OpenAI API")
         ]
         let builtIn = adapters.map { $0.snapshot(from: uiState) }
-        let external = store.loadExternalUsageProviderSnapshots()
+        let external = externalProviderSnapshot
         let externalIDs = Set(external.map(\.id))
         return builtIn.filter { !externalIDs.contains($0.id) } + external
     }
@@ -699,28 +757,6 @@ final class TaskLightViewModel: ObservableObject {
         Array(recentEventSnapshot.prefix(limit))
     }
 
-    private func refreshRecentEventsIfNeeded() {
-        let eventURL = store.config.eventsURL
-        let attributes = try? FileManager.default.attributesOfItem(atPath: eventURL.path)
-        let modifiedAt = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        let fileSize = (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
-        let fingerprint = "\(modifiedAt):\(fileSize)"
-        guard fingerprint != recentEventsFingerprint else { return }
-        recentEventsFingerprint = fingerprint
-        let loadedEvents = store.loadRecentEvents()
-        alertEventSnapshot = loadedEvents
-        recentEventSnapshot = Array(
-            loadedEvents
-                .sorted { lhs, rhs in
-                    if lhs.created_at != rhs.created_at {
-                        return lhs.created_at > rhs.created_at
-                    }
-                    return lhs.event_id > rhs.event_id
-                }
-                .prefix(TaskLightUIPerformanceBudget.expandedRecentEventLimit)
-        )
-    }
-
     private func recordQuotaHistoryIfNeeded(_ quota: CodexQuotaUIState?) {
         guard let quota, quota.fresh else { return }
         let signature = [
@@ -734,12 +770,19 @@ final class TaskLightViewModel: ObservableObject {
         ].joined(separator: "|")
         guard signature != lastQuotaHistorySignature else { return }
         lastQuotaHistorySignature = signature
-        store.appendQuotaHistorySample(from: quota)
+        guard let quotaData = try? JSONEncoder().encode(quota) else { return }
+        let config = self.config
+        taskLightPresentationWriteQueue.async {
+            guard let decodedQuota = try? JSONDecoder().decode(CodexQuotaUIState.self, from: quotaData) else {
+                return
+            }
+            TaskLightStore(config: config).appendQuotaHistorySample(from: decodedQuota)
+        }
     }
 
     private func saveWidgetSnapshot(for state: TaskLightUIState) {
         let providerSnapshots = usageProviderSnapshots()
-        let doctorRows = store.loadWorkspaceDoctorRows(limit: 200)
+        let doctorRows = workspaceDoctorSnapshot
         let workspaceOK = doctorRows.filter { $0.severity == "ok" }.count
         let workspaceWarning = doctorRows.filter { $0.severity == "warning" || $0.severity == "needs_review" }.count
         let workspaceAttention = doctorRows.filter { $0.severity == "attention" }.count
@@ -772,14 +815,29 @@ final class TaskLightViewModel: ObservableObject {
             providers: providerSnapshots
         )
         guard let signature = TaskLightWidgetBridge.encodeSnapshot(snapshot) else {
-            store.saveWidgetSnapshot(snapshot)
+            guard let snapshotData = try? JSONEncoder().encode(snapshot) else { return }
+            let config = self.config
+            taskLightPresentationWriteQueue.async {
+                guard let decodedSnapshot = try? JSONDecoder().decode(TaskLightWidgetSnapshot.self, from: snapshotData) else {
+                    return
+                }
+                TaskLightStore(config: config).saveWidgetSnapshot(decodedSnapshot)
+            }
             return
         }
         let changed = signature != lastWidgetSnapshotSignature
+        guard changed else { return }
         lastWidgetSnapshotSignature = signature
-        store.saveWidgetSnapshot(snapshot)
-        if changed {
-            reloadWidgetTimelineIfNeeded()
+        guard let snapshotData = try? JSONEncoder().encode(snapshot) else { return }
+        let config = self.config
+        taskLightPresentationWriteQueue.async { [weak self] in
+            guard let decodedSnapshot = try? JSONDecoder().decode(TaskLightWidgetSnapshot.self, from: snapshotData) else {
+                return
+            }
+            TaskLightStore(config: config).saveWidgetSnapshot(decodedSnapshot)
+            DispatchQueue.main.async {
+                self?.reloadWidgetTimelineIfNeeded()
+            }
         }
     }
 
@@ -813,6 +871,23 @@ final class TaskLightViewModel: ObservableObject {
         if !isMeetingLike, autoMeetingApplied, presenceMode == .focusCapsule {
             autoMeetingApplied = false
             setPresenceMode(.normal)
+        }
+    }
+
+    private func recordRenderTelemetry(_ telemetry: TaskLightRenderTelemetry, fingerprint: String, status: String) {
+        guard fingerprint != lastRenderTelemetryFingerprint
+                || telemetry.load_milliseconds > TaskLightUIPerformanceBudget.renderSnapshotLoadMaxMilliseconds else {
+            return
+        }
+        lastRenderTelemetryFingerprint = fingerprint
+        let config = self.config
+        let recorded = TaskLightRenderTelemetry(
+            load_milliseconds: telemetry.load_milliseconds,
+            status: status,
+            cache_hit: telemetry.cache_hit
+        )
+        DispatchQueue.global(qos: .utility).async {
+            TaskLightStore(config: config).appendRenderTelemetry(recorded)
         }
     }
 
@@ -1316,7 +1391,12 @@ final class TaskLightViewModel: ObservableObject {
                 value: "\(diagnostics.anomaly_count ?? 0)",
                 severity: (diagnostics.anomaly_count ?? 0) == 0 ? .ok : .warning
             ),
-            TaskRadarDiagnosticRow(label: "Transitions 1h", value: "\(diagnostics.status_transition_count_1h ?? 0)", severity: .unknown)
+            TaskRadarDiagnosticRow(label: "Transitions 1h", value: "\(diagnostics.status_transition_count_1h ?? 0)", severity: .unknown),
+            TaskRadarDiagnosticRow(
+                label: "Snapshot",
+                value: renderSnapshotTelemetry.map { String(format: "%.0fms", $0.load_milliseconds) } ?? "warming",
+                severity: (renderSnapshotTelemetry?.load_milliseconds ?? 0) <= TaskLightUIPerformanceBudget.renderSnapshotLoadMaxMilliseconds ? .ok : .warning
+            )
         ]
     }
 
@@ -1398,8 +1478,8 @@ final class TaskLightViewModel: ObservableObject {
 
     private func scheduleStateFileRefresh() {
         let fingerprint = Self.fileFingerprint(for: config.uiStateURL)
-        guard fingerprint != lastWatchedUIStateFileFingerprint else { return }
-        lastWatchedUIStateFileFingerprint = fingerprint
+        guard fingerprint != lastLoadedUIStateFileFingerprint else { return }
+        lastLoadedUIStateFileFingerprint = fingerprint
         pendingStateFileRefresh?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             self?.refresh()
@@ -1484,7 +1564,14 @@ final class TaskLightViewModel: ObservableObject {
         }
         if ledgerChanged {
             ledger.updated_at = TaskLightTaskRecord.nowString()
-            store.savePlayedLedger(ledger)
+            guard let ledgerData = try? JSONEncoder().encode(ledger) else { return }
+            let config = self.config
+            taskLightPresentationWriteQueue.async {
+                guard let decodedLedger = try? JSONDecoder().decode(TaskLightPlayedEventsLedger.self, from: ledgerData) else {
+                    return
+                }
+                TaskLightStore(config: config).savePlayedLedger(decodedLedger)
+            }
         }
         self.ledger = ledger
         self.muted = ledger.muted
@@ -1614,12 +1701,15 @@ final class TaskLightViewModel: ObservableObject {
         }
         lastUIClientDiagnosticSignature = signature
         lastUIClientDiagnosticWriteAt = now
-        store.saveUIClientRecord(
-            bundleID: bundleID,
-            bundlePath: bundleURL.path,
-            executablePath: executableURL.path,
-            buildID: buildID
-        )
+        let config = self.config
+        taskLightPresentationWriteQueue.async {
+            TaskLightStore(config: config).saveUIClientRecord(
+                bundleID: bundleID,
+                bundlePath: bundleURL.path,
+                executablePath: executableURL.path,
+                buildID: buildID
+            )
+        }
     }
 
     private static func fileFingerprint(for url: URL) -> String {
@@ -1694,7 +1784,10 @@ final class TaskLightViewModel: ObservableObject {
                 "turn_id": reference.turn_id ?? "none"
             ]
         }
-        store.appendUIEventFlowRecord(payload)
+        let config = self.config
+        taskLightPresentationWriteQueue.async {
+            TaskLightStore(config: config).appendUIEventFlowRecord(payload)
+        }
     }
 
     private func compactReferenceTask() -> TaskLightTaskSummary? {

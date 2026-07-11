@@ -51,7 +51,9 @@ private struct LuckyCatExpandedDashboardHostView: View {
         .frame(width: LuckyCatLayout.expandedWidth, height: LuckyCatLayout.expandedHeight)
         .onAppear {
             guard !showsDashboard else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // Show the lightweight shell immediately, then let AppKit commit its
+            // first frame before the dashboard's glass hierarchy is constructed.
+            DispatchQueue.main.async {
                 showsDashboard = true
             }
         }

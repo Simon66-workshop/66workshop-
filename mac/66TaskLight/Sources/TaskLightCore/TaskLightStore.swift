@@ -240,6 +240,27 @@ public final class TaskLightStore {
         statusReplayCache = nil
     }
 
+    public func appendRenderTelemetry(_ telemetry: TaskLightRenderTelemetry) {
+        ensureLayout()
+        rotateJSONLIfNeeded(
+            config.renderTelemetryURL,
+            maxBytes: UInt64(TaskLightUIPerformanceBudget.renderSnapshotTelemetryMaxBytes),
+            archiveCount: TaskLightUIPerformanceBudget.retainedLogArchiveCount
+        )
+        guard let data = try? encoder.encode(telemetry),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return
+        }
+        let line = encoded + "\n"
+        let fd = open(config.renderTelemetryURL.path, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.withCString { pointer in
+            write(fd, pointer, strlen(pointer))
+        }
+        fsync(fd)
+    }
+
     private func rotateJSONLIfNeeded(_ url: URL, maxBytes: UInt64, archiveCount: Int) {
         guard maxBytes > 0, archiveCount > 0,
               let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
@@ -312,6 +333,8 @@ public final class TaskLightStore {
 
     public func loadExternalUsageProviderSnapshots() -> [UsageProviderSnapshot] {
         ensureLayout()
+        let optIn = loadProviderOptIn()
+        guard optIn.explicit_user_opt_in else { return [] }
         let directory = config.providersDirectoryURL.appendingPathComponent("snapshots")
         let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return urls
@@ -319,8 +342,14 @@ public final class TaskLightStore {
             .compactMap { url in
                 try? readJSON(from: url) as UsageProviderSnapshot
             }
-            .filter { $0.diagnostic_only }
+            .filter { $0.diagnostic_only && $0.id != "codex" && optIn.allows($0.id) }
             .sorted { $0.id < $1.id }
+    }
+
+    public func loadProviderOptIn() -> TaskLightProviderOptIn {
+        ensureLayout()
+        let url = config.providersDirectoryURL.appendingPathComponent("provider_opt_in.json")
+        return (try? readJSON(from: url) as TaskLightProviderOptIn) ?? TaskLightProviderOptIn()
     }
 
     private func saveWidgetSnapshotToAppGroup(_ snapshot: TaskLightWidgetSnapshot) {

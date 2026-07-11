@@ -45,6 +45,10 @@ def reset():
     for child in state_dir.iterdir():
         if child.name in {"tasks", "turn_bindings", "thread_bindings"}:
             shutil.rmtree(child)
+        elif child.is_dir():
+            # New sidecar directories (for example provider state) are allowed
+            # in a state root and must not make an arbiter fixture reset crash.
+            shutil.rmtree(child)
         else:
             child.unlink(missing_ok=True)
     (state_dir / "tasks").mkdir(exist_ok=True)
