@@ -19,7 +19,10 @@ struct TaskRadarWindowHostView: View {
         .frame(width: 420, height: 640, alignment: .center)
         .onAppear {
             guard !showsRadar else { return }
-            DispatchQueue.main.async {
+            // Render the bounded summary shell first; defer the diagnostic
+            // tree by one run-loop beat so opening the radar never competes
+            // with native menu teardown.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 showsRadar = true
             }
         }

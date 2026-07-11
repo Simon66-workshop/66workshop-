@@ -685,11 +685,12 @@ rg -q "edgeCollapseRequestID" "$view_model" \
 rg -q "edgeRestoreRequestID" "$view_model" \
   || fail "view model restore request command channel is missing"
 
-rg -q "self\\.edgeCollapsed = false" "$view_model" \
-  || fail "app launch should default to the full compact cat instead of restoring the edge rail"
+rg -q "self\\.edgeCollapsed = defaults\\.bool\\(forKey: TaskLightLedgerKeys\\.edgeCollapsed\\)" "$view_model" \
+  || fail "app launch must restore the persisted compact or capsule presentation mode"
 
-rg -q "defaults\\.set\\(false, forKey: TaskLightLedgerKeys\\.edgeCollapsed\\)" "$view_model" \
-  || fail "app launch should clear stale edge rail persistence before showing the compact cat"
+if rg -q "defaults\\.set\\(false, forKey: TaskLightLedgerKeys\\.edgeCollapsed\\)" "$view_model"; then
+  fail "app launch must not clear the persisted capsule mode before panels are presented"
+fi
 
 rg -q "statusOrbClickCatcher.collapse" "$controller" \
   || fail "panel controller does not observe status orb collapse requests"

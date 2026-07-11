@@ -1,17 +1,19 @@
 import SwiftUI
 import TaskLightCore
 
+@MainActor
 struct LuckyCatPreviewScenario: Identifiable {
     let id: String
     let title: String
     let uiState: TaskLightUIState
 }
 
+@MainActor
 struct LuckyCatVisualStateMatrixView: View {
     let scenarios: [LuckyCatPreviewScenario]
 
-    init(scenarios: [LuckyCatPreviewScenario] = LuckyCatPreviewData.visualMatrixScenarios) {
-        self.scenarios = scenarios
+    init(scenarios: [LuckyCatPreviewScenario]? = nil) {
+        self.scenarios = scenarios ?? LuckyCatPreviewData.visualMatrixScenarios
     }
 
     var body: some View {
@@ -28,6 +30,7 @@ struct LuckyCatVisualStateMatrixView: View {
     }
 }
 
+@MainActor
 struct LuckyCatVisualMatrixHostView: View {
     var body: some View {
         ZStack {

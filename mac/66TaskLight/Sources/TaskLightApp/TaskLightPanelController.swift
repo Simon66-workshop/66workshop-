@@ -184,13 +184,21 @@ private enum TaskLightPressTarget {
             return "edgeRail"
         }
     }
+
+    var interactionTarget: TaskLightInteractionTarget {
+        switch self {
+        case .compact:
+            return .compact
+        case .edgeRail:
+            return .edgeRail
+        }
+    }
 }
 
 private struct TaskLightFallbackPress {
     let target: TaskLightPressTarget
     let startPoint: NSPoint
     let startFrame: NSRect
-    let startedAt = Date()
     var didDrag = false
 }
 
@@ -215,6 +223,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
     private var suppressFallbackPressUntil = Date.distantPast
     private var fallbackPress: TaskLightFallbackPress?
     private var nativePress: TaskLightFallbackPress?
+    private var interactionStateMachine = TaskLightInteractionStateMachine(
+        dragThreshold: taskLightDragThreshold,
+        longPressDuration: taskLightClickMaxDuration,
+        doubleTapInterval: NSEvent.doubleClickInterval
+    )
     private var nativePressRecoveryWorkItems: [DispatchWorkItem] = []
     private var suppressedEdgeTransitionValue: Bool?
     private var pendingEdgeModelSyncWorkItem: DispatchWorkItem?
@@ -816,6 +829,87 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         completion(pass)
     }
 
+    func runInteractionEventReplaySelfTest(completion: @escaping ([String: Any]) -> Void) {
+        guard let compactPanel else {
+            completion(["status": "fail", "reason": "compact_panel_missing"])
+            return
+        }
+
+        viewModel.expanded = false
+        forceRestoreFromEdgePanel(source: "appKitReplay.initialRestore")
+        if viewModel.edgeCollapsed {
+            viewModel.setEdgeCollapsed(false)
+        }
+        showCurrentModeFromMenuBar(source: "appKitReplay.initialCompact")
+        edgeTransitionLockedUntil = .distantPast
+        lastEdgeToggleAt = .distantPast
+        interactionStateMachine = TaskLightInteractionStateMachine(
+            dragThreshold: taskLightDragThreshold,
+            longPressDuration: taskLightClickMaxDuration,
+            doubleTapInterval: NSEvent.doubleClickInterval
+        )
+        let compactPoint = compactStatusOrbCenter(panelSize: compactPanel.frame.size)
+        guard let compactDown = replayMouseEvent(.leftMouseDown, point: compactPoint, panel: compactPanel),
+              let compactUp = replayMouseEvent(.leftMouseUp, point: compactPoint, panel: compactPanel) else {
+            completion(["status": "fail", "reason": "compact_event_creation_failed"])
+            return
+        }
+
+        beginNativePress(on: compactPanel, event: compactDown, target: .compact, source: "appKitReplay.compact")
+        finishNativePress(on: compactPanel, event: compactUp, source: "appKitReplay.compact")
+        flushPendingEdgeModelSyncForSelfTest()
+        let singleTapCollapsed = viewModel.edgeCollapsed && panelIsInteractivelyVisible(edgePanel)
+
+        guard let edgePanel,
+              let edgeDown = replayMouseEvent(.leftMouseDown, point: NSPoint(x: edgePanel.frame.width / 2, y: edgePanel.frame.height / 2), panel: edgePanel),
+              let edgeUp = replayMouseEvent(.leftMouseUp, point: NSPoint(x: edgePanel.frame.width / 2, y: edgePanel.frame.height / 2), panel: edgePanel) else {
+            completion(["status": "fail", "reason": "edge_event_creation_failed", "single_tap_collapsed": singleTapCollapsed])
+            return
+        }
+
+        beginNativePress(on: edgePanel, event: edgeDown, target: .edgeRail, source: "appKitReplay.edge")
+        finishNativePress(on: edgePanel, event: edgeUp, source: "appKitReplay.edge")
+        let crossSurfaceDoubleTapOpenedDiagnostics = viewModel.expanded && expandedPanel?.isVisible == true
+
+        viewModel.expanded = false
+        viewModel.setEdgeCollapsed(false)
+        let dragStart = compactStatusOrbCenter(panelSize: compactPanel.frame.size)
+        let dragEnd = NSPoint(x: dragStart.x + taskLightDragThreshold + 4, y: dragStart.y)
+        let startFrame = compactPanel.frame
+        if let dragDown = replayMouseEvent(.leftMouseDown, point: dragStart, panel: compactPanel),
+           let dragMove = replayMouseEvent(.leftMouseDragged, point: dragEnd, panel: compactPanel),
+           let dragUp = replayMouseEvent(.leftMouseUp, point: dragEnd, panel: compactPanel) {
+            beginNativePress(on: compactPanel, event: dragDown, target: .compact, source: "appKitReplay.drag")
+            updateNativePress(on: compactPanel, event: dragMove, source: "appKitReplay.drag")
+            finishNativePress(on: compactPanel, event: dragUp, source: "appKitReplay.drag")
+        }
+        let dragDidNotToggle = viewModel.edgeCollapsed == false
+            && abs(compactPanel.frame.minX - startFrame.minX) >= taskLightDragThreshold
+
+        let passed = singleTapCollapsed && crossSurfaceDoubleTapOpenedDiagnostics && dragDidNotToggle
+        completion([
+            "status": passed ? "ok" : "fail",
+            "single_tap_collapsed": singleTapCollapsed,
+            "cross_surface_double_tap_opened_diagnostics": crossSurfaceDoubleTapOpenedDiagnostics,
+            "drag_did_not_toggle": dragDidNotToggle,
+            "event_replay": "NSEvent.mouseEvent"
+        ])
+    }
+
+    private func replayMouseEvent(_ type: NSEvent.EventType, point: NSPoint, panel: TaskLightPanel) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: panel.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
+        )
+    }
+
     func shutdown() {
         startupVisibilityWorkItems.forEach { $0.cancel() }
         startupVisibilityWorkItems.removeAll()
@@ -1010,6 +1104,16 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
 
     @discardableResult
     private func handleEdgeRailClick(clickCount: Int, source: String) -> Bool {
+        if clickCount >= 2 {
+            openDiagnosticsFromInteraction(source: "\(source).doubleTap")
+            writeClickDiagnostic(
+                source: source,
+                action: "double_click_open_diagnostics",
+                point: nil,
+                extra: ["click_count": clickCount]
+            )
+            return true
+        }
         if let edgePanel {
             rememberEdgeRailFrame(edgePanel.frame, source: "\(source).restoreAnchor", persistImmediately: false)
         }
@@ -1023,8 +1127,13 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         return true
     }
 
+    // Compatibility entry point for AppKit mouse-down delivery. It deliberately
+    // feeds the shared reducer instead of restoring on mouse-down, so drag
+    // intent still wins over click intent.
     private func handleEdgeRailMouseDown(source: String) {
-        _ = handleEdgeRailClick(clickCount: 2, source: source)
+        guard let edgePanel else { return }
+        let point = NSPoint(x: edgePanel.frame.width / 2, y: edgePanel.frame.height / 2)
+        replaySyntheticTap(target: .edgeRail, panel: edgePanel, point: point, source: source)
     }
 
     private func beginNativePress(on panel: TaskLightPanel, event: NSEvent, target: TaskLightPressTarget, source: String) {
@@ -1050,6 +1159,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             startPoint: screenPoint(for: event, in: panel),
             startFrame: panel.frame
         )
+        _ = interactionStateMachine.begin(
+            target: target.interactionTarget,
+            x: event.locationInWindow.x,
+            y: event.locationInWindow.y,
+            at: Date().timeIntervalSinceReferenceDate
+        )
         writeClickDiagnostic(source: source, action: "press_begin", point: event.locationInWindow)
         appendStartupTrace("\(source).pressBegin")
         if target == .compact {
@@ -1062,7 +1177,11 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         let currentPoint = screenPoint(for: event, in: panel)
         let dx = currentPoint.x - press.startPoint.x
         let dy = currentPoint.y - press.startPoint.y
-        if !press.didDrag, hypot(dx, dy) >= taskLightDragThreshold {
+        let interactionDecision = interactionStateMachine.move(
+            x: event.locationInWindow.x,
+            y: event.locationInWindow.y
+        )
+        if case .dragStarted = interactionDecision {
             press.didDrag = true
             writeClickDiagnostic(source: source, action: "drag_begin", point: event.locationInWindow)
             appendStartupTrace("\(source).dragBegin")
@@ -1093,48 +1212,74 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             suppressFallbackPressUntil = Date().addingTimeInterval(0.22)
         }
 
-        if press.didDrag {
-            finishPanelDrag(panel, target: press.target, source: source)
-            return
-        }
+        let startedAt = CACurrentMediaTime()
+        let decision = interactionStateMachine.end(
+            x: event.locationInWindow.x,
+            y: event.locationInWindow.y,
+            at: Date().timeIntervalSinceReferenceDate
+        )
+        applyInteractionDecision(decision, panel: panel, source: source, point: event.locationInWindow)
+        writeManualLatency(
+            source: source,
+            action: "\(press.target.traceName)_mouse_up",
+            startedAt: startedAt,
+            eventTimestamp: event.timestamp
+        )
+    }
 
-        let pressDuration = Date().timeIntervalSince(press.startedAt)
-        if pressDuration >= taskLightClickMaxDuration {
+    private func applyInteractionDecision(
+        _ decision: TaskLightInteractionDecision,
+        panel: TaskLightPanel,
+        source: String,
+        point: NSPoint
+    ) {
+        switch decision {
+        case .ignored, .dragStarted, .dragChanged:
+            return
+        case .dragEnded(let target):
+            finishPanelDrag(panel, target: pressTarget(for: target), source: source)
+        case .singleTap(let target):
+            switch target {
+            case .compact:
+                _ = handleCompactPanelMouseDown(
+                    at: point,
+                    panelSize: panel.frame.size,
+                    clickCount: 1,
+                    source: source
+                )
+            case .edgeRail:
+                _ = handleEdgeRailClick(clickCount: 1, source: source)
+            }
+        case .doubleTap:
+            openDiagnosticsFromInteraction(source: "\(source).doubleTap")
+            writeClickDiagnostic(source: source, action: "double_click_open_diagnostics", point: point)
+        case .longPress(let target):
             writeClickDiagnostic(
                 source: source,
                 action: "press_hold_no_toggle",
-                point: event.locationInWindow,
-                extra: ["duration_ms": Int(pressDuration * 1000)]
+                point: point,
+                extra: ["target": target.rawValue]
             )
-            appendStartupTrace("\(source).pressHoldNoToggle.\(Int(pressDuration * 1000))ms")
-            return
+            appendStartupTrace("\(source).pressHoldNoToggle")
         }
+    }
 
-        switch press.target {
+    private func pressTarget(for target: TaskLightInteractionTarget) -> TaskLightPressTarget {
+        switch target {
         case .compact:
-            let startedAt = CACurrentMediaTime()
-            _ = handleCompactPanelMouseDown(
-                at: event.locationInWindow,
-                panelSize: panel.frame.size,
-                clickCount: event.clickCount,
-                source: source
-            )
-            writeManualLatency(
-                source: source,
-                action: "compact_mouse_up",
-                startedAt: startedAt,
-                eventTimestamp: event.timestamp
-            )
+            return .compact
         case .edgeRail:
-            let startedAt = CACurrentMediaTime()
-            _ = handleEdgeRailClick(clickCount: event.clickCount, source: source)
-            writeManualLatency(
-                source: source,
-                action: "edge_rail_mouse_up",
-                startedAt: startedAt,
-                eventTimestamp: event.timestamp
-            )
+            return .edgeRail
         }
+    }
+
+    private func openDiagnosticsFromInteraction(source: String) {
+        forceRestoreFromEdgePanel(source: "\(source).restore")
+        if viewModel.edgeCollapsed {
+            viewModel.setEdgeCollapsed(false)
+        }
+        viewModel.expanded = true
+        appendStartupTrace("\(source).openDiagnostics")
     }
 
     private func scheduleNativePressRecovery(on panel: TaskLightPanel, source: String) {
@@ -1167,21 +1312,16 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             suppressFallbackPressUntil = Date().addingTimeInterval(0.22)
         }
         appendStartupTrace("\(source).recoverReleasedMouseUp")
-        switch press.target {
-        case .compact:
-            let panelPoint = NSPoint(
-                x: press.startPoint.x - panel.frame.minX,
-                y: press.startPoint.y - panel.frame.minY
-            )
-            _ = handleCompactPanelMouseDown(
-                at: panelPoint,
-                panelSize: panel.frame.size,
-                clickCount: 1,
-                source: "\(source).recoveredMouseUp"
-            )
-        case .edgeRail:
-            _ = handleEdgeRailClick(clickCount: 1, source: "\(source).recoveredMouseUp")
-        }
+        let panelPoint = NSPoint(
+            x: press.startPoint.x - panel.frame.minX,
+            y: press.startPoint.y - panel.frame.minY
+        )
+        let decision = interactionStateMachine.end(
+            x: panelPoint.x,
+            y: panelPoint.y,
+            at: Date().timeIntervalSinceReferenceDate
+        )
+        applyInteractionDecision(decision, panel: panel, source: "\(source).recoveredMouseUp", point: panelPoint)
     }
 
     func handleMouseEventTap(type: CGEventType, screenPoint: NSPoint, eventLocation: CGPoint) {
@@ -1242,7 +1382,12 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).any.observed.x\(Int(normalizedPoint.x)).y\(Int(normalizedPoint.y))")
         }
         if let edgePanel, panelIsInteractivelyVisible(edgePanel), edgePanel.frame.contains(normalizedPoint) {
-            _ = handleEdgeRailClick(clickCount: 1, source: "\(source).edgeRail")
+            replaySyntheticTap(
+                target: .edgeRail,
+                panel: edgePanel,
+                point: NSPoint(x: normalizedPoint.x - edgePanel.frame.minX, y: normalizedPoint.y - edgePanel.frame.minY),
+                source: "\(source).edgeRail"
+            )
             return true
         }
 
@@ -1262,24 +1407,43 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
             appendStartupTrace("\(source).compact.panelClickNoToggle")
             return true
         }
-        writeClickDiagnostic(
-            source: "\(source).compact",
-            action: "collapse_status_orb",
-            point: panelPoint
-        )
-        setEdgeCollapsedFromInteraction(true, source: "\(source).compact.panelCollapse")
+        replaySyntheticTap(target: .compact, panel: compactPanel, point: panelPoint, source: "\(source).compact")
         return true
+    }
+
+    private func replaySyntheticTap(
+        target: TaskLightInteractionTarget,
+        panel: TaskLightPanel,
+        point: NSPoint,
+        source: String
+    ) {
+        let timestamp = Date().timeIntervalSinceReferenceDate
+        _ = interactionStateMachine.begin(target: target, x: point.x, y: point.y, at: timestamp)
+        let decision = interactionStateMachine.end(x: point.x, y: point.y, at: timestamp)
+        applyInteractionDecision(decision, panel: panel, source: source, point: point)
     }
 
     private func beginFallbackPress(at point: NSPoint) {
         if let edgePanel, panelIsInteractivelyVisible(edgePanel), edgePanel.frame.contains(point) {
             fallbackPress = TaskLightFallbackPress(target: .edgeRail, startPoint: point, startFrame: edgePanel.frame)
+            _ = interactionStateMachine.begin(
+                target: .edgeRail,
+                x: point.x,
+                y: point.y,
+                at: Date().timeIntervalSinceReferenceDate
+            )
             writeClickDiagnostic(source: "mousePoll.edgeRail", action: "press_begin", point: point)
             appendStartupTrace("mousePoll.edgeRail.pressBegin")
             return
         }
         if let compactPanel, panelIsInteractivelyVisible(compactPanel), !viewModel.expanded, compactPanel.frame.contains(point) {
             fallbackPress = TaskLightFallbackPress(target: .compact, startPoint: point, startFrame: compactPanel.frame)
+            _ = interactionStateMachine.begin(
+                target: .compact,
+                x: point.x,
+                y: point.y,
+                at: Date().timeIntervalSinceReferenceDate
+            )
             writeClickDiagnostic(source: "mousePoll.compact", action: "press_begin", point: point)
             appendStartupTrace("mousePoll.compact.pressBegin")
         }
@@ -1289,7 +1453,8 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
         var updated = press
         let dx = point.x - press.startPoint.x
         let dy = point.y - press.startPoint.y
-        if !updated.didDrag, sqrt((dx * dx) + (dy * dy)) >= taskLightDragThreshold {
+        let interactionDecision = interactionStateMachine.move(x: point.x, y: point.y)
+        if case .dragStarted = interactionDecision {
             updated.didDrag = true
             appendStartupTrace("mousePoll.\(press.target.traceName).dragBegan")
         }
@@ -1309,37 +1474,14 @@ final class TaskLightPanelController: NSObject, NSWindowDelegate {
 
     private func finishFallbackPress(_ press: TaskLightFallbackPress, at point: NSPoint) {
         fallbackPress = nil
-        if press.didDrag {
-            if let panel = panel(for: press.target) {
-                finishPanelDrag(panel, target: press.target, source: "mousePoll.\(press.target.traceName)")
-            }
-            return
-        }
-        let pressDuration = Date().timeIntervalSince(press.startedAt)
-        if pressDuration >= taskLightClickMaxDuration {
-            writeClickDiagnostic(
-                source: "mousePoll.\(press.target.traceName)",
-                action: "press_hold_no_toggle",
-                point: point,
-                extra: ["duration_ms": Int(pressDuration * 1000)]
-            )
-            appendStartupTrace("mousePoll.\(press.target.traceName).pressHoldNoToggle.\(Int(pressDuration * 1000))ms")
-            return
-        }
-
-        switch press.target {
-        case .compact:
-            guard let compactPanel else { return }
-            let panelPoint = NSPoint(x: point.x - compactPanel.frame.minX, y: point.y - compactPanel.frame.minY)
-            _ = handleCompactPanelMouseDown(
-                at: panelPoint,
-                panelSize: compactPanel.frame.size,
-                clickCount: 1,
-                source: "mousePoll.compact"
-            )
-        case .edgeRail:
-            _ = handleEdgeRailClick(clickCount: 1, source: "mousePoll.edgeRail")
-        }
+        guard let panel = panel(for: press.target) else { return }
+        let decision = interactionStateMachine.end(
+            x: point.x,
+            y: point.y,
+            at: Date().timeIntervalSinceReferenceDate
+        )
+        let panelPoint = NSPoint(x: point.x - panel.frame.minX, y: point.y - panel.frame.minY)
+        applyInteractionDecision(decision, panel: panel, source: "mousePoll.\(press.target.traceName)", point: panelPoint)
     }
 
     private func panel(for target: TaskLightPressTarget) -> TaskLightPanel? {

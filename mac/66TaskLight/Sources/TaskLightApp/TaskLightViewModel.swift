@@ -106,8 +106,7 @@ final class TaskLightViewModel: ObservableObject {
         let defaults = UserDefaults.standard
         self.uiState = initialUIState
         self.expanded = false
-        self.edgeCollapsed = false
-        defaults.set(false, forKey: TaskLightLedgerKeys.edgeCollapsed)
+        self.edgeCollapsed = defaults.bool(forKey: TaskLightLedgerKeys.edgeCollapsed)
         self.presenceMode = TaskLightPresenceMode(rawValue: defaults.string(forKey: TaskLightLedgerKeys.presenceMode) ?? "") ?? .normal
         self.autoMeetingModeEnabled = Self.frontmostAppDetectionAllowed() && defaults.bool(forKey: TaskLightLedgerKeys.autoMeetingMode)
         self.edgeCollapseRequestID = 0
@@ -1299,22 +1298,7 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func quotaCompactText() -> String {
-        guard let quota = uiState.quota, quota.fresh else {
-            return "⚡Q?"
-        }
-        var parts: [String] = []
-        var seenValues = Set<Int>()
-        for value in [quota.short_percent, quota.long_percent, quota.effective_remaining_percent].compactMap({ $0 }) {
-            guard seenValues.insert(value).inserted else { continue }
-            parts.append("\(value)")
-        }
-        if let resets = quota.manual_resets_available {
-            parts.append("R\(resets)")
-        }
-        guard !parts.isEmpty else {
-            return "⚡Q?"
-        }
-        return "⚡" + parts.joined(separator: "·")
+        TaskLightQuotaPresentation.compactText(for: uiState.quota)
     }
 
     func quotaStatusLabel() -> String {
@@ -1477,7 +1461,11 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     private func scheduleStateFileRefresh() {
-        let fingerprint = Self.fileFingerprint(for: config.uiStateURL)
+        let quotaStateURL = config.stateDirectory.appendingPathComponent("quota_state.json")
+        let fingerprint = [
+            Self.fileFingerprint(for: config.uiStateURL),
+            Self.fileFingerprint(for: quotaStateURL)
+        ].joined(separator: "|")
         guard fingerprint != lastLoadedUIStateFileFingerprint else { return }
         lastLoadedUIStateFileFingerprint = fingerprint
         pendingStateFileRefresh?.cancel()

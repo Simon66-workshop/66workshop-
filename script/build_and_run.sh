@@ -422,6 +422,44 @@ PY
   return 1
 }
 
+launch_interaction_event_replay_self_test() {
+  local state_dir="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
+  local result_path="$state_dir/interaction_event_replay_self_test.json"
+  rm -f "$result_path"
+  /usr/bin/open -n "$RUNTIME_BUNDLE" --args --tasklight-interaction-event-replay-self-test
+  for _ in $(seq 1 100); do
+    if [ -s "$result_path" ]; then
+      python3 - "$result_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+for key in [
+    "status",
+    "single_tap_collapsed",
+    "cross_surface_double_tap_opened_diagnostics",
+    "drag_did_not_toggle",
+    "event_replay",
+]:
+    print(f"interaction_event_replay_{key}={payload.get(key, 'missing')}")
+
+if payload.get("status") != "ok":
+    raise SystemExit(1)
+for key in ["single_tap_collapsed", "cross_surface_double_tap_opened_diagnostics", "drag_did_not_toggle"]:
+    if payload.get(key) is not True:
+        raise SystemExit(f"{key} was not true")
+if payload.get("event_replay") != "NSEvent.mouseEvent":
+    raise SystemExit("event replay did not use NSEvent.mouseEvent")
+PY
+      return
+    fi
+    sleep 0.2
+  done
+  echo "interaction_event_replay_status=timeout"
+  return 1
+}
+
 launch_logs() {
   open_app
   /usr/bin/log stream --info --style compact --predicate "process == \"$BINARY_NAME\""
@@ -564,8 +602,15 @@ case "$MODE" in
     stage_runtime_bundle
     launch_expanded_panel_self_test
     ;;
+  --interaction-event-replay-self-test|interaction-event-replay-self-test)
+    kill_existing
+    build_app
+    stage_bundle
+    stage_runtime_bundle
+    launch_interaction_event_replay_self_test
+    ;;
   *)
-    echo "usage: $0 [run|install-desktop|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test|--visual-matrix-self-test|--menu-bar-self-test|--expanded-panel-self-test]" >&2
+    echo "usage: $0 [run|install-desktop|--debug|--logs|--telemetry|--verify|--edge-toggle-self-test|--visual-matrix-self-test|--menu-bar-self-test|--expanded-panel-self-test|--interaction-event-replay-self-test]" >&2
     exit 2
     ;;
 esac

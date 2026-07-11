@@ -1,5 +1,6 @@
 import TaskLightCore
 
+@MainActor
 enum LuckyCatPreviewData {
     static let visualMatrixScenarios: [LuckyCatPreviewScenario] = [
         LuckyCatPreviewScenario(id: "idle", title: "Idle", uiState: uiState(status: "idle", title: "IDLE")),

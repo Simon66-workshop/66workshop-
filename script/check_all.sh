@@ -59,6 +59,8 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_edge_glass_module_boundaries.sh"
 "$ROOT_DIR/script/smoke_luckycat_edge_toggle_runtime.sh"
 "$ROOT_DIR/script/smoke_status_orb_interaction_rules.sh"
+"$ROOT_DIR/script/smoke_tasklight_interaction_event_replay.sh"
+"$ROOT_DIR/script/check_component_audit_guardrails.sh"
 "$ROOT_DIR/script/smoke_luckycat_expanded_panel.sh"
 "$ROOT_DIR/script/smoke_luckycat_expanded_panel_runtime.sh"
 "$ROOT_DIR/script/smoke_luckycat_menu_bar.sh"

@@ -131,6 +131,7 @@ public final class TaskLightRenderSnapshotCoordinator {
             config.eventsURL,
             config.uiEventFlowURL,
             config.workspaceCoverageLatestJSONURL,
+            config.stateDirectory.appendingPathComponent("quota_state.json"),
             config.quotaHistoryURL,
             config.providersDirectoryURL.appendingPathComponent("provider_opt_in.json"),
             config.providersDirectoryURL.appendingPathComponent("snapshots")

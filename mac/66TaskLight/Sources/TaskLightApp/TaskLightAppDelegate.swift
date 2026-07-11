@@ -12,6 +12,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
     private var visualMatrixSelfTestScheduled = false
     private var menuBarSelfTestScheduled = false
     private var expandedPanelSelfTestScheduled = false
+    private var interactionEventReplaySelfTestScheduled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appendStartupTrace("applicationDidFinishLaunching.begin")
@@ -64,6 +65,7 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
         scheduleVisualMatrixSelfTestIfNeeded()
         scheduleMenuBarSelfTestIfNeeded()
         scheduleExpandedPanelSelfTestIfNeeded()
+        scheduleInteractionEventReplaySelfTestIfNeeded()
         appendStartupTrace("presentInitialPanelIfNeeded.\(trigger).end")
     }
 
@@ -127,6 +129,23 @@ final class TaskLightAppDelegate: NSObject, NSApplicationDelegate {
             panelController.runExpandedPanelSelfTest { payload in
                 self.writeSelfTestResult(payload, fileName: "expanded_panel_self_test.json")
                 self.appendStartupTrace("expandedPanelSelfTest.completed.\(payload["status"] ?? "unknown")")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
+    }
+
+    private func scheduleInteractionEventReplaySelfTestIfNeeded() {
+        guard !interactionEventReplaySelfTestScheduled else { return }
+        guard ProcessInfo.processInfo.arguments.contains("--tasklight-interaction-event-replay-self-test") else { return }
+        interactionEventReplaySelfTestScheduled = true
+        appendStartupTrace("interactionEventReplaySelfTest.scheduled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) { [weak self] in
+            guard let self, let panelController = self.panelController else { return }
+            panelController.runInteractionEventReplaySelfTest { payload in
+                self.writeSelfTestResult(payload, fileName: "interaction_event_replay_self_test.json")
+                self.appendStartupTrace("interactionEventReplaySelfTest.completed.\(payload["status"] ?? "unknown")")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     NSApp.terminate(nil)
                 }

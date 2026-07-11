@@ -1,0 +1,29 @@
+name: TaskLight Component Audit
+
+on:
+  pull_request:
+    paths:
+      - "mac/66TaskLight/**"
+      - "script/check_component_audit_guardrails.sh"
+      - "script/smoke_status_orb_interaction_rules.sh"
+      - "script/smoke_tasklight_interaction_event_replay.sh"
+  push:
+    paths:
+      - "mac/66TaskLight/**"
+      - "script/check_component_audit_guardrails.sh"
+      - "script/smoke_status_orb_interaction_rules.sh"
+      - "script/smoke_tasklight_interaction_event_replay.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  component-audit:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build core tests
+        working-directory: mac/66TaskLight
+        run: swift run TaskLightTestRunner
+      - name: Check interaction and presentation guardrails
+        run: ./script/check_component_audit_guardrails.sh

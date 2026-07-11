@@ -77,8 +77,9 @@ public final class TaskLightStore {
 
     public func loadProjectedUIState() -> TaskLightUIState {
         ensureLayout()
-        if let projected: TaskLightUIState = try? readJSON(from: config.uiStateURL),
+        if var projected: TaskLightUIState = try? readJSON(from: config.uiStateURL),
            isUIStateFresh(projected) {
+            projected.quota = resolvedDisplayQuota(projected.quota)
             return projected
         }
         let fallbackReason: String
@@ -93,6 +94,28 @@ public final class TaskLightStore {
             }
         }
         return fallbackUIState(from: loadFallbackDashboard(), reason: fallbackReason)
+    }
+
+    private func resolvedDisplayQuota(_ projected: CodexQuotaUIState?) -> CodexQuotaUIState? {
+        guard let local = loadQuotaFallback(), local.fresh, quotaHasDisplayValue(local) else {
+            return projected
+        }
+        guard let projected else { return local }
+        return projected.fresh && quotaHasDisplayValue(projected) ? projected : local
+    }
+
+    private func quotaHasDisplayValue(_ quota: CodexQuotaUIState) -> Bool {
+        let directValues = [
+            quota.short_percent,
+            quota.long_percent,
+            quota.effective_remaining_percent
+        ].compactMap { $0 }
+        if directValues.contains(where: { (0...100).contains($0) }) {
+            return true
+        }
+        return (quota.display_windows ?? []).contains {
+            $0.remaining_percent.map { (0...100).contains($0) } == true
+        }
     }
 
     public func loadUIState() -> TaskLightUIState {

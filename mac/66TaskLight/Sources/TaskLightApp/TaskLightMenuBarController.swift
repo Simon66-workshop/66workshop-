@@ -272,7 +272,14 @@ final class TaskLightMenuBarController: NSObject, NSPopoverDelegate, NSMenuDeleg
             self.appendMenuTrace("action.\(action).shown=\(isShown)")
             self.writeManualLatency(source: "menu", action: action, startedAt: startedAt)
         }
-        performAfterStatusMenuClose(openAction)
+        // An NSMenu action runs while AppKit is still tracking the menu. Opening
+        // another transient surface here is the source of the historical
+        // "opens then disappears" failure, so retain the intent until close.
+        if isStatusMenuOpen {
+            pendingMenuCloseAction = openAction
+        } else {
+            openAction()
+        }
     }
 
     @objc private func toggleFocusMode() {
