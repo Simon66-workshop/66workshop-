@@ -30,6 +30,7 @@ from codex_quota_import import (
 
 DEFAULT_STATE_DIR = Path.home() / ".66tasklight"
 SCHEMA_VERSION = "0.2"
+WATCHER_ID = "quota_watcher"
 
 
 def state_dir() -> Path:
@@ -155,6 +156,9 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
         fresh = quota_payload.get("fresh") is True
         health = {
             "schema_version": SCHEMA_VERSION,
+            "writer": WATCHER_ID,
+            "poll_seconds": args.poll_seconds,
+            "request_timeout_seconds": args.timeout,
             "status": "ok" if fresh else "degraded",
             "source": "codex_appserver",
             "mode": mode,
@@ -179,6 +183,9 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
             atomic_write_json(output, fallback_payload)
             health = {
                 "schema_version": SCHEMA_VERSION,
+                "writer": WATCHER_ID,
+                "poll_seconds": args.poll_seconds,
+                "request_timeout_seconds": args.timeout,
                 "status": "degraded",
                 "source": "codex_appserver",
                 "mode": mode,
@@ -196,6 +203,9 @@ def run_once(args: argparse.Namespace, root: Path) -> dict[str, Any]:
             return health
         health = {
             "schema_version": SCHEMA_VERSION,
+            "writer": WATCHER_ID,
+            "poll_seconds": args.poll_seconds,
+            "request_timeout_seconds": args.timeout,
             "status": "error",
             "source": "codex_appserver",
             "mode": mode,
@@ -223,9 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output")
     parser.add_argument("--health")
     parser.add_argument("--fixture")
-    parser.add_argument("--timeout", type=float, default=float(os.environ.get("TASKLIGHT_QUOTA_AUTOPROBE_TIMEOUT_SECONDS", "2")))
+    parser.add_argument("--timeout", type=float, default=float(os.environ.get("TASKLIGHT_QUOTA_AUTOPROBE_TIMEOUT_SECONDS", "5")))
     parser.add_argument("--event-timeout", type=float, default=float(os.environ.get("TASKLIGHT_QUOTA_WATCH_EVENT_TIMEOUT_SECONDS", "1.5")))
-    parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_QUOTA_WATCH_POLL_SECONDS", "30")))
+    parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_QUOTA_WATCH_POLL_SECONDS", "10")))
     parser.add_argument("--print-json", action="store_true")
     return parser
 
@@ -242,11 +252,16 @@ def main() -> int:
             print(f"STATUS={payload.get('status')} mode={payload.get('mode')} quota_status={payload.get('quota_status')} effective_remaining_percent={payload.get('effective_remaining_percent')}")
         return 0
     while True:
+        cycle_started = time.monotonic()
         try:
             run_once(args, root)
         except Exception:
             pass
-        time.sleep(max(2.0, args.poll_seconds))
+        # ``poll_seconds`` is a target cadence, not extra sleep after a slow
+        # AppServer request. Otherwise a 5-second timeout silently becomes a
+        # 15-second stale window during active Codex work.
+        elapsed = time.monotonic() - cycle_started
+        time.sleep(max(2.0, args.poll_seconds - elapsed))
 
 
 if __name__ == "__main__":

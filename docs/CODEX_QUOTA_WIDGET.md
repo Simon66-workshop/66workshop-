@@ -165,4 +165,16 @@ When multiple buckets share a duration, display selection is:
 
 ## Safety
 
-Quota state is a sidecar at `~/.66tasklight/quota_state.json`. Projector copies a sanitized view to `ui_state.quota`. If quota is missing, stale, or invalid, LuckyCat shows `⚡ Q?` and the main lamp stays governed only by task/runtime state.
+Quota state is a sidecar at `~/.66tasklight/quota_state.json`. Projector copies a sanitized view to `ui_state.quota`. Missing or invalid quota shows `⚡ Q?`; a stale but previously valid local snapshot retains its values with a trailing `~`. The main lamp stays governed only by task/runtime state.
+
+The dedicated quota watcher is the production writer for `quota_state.json`.
+The State Projector only retains a bootstrap fallback when that watcher has no
+recent lease and no production watcher is installed, preventing simultaneous
+AppServer reads from racing each other during a watcher restart.
+LaunchAgents run a staged copy of the Python runtime below
+`~/.66tasklight/runtime/tasklight-python`, rather than executing from the
+protected Documents workspace. This prevents macOS file-access prompts from
+silently stalling background quota and projection work.
+If a watcher request fails after a valid snapshot, the UI retains the last
+local values with a trailing `~` and marks the source stale; those values are
+never presented as a current read.

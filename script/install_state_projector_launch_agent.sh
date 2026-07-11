@@ -16,9 +16,13 @@ fi
 mkdir -p "$PLIST_DIR" "$LOG_DIR" "$STATE_DIR"
 OUT_LOG="$LOG_DIR/state_projector.out.log"
 ERR_LOG="$LOG_DIR/state_projector.err.log"
+"$ROOT_DIR/script/stage_tasklight_runtime.sh" --state-dir "$STATE_DIR" >/dev/null
+RUNTIME_ROOT="${TASKLIGHT_RUNTIME_ROOT:-$STATE_DIR/runtime/tasklight-python}"
+RUNTIME_SCRIPT="$RUNTIME_ROOT/script/state_projector.py"
 
 launchctl bootout "gui/$(id -u)" "$PLIST_PATH" >/dev/null 2>&1 || true
 pkill -f "$ROOT_DIR/script/state_projector.py --watch" >/dev/null 2>&1 || true
+pkill -f "$RUNTIME_SCRIPT --watch" >/dev/null 2>&1 || true
 
 python3 - "$PLIST_PATH" "$LABEL" "$ROOT_DIR" "$STATE_DIR" "$OUT_LOG" "$ERR_LOG" "$PYTHON_BIN" <<'PY'
 import os
@@ -38,10 +42,10 @@ payload = {
     "Label": label,
     "ProgramArguments": [
         python_bin,
-        str(root / "script" / "state_projector.py"),
+        str(Path(state_dir) / "runtime" / "tasklight-python" / "script" / "state_projector.py"),
         "--watch",
     ],
-    "WorkingDirectory": str(root),
+    "WorkingDirectory": str(Path(state_dir) / "runtime" / "tasklight-python"),
     "EnvironmentVariables": {
         "PATH": os.environ.get("PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"),
         "TASKLIGHT_STATE_DIR": state_dir,

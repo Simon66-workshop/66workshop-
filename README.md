@@ -740,7 +740,7 @@ python3 script/codex_quota_import.py --text "5小时 93% 11:44
 ./script/check_codex_quota.sh
 ```
 
-App Server `usedPercent` is converted to remaining percent. Manual Usage text is treated as already being remaining percent. `quota_state.json` keeps `raw_windows` for all codex-like buckets and `display_windows` for the selected UI buckets; same-duration display windows prefer `bucket_id=codex` over model-specific buckets. Missing or stale quota shows `⚡ Q?`.
+App Server `usedPercent` is converted to the same rounded remaining percent shown by the local client. Manual Usage text is treated as already being remaining percent. `quota_state.json` keeps `raw_windows` for all codex-like buckets and `display_windows` for the selected UI buckets; same-duration display windows prefer `bucket_id=codex` over model-specific buckets. Missing or invalid quota shows `⚡ Q?`; a last-valid stale snapshot carries a trailing `~` and is never treated as live data.
 
 When LuckyCat and Codex disagree about active work, start with:
 

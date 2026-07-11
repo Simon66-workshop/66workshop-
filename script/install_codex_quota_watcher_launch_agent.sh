@@ -7,8 +7,9 @@ PLIST_PATH="${TASKLIGHT_QUOTA_WATCHER_PLIST:-$HOME/Library/LaunchAgents/${LABEL}
 STATE_DIR="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
 LOG_DIR="${TASKLIGHT_QUOTA_WATCH_LOG_DIR:-$STATE_DIR/logs}"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
-POLL_SECONDS="${TASKLIGHT_QUOTA_WATCH_POLL_SECONDS:-30}"
+POLL_SECONDS="${TASKLIGHT_QUOTA_WATCH_POLL_SECONDS:-10}"
 EVENT_TIMEOUT="${TASKLIGHT_QUOTA_WATCH_EVENT_TIMEOUT_SECONDS:-1.5}"
+REQUEST_TIMEOUT="${TASKLIGHT_QUOTA_AUTOPROBE_TIMEOUT_SECONDS:-5}"
 CODEX_BIN="${TASKLIGHT_CODEX_BIN:-${CODEX_BIN:-}}"
 DRY_RUN=0
 
@@ -17,6 +18,9 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 mkdir -p "$(dirname "$PLIST_PATH")" "$LOG_DIR" "$STATE_DIR"
+"$ROOT_DIR/script/stage_tasklight_runtime.sh" --state-dir "$STATE_DIR" >/dev/null
+RUNTIME_ROOT="${TASKLIGHT_RUNTIME_ROOT:-$STATE_DIR/runtime/tasklight-python}"
+RUNTIME_SCRIPT="$RUNTIME_ROOT/script/codex_quota_appserver_watcher.py"
 
 if [[ -z "$CODEX_BIN" ]]; then
   for candidate in \
@@ -39,16 +43,18 @@ cat >"$PLIST_PATH" <<PLIST
   <key>Label</key>
   <string>${LABEL}</string>
   <key>WorkingDirectory</key>
-  <string>${ROOT_DIR}</string>
+  <string>${RUNTIME_ROOT}</string>
   <key>ProgramArguments</key>
   <array>
     <string>${PYTHON_BIN}</string>
-    <string>${ROOT_DIR}/script/codex_quota_appserver_watcher.py</string>
+    <string>${RUNTIME_SCRIPT}</string>
     <string>--watch</string>
     <string>--poll-seconds</string>
     <string>${POLL_SECONDS}</string>
     <string>--event-timeout</string>
     <string>${EVENT_TIMEOUT}</string>
+    <string>--timeout</string>
+    <string>${REQUEST_TIMEOUT}</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

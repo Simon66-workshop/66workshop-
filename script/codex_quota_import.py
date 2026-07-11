@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -57,6 +58,23 @@ def health_for_percent(percent: int | None) -> str:
     if percent >= 5:
         return "low"
     return "critical"
+
+
+def remaining_percent_from_used(value: Any) -> tuple[int, int] | None:
+    """Normalize AppServer usage using the same integer the client presents.
+
+    Some AppServer builds return a fractional ``usedPercent``. Rounding that
+    number first can produce a one-point disagreement with the visible
+    remaining quota. Round the remaining value once, then derive the paired
+    used value so both fields always add up to one hundred.
+    """
+    try:
+        used = float(value)
+    except (TypeError, ValueError):
+        return None
+    remaining = int(math.floor(max(0.0, min(100.0, 100.0 - used)) + 0.5))
+    remaining = max(0, min(100, remaining))
+    return remaining, 100 - remaining
 
 
 def recommendation_for_status(status: str) -> str:
@@ -599,12 +617,10 @@ def normalize_appserver_response(result: dict[str, Any]) -> dict[str, Any]:
             window = bucket.get(role)
             if not isinstance(window, dict):
                 continue
-            used = window.get("usedPercent")
-            try:
-                used_percent = int(round(float(used)))
-            except (TypeError, ValueError):
+            normalized_usage = remaining_percent_from_used(window.get("usedPercent"))
+            if normalized_usage is None:
                 continue
-            remaining = max(0, min(100, 100 - used_percent))
+            remaining, used_percent = normalized_usage
             duration = window.get("windowDurationMins")
             try:
                 duration_mins = int(duration) if duration is not None else None

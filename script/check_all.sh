@@ -18,6 +18,8 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_state_projector_snapshot_cache.sh"
 "$ROOT_DIR/script/smoke_codex_quota.sh"
 "$ROOT_DIR/script/smoke_codex_quota_watcher.sh"
+"$ROOT_DIR/script/smoke_quota_writer_ownership.sh"
+"$ROOT_DIR/script/smoke_tasklight_runtime_stage.sh"
 "$ROOT_DIR/script/smoke_codex_quota_reset_credits.sh"
 "$ROOT_DIR/script/smoke_codex_quota_watcher_launch_agent.sh"
 "$ROOT_DIR/script/smoke_widget_snapshot.sh"

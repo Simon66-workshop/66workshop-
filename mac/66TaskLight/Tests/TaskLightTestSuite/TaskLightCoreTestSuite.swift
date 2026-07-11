@@ -140,7 +140,7 @@ public struct TaskLightCoreTestSuite {
             manual_resets_available: 3
         )
 
-        #expect(TaskLightQuotaPresentation.compactText(for: staleQuota) == "⚡57·93·R3")
+        #expect(TaskLightQuotaPresentation.compactText(for: staleQuota) == "⚡57·93·R3~")
         #expect(TaskLightQuotaPresentation.compactText(for: nil) == "⚡Q?")
     }
 

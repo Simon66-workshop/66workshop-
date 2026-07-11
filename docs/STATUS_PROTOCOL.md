@@ -653,7 +653,7 @@ M3.6 adds optional display-only quota data to `ui_state.json`. M3.7 separates th
 }
 ```
 
-Quota is copied from `quota_state.json` by `state_projector.py`. It must not change `global_status`, `lamp_status`, `global_display_title`, task transitions, sound events, or runtime candidate scoring. Missing, stale, or invalid quota should produce `unknown` diagnostics and compact `⚡ Q?`, not a projector failure.
+Quota is copied from `quota_state.json` by `state_projector.py`. It must not change `global_status`, `lamp_status`, `global_display_title`, task transitions, sound events, or runtime candidate scoring. Missing or invalid quota should produce `unknown` diagnostics and compact `⚡ Q?`, not a projector failure. A stale but last-valid local snapshot remains diagnostic-only, is marked `stale`, and uses a trailing `~` so it cannot be mistaken for a current read.
 
 `quota_state.json` may contain:
 

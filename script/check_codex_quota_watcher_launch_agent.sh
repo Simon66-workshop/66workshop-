@@ -5,17 +5,20 @@ LABEL="${TASKLIGHT_QUOTA_WATCHER_LABEL:-com.66tasklight.quota-watcher}"
 PLIST_PATH="${TASKLIGHT_QUOTA_WATCHER_PLIST:-$HOME/Library/LaunchAgents/${LABEL}.plist}"
 STATE_DIR="${TASKLIGHT_STATE_DIR:-$HOME/.66tasklight}"
 HEALTH_PATH="${TASKLIGHT_QUOTA_PROBE_HEALTH_PATH:-$STATE_DIR/quota_probe_health.json}"
+RUNTIME_SCRIPT="${TASKLIGHT_QUOTA_WATCHER_RUNTIME_SCRIPT:-$STATE_DIR/runtime/tasklight-python/script/codex_quota_appserver_watcher.py}"
+MAX_AGE_SECONDS="${TASKLIGHT_QUOTA_WATCHER_MAX_AGE_SECONDS:-30}"
 
 launch_status="not_running"
 if launchctl print "gui/$UID/$LABEL" >/dev/null 2>&1; then
   launch_status="running"
 fi
 
-process_pid="$(pgrep -f "codex_quota_appserver_watcher.py.*--watch" | head -1 || true)"
+process_pid="$(pgrep -f "$RUNTIME_SCRIPT.*--watch" | head -1 || true)"
+[ -n "$process_pid" ] || process_pid="$(pgrep -f "codex_quota_appserver_watcher.py.*--watch" | head -1 || true)"
 plist_exists="no"
 [[ -f "$PLIST_PATH" ]] && plist_exists="yes"
 
-python3 - "$HEALTH_PATH" "$plist_exists" "$launch_status" "$process_pid" <<'PY'
+python3 - "$HEALTH_PATH" "$plist_exists" "$launch_status" "$process_pid" "$MAX_AGE_SECONDS" <<'PY'
 import json
 import sys
 import time
@@ -26,6 +29,7 @@ health_path = Path(sys.argv[1]).expanduser()
 plist_exists = sys.argv[2]
 launch_status = sys.argv[3]
 process_pid = sys.argv[4] or "none"
+max_age_seconds = float(sys.argv[5])
 
 def parse_ts(value):
     if not value:
@@ -53,6 +57,8 @@ elif not payload:
     status = "stale"
 elif payload.get("status") == "error":
     status = "error"
+elif last_probe_age is None or last_probe_age > max_age_seconds:
+    status = "stale"
 
 print(f"plist_exists={plist_exists}")
 print(f"launchctl_status={launch_status}")

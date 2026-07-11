@@ -8,8 +8,10 @@ UI_STATE_PATH="${TASKLIGHT_UI_STATE_PATH:-$STATE_DIR/ui_state.json}"
 HEALTH_PATH="${TASKLIGHT_STATE_PROJECTOR_HEALTH_PATH:-$STATE_DIR/state_projector_health.json}"
 MAX_AGE="${TASKLIGHT_STATE_PROJECTOR_MAX_AGE_SECONDS:-5}"
 EXPECTED_HASH="${TASKLIGHT_STATE_PROJECTOR_EXPECTED_HASH:-sha256:$(shasum -a 256 "$ROOT_DIR/script/state_projector.py" | awk '{print $1}')}"
+RUNTIME_SCRIPT="${TASKLIGHT_STATE_PROJECTOR_RUNTIME_SCRIPT:-$STATE_DIR/runtime/tasklight-python/script/state_projector.py}"
 
-process_list="$(pgrep -f "$ROOT_DIR/script/state_projector.py --watch" || true)"
+process_list="$(pgrep -f "$RUNTIME_SCRIPT --watch" || true)"
+[ -n "$process_list" ] || process_list="$(pgrep -f "$ROOT_DIR/script/state_projector.py --watch" || true)"
 [ -n "$process_list" ] || process_list="$(pgrep -f "state_projector.py --watch" || true)"
 process_count="${TASKLIGHT_STATE_PROJECTOR_PROCESS_COUNT_OVERRIDE:-}"
 if [ -z "$process_count" ]; then

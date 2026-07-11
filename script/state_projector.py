@@ -411,6 +411,42 @@ def quota_autoprobe_enabled(root: Path) -> bool:
         return False
 
 
+def quota_watcher_owns_snapshot(root: Path, now_ts: float) -> bool:
+    """Prevent the projector from racing the dedicated quota watcher.
+
+    The watcher owns production quota writes. The projector only keeps its
+    bootstrap fallback for installations where no recent watcher lease exists.
+    """
+    health = load_json(quota_probe_health_path(root), {})
+    if not isinstance(health, dict) or health.get("writer") != "quota_watcher":
+        return False
+    age = age_seconds(health.get("last_probe_at") or health.get("updated_at"), now_ts)
+    try:
+        poll_seconds = max(2.0, float(health.get("poll_seconds") or 10.0))
+        timeout_seconds = max(1.0, float(health.get("request_timeout_seconds") or 5.0))
+    except (TypeError, ValueError):
+        poll_seconds, timeout_seconds = 10.0, 5.0
+    return age is not None and age <= max(20.0, poll_seconds * 2.0 + timeout_seconds + 5.0)
+
+
+def production_quota_watcher_installed(root: Path) -> bool:
+    """The installed watcher owns production quota and health sidecars.
+
+    Do not infer ownership from its first heartbeat: a watcher restart has a
+    short period before that file exists, and allowing the projector to write
+    in that gap reintroduces the stale-snapshot race.
+    """
+    try:
+        if root.expanduser().resolve() != DEFAULT_STATE_DIR.resolve():
+            return False
+    except OSError:
+        return False
+    label = os.environ.get("TASKLIGHT_QUOTA_WATCHER_LABEL", "com.66tasklight.quota-watcher")
+    configured_path = os.environ.get("TASKLIGHT_QUOTA_WATCHER_PLIST")
+    plist_path = Path(configured_path).expanduser() if configured_path else Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    return plist_path.exists()
+
+
 def signal_bus_max_age_seconds() -> float:
     return float(os.environ.get("TASKLIGHT_SIGNAL_BUS_MAX_AGE_SECONDS", "86400"))
 
@@ -627,6 +663,8 @@ def load_ui_clients(root: Path) -> list[dict[str, Any]]:
 def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
     if not quota_autoprobe_enabled(root):
         return
+    if quota_watcher_owns_snapshot(root, now_ts) or production_quota_watcher_installed(root):
+        return
     health_path = quota_probe_health_path(root)
     health = load_json(health_path, {})
     last_probe_age = age_seconds((health or {}).get("last_probe_at"), now_ts) if isinstance(health, dict) else None
@@ -653,6 +691,19 @@ def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
             "updated_at": now_iso(),
         }
     except Exception as error:
+        fallback_payload = None
+        try:
+            from codex_quota_import import normalize_appserver_response, preserve_last_known_good_appserver_quota
+
+            fallback_payload = preserve_last_known_good_appserver_quota(
+                normalize_appserver_response({}),
+                quota_state_path(root),
+                "projector_quota_probe_error_cached_snapshot",
+            )
+            if fallback_payload.get("source") == "codex_appserver_cached":
+                atomic_write_json(quota_state_path(root), fallback_payload)
+        except Exception:
+            fallback_payload = None
         payload = {
             "schema_version": SCHEMA_VERSION,
             "status": "error",
@@ -660,8 +711,8 @@ def maybe_autoprobe_quota(root: Path, now_ts: float) -> None:
             "mode": "poll_fallback",
             "last_event_at": None,
             "last_probe_at": now_iso(),
-            "quota_status": "unknown",
-            "effective_remaining_percent": None,
+            "quota_status": fallback_payload.get("quota_status") if isinstance(fallback_payload, dict) else "unknown",
+            "effective_remaining_percent": fallback_payload.get("effective_remaining_percent") if isinstance(fallback_payload, dict) else None,
             "last_error": str(error)[:240],
             "updated_at": now_iso(),
         }
@@ -715,10 +766,25 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
     if not isinstance(payload, dict):
         diagnostics["quota_status"] = "invalid"
         return None, diagnostics
+    health = load_json(quota_probe_health_path(root), {})
     captured_at = payload.get("captured_at")
     age = age_seconds(captured_at, now_ts)
-    stale = payload.get("fresh") is not True or age is None or age > quota_max_age_seconds()
-    warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
+    captured_ts = parse_ts(captured_at)
+    latest_probe_ts = parse_ts(health.get("last_probe_at") or health.get("updated_at")) if isinstance(health, dict) else None
+    watcher_lease_expired = isinstance(health, dict) and health.get("writer") == "quota_watcher" and not quota_watcher_owns_snapshot(root, now_ts)
+    probe_failed_after_snapshot = (
+        isinstance(health, dict)
+        and str(health.get("status") or "").lower() in {"error", "degraded"}
+        and captured_ts is not None
+        and latest_probe_ts is not None
+        and latest_probe_ts >= captured_ts
+    )
+    stale = payload.get("fresh") is not True or age is None or age > quota_max_age_seconds() or probe_failed_after_snapshot or watcher_lease_expired
+    warnings = list(payload.get("warnings") if isinstance(payload.get("warnings"), list) else [])
+    if probe_failed_after_snapshot and "quota_probe_failed_after_snapshot" not in warnings:
+        warnings.append("quota_probe_failed_after_snapshot")
+    if watcher_lease_expired and "quota_watcher_lease_expired" not in warnings:
+        warnings.append("quota_watcher_lease_expired")
     raw_windows = payload.get("raw_windows") if isinstance(payload.get("raw_windows"), list) else []
     legacy_windows = payload.get("windows") if isinstance(payload.get("windows"), list) else []
     display_source = payload.get("display_windows") if isinstance(payload.get("display_windows"), list) else []
@@ -728,13 +794,12 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
     long = valid_windows[-1] if len(valid_windows) > 1 else {}
     resets = payload.get("manual_resets") if isinstance(payload.get("manual_resets"), dict) else {}
     reset_credits = resets.get("credits") if isinstance(resets.get("credits"), list) else []
-    status = "unknown" if stale else str(payload.get("quota_status") or "unknown")
+    status = "stale" if stale else str(payload.get("quota_status") or "unknown")
     if stale:
         maybe_autoprobe_quota(root, now_ts)
         refreshed = load_json(path, None)
         if isinstance(refreshed, dict) and refreshed.get("captured_at") != captured_at:
             return project_quota_state(root, time.time())
-    health = load_json(quota_probe_health_path(root), {})
     probe_mode = health.get("mode") if isinstance(health, dict) else None
     diagnostics.update(
         {
@@ -752,12 +817,12 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
             "id": window.get("id"),
             "label": window.get("label"),
             "bucket_id": window.get("bucket_id"),
-            "remaining_percent": None if stale else window.get("remaining_percent"),
+            "remaining_percent": window.get("remaining_percent"),
             "used_percent": window.get("used_percent"),
             "reset_label": window.get("reset_label"),
             "reset_at": window.get("reset_at"),
             "window_duration_mins": window.get("window_duration_mins"),
-            "health": "unknown" if stale else window.get("health"),
+            "health": "stale" if stale else window.get("health"),
             "selection_reason": window.get("selection_reason"),
         }
         for window in valid_windows
@@ -766,27 +831,27 @@ def project_quota_state(root: Path, now_ts: float) -> tuple[dict[str, Any] | Non
         "source": payload.get("source"),
         "fresh": not stale,
         "status": status,
-        "effective_remaining_percent": None if stale else payload.get("effective_remaining_percent"),
+        "effective_remaining_percent": payload.get("effective_remaining_percent"),
         "display_windows": display_windows,
         "raw_window_count": raw_window_count,
         "captured_age_sec": age,
         "probe_mode": probe_mode,
         "bucket_id": short.get("bucket_id"),
         "warnings": warnings,
-        "short_percent": None if stale else short.get("remaining_percent"),
+        "short_percent": short.get("remaining_percent"),
         "short_label": short.get("label"),
         "short_reset_label": short.get("reset_label"),
         "short_bucket_id": short.get("bucket_id"),
-        "long_percent": None if stale else long.get("remaining_percent"),
+        "long_percent": long.get("remaining_percent"),
         "long_label": long.get("label"),
         "long_reset_label": long.get("reset_label"),
         "long_bucket_id": long.get("bucket_id"),
-        "manual_resets_available": None if stale else resets.get("available_count"),
-        "manual_resets_total_count": None if stale else resets.get("total_count"),
-        "manual_resets_used_count": None if stale else resets.get("used_count"),
-        "manual_resets_expired_count": None if stale else resets.get("expired_count"),
-        "manual_resets_next_expiry": None if stale else resets.get("next_expiry"),
-        "manual_reset_credits": [] if stale else [
+        "manual_resets_available": resets.get("available_count"),
+        "manual_resets_total_count": resets.get("total_count"),
+        "manual_resets_used_count": resets.get("used_count"),
+        "manual_resets_expired_count": resets.get("expired_count"),
+        "manual_resets_next_expiry": resets.get("next_expiry"),
+        "manual_reset_credits": [
             {
                 "id": credit.get("id"),
                 "status": credit.get("status"),

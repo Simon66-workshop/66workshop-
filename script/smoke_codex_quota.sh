@@ -96,6 +96,26 @@ assert q["manual_resets_available"] == 3, q
 assert q["manual_resets_next_expiry"] == "2026-07-18", q
 PY
 
+python3 - "$ROOT_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "script"))
+from codex_quota_import import normalize_appserver_response
+
+payload = normalize_appserver_response({
+    "rateLimits": [{
+        "limitId": "codex",
+        "primary": {"usedPercent": 4.5, "windowDurationMins": 300, "resetsAt": 4102444800},
+        "secondary": {"usedPercent": 8.5, "windowDurationMins": 10080, "resetsAt": 4102444800},
+    }]
+})
+assert payload["display_windows"][0]["remaining_percent"] == 96, payload
+assert payload["display_windows"][0]["used_percent"] == 4, payload
+assert payload["display_windows"][1]["remaining_percent"] == 92, payload
+assert payload["display_windows"][1]["used_percent"] == 8, payload
+PY
+
 python3 "$ROOT_DIR/script/codex_quota_import.py" --text $'5小时 97% 11:44\n1周 97% 6月18日' >/dev/null
 python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
 python3 - "$TASKLIGHT_UI_STATE_PATH" <<'PY'

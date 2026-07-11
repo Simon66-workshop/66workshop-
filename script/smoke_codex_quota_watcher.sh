@@ -49,6 +49,8 @@ quota=json.load(open(sys.argv[1], encoding="utf-8"))
 health=json.load(open(sys.argv[2], encoding="utf-8"))
 assert health["status"] == "ok", health
 assert health["mode"] == "event_fixture", health
+assert health["writer"] == "quota_watcher", health
+assert health["poll_seconds"] > 0, health
 assert health["last_event_at"], health
 assert quota["display_windows"][0]["bucket_id"] == "codex", quota
 assert quota["display_windows"][0]["remaining_percent"] == 98, quota
@@ -56,6 +58,53 @@ assert quota["display_windows"][-1]["remaining_percent"] == 40, quota
 assert len(quota["raw_windows"]) == 4, quota
 assert quota["manual_resets"]["available_count"] == 3, quota
 assert quota["manual_resets"]["next_expiry"] == "2026-07-18", quota
+PY
+
+# A watcher that has stopped renewing its lease must not leave a payload marked
+# fresh for the old global max-age window.
+python3 - "$TASKLIGHT_QUOTA_PROBE_HEALTH_PATH" <<'PY'
+import json, sys
+from datetime import datetime, timedelta
+
+path = sys.argv[1]
+health = json.load(open(path, encoding="utf-8"))
+expired = datetime.now().astimezone() - timedelta(seconds=90)
+health["last_probe_at"] = expired.replace(microsecond=0).isoformat()
+health["updated_at"] = health["last_probe_at"]
+json.dump(health, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+python3 - "$TASKLIGHT_UI_STATE_PATH" <<'PY'
+import json, sys
+state=json.load(open(sys.argv[1], encoding="utf-8"))
+quota=state.get("quota")
+assert quota and quota["fresh"] is False, state
+assert "quota_watcher_lease_expired" in quota["warnings"], quota
+PY
+
+# A newer failed watcher probe must downgrade an older fresh payload instead
+# of letting the projector present it as a live quota read.
+python3 - "$TASKLIGHT_QUOTA_PROBE_HEALTH_PATH" <<'PY'
+import json, sys
+from datetime import datetime
+
+path = sys.argv[1]
+health = json.load(open(path, encoding="utf-8"))
+health["status"] = "error"
+health["last_probe_at"] = datetime.now().astimezone().replace(microsecond=0).isoformat()
+health["updated_at"] = health["last_probe_at"]
+health["last_error"] = "simulated_timeout"
+json.dump(health, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
+python3 - "$TASKLIGHT_UI_STATE_PATH" <<'PY'
+import json, sys
+state=json.load(open(sys.argv[1], encoding="utf-8"))
+quota=state.get("quota")
+assert quota and quota["fresh"] is False, state
+assert quota["status"] == "stale", quota
+assert quota["short_percent"] == 98 and quota["long_percent"] == 40, quota
+assert "quota_probe_failed_after_snapshot" in quota["warnings"], quota
 PY
 
 cat >"$STATE_DIR/rate-limit-updated-unsupported.json" <<'JSON'
@@ -82,6 +131,7 @@ state=json.load(open(sys.argv[1], encoding="utf-8"))
 quota=state.get("quota")
 assert quota and quota["fresh"] is False, state
 assert quota["source"] == "codex_appserver_cached", quota
+assert quota["short_percent"] == 98 and quota["long_percent"] == 40, quota
 assert state["global_status"] == "idle", state
 PY
 

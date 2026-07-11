@@ -21,6 +21,9 @@ public enum TaskLightQuotaPresentation {
             parts.append("R\(resets)")
         }
 
-        return parts.isEmpty ? "⚡Q?" : "⚡" + parts.joined(separator: "·")
+        guard !parts.isEmpty else { return "⚡Q?" }
+        // A cached local snapshot remains useful during a short AppServer
+        // timeout, but it must never look like a live quota read.
+        return "⚡" + parts.joined(separator: "·") + (quota.fresh ? "" : "~")
     }
 }
