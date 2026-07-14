@@ -350,6 +350,56 @@ do {
     check(TaskLightProjectedPresentation.displayTitle(from: mismatchedTitleUIState) == "RUNNING", "ui_state presentation guards stale Done title during projected running")
     check(TaskLightProjectedPresentation.primaryStatus(from: mismatchedTitleUIState) == "running", "ui_state presentation primary status follows projected running")
 
+    var unresolvedStaleUIState = TaskLightUIState()
+    unresolvedStaleUIState.counts.stale = 1
+    check(TaskLightProjectedPresentation.primaryStatus(from: unresolvedStaleUIState) == "idle", "unresolved stale presentation does not promote the primary lamp")
+    check(TaskLightProjectedPresentation.menuBarStatusLabel(from: unresolvedStaleUIState) == "Stale", "menu bar exposes unresolved stale work instead of clean Idle")
+    check(TaskLightProjectedPresentation.menuBarActivityCount(from: unresolvedStaleUIState) == 1, "menu bar counts unresolved stale work")
+
+    let cleanIdleUIState = TaskLightUIState()
+    check(TaskLightProjectedPresentation.menuBarStatusLabel(from: cleanIdleUIState) == "Idle", "clean idle remains Idle")
+    check(TaskLightProjectedPresentation.menuBarActivityCount(from: cleanIdleUIState) == 0, "clean idle remains zero")
+
+    var weakObservedUIState = TaskLightUIState()
+    weakObservedUIState.runtime_candidates = [
+        TaskLightRuntimeCandidate(
+            candidate_id: "turn:weak-observed",
+            source_set: ["codex_hook"],
+            freshness_score: 0.5,
+            display_scope: "observed_only",
+            state_cause: "codex_hook:item_started"
+        )
+    ]
+    check(TaskLightProjectedPresentation.primaryStatus(from: weakObservedUIState) == "idle", "weak observed work does not promote the primary lamp")
+    check(TaskLightProjectedPresentation.menuBarStatusLabel(from: weakObservedUIState) == "Watch", "menu bar exposes weak observed work instead of clean Idle")
+    check(TaskLightProjectedPresentation.menuBarActivityCount(from: weakObservedUIState) == 1, "menu bar counts fresh weak observed work")
+
+    var hookRunningUIState = TaskLightUIState(global_status: "running", lamp_status: "running", global_display_title: "RUNNING")
+    hookRunningUIState.runtime_candidates = [
+        TaskLightRuntimeCandidate(
+            candidate_id: "turn:authoritative-running",
+            source_set: ["codex_hook"],
+            freshness_score: 1,
+            display_scope: "active_execution",
+            state_cause: "codex_hook:item_started"
+        )
+    ]
+    check(TaskLightProjectedPresentation.menuBarActivityCount(from: hookRunningUIState) == 1, "menu bar counts authoritative active hook turns when managed task counts are empty")
+
+    var processOnlyUIState = TaskLightUIState()
+    processOnlyUIState.runtime_candidates = [
+        TaskLightRuntimeCandidate(
+            candidate_id: "process:diagnostic-only",
+            source_set: ["process_observer"],
+            freshness_score: 1,
+            display_scope: "ignored",
+            state_cause: "process_observer:running",
+            why_ignored: "process_only_not_authoritative"
+        )
+    ]
+    check(TaskLightProjectedPresentation.menuBarStatusLabel(from: processOnlyUIState) == "Idle", "process-only evidence does not change the menu status")
+    check(TaskLightProjectedPresentation.menuBarActivityCount(from: processOnlyUIState) == 0, "process-only evidence does not increase the running count")
+
     try "{broken".data(using: .utf8)!.write(to: config.uiStateURL)
     let fallbackUIState = store.loadProjectedUIState()
     check(fallbackUIState.source == "swift_fallback", "corrupt ui_state falls back")

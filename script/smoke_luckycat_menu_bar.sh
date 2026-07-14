@@ -31,6 +31,12 @@ rg -q "onOpenVisualMatrix" "$controller" "$radar" \
 rg -q "menuBarStatusTitle\\(\\)" "$view_model" "$controller" \
   || fail "menu bar title helper is missing"
 
+rg -q "TaskLightProjectedPresentation\.menuBarStatusLabel" "$view_model" \
+  || fail "menu bar must expose stale or observed work without changing the projected lamp"
+
+rg -q "TaskLightProjectedPresentation\.menuBarActivityCount" "$view_model" \
+  || fail "menu bar activity count must follow the displayed status"
+
 rg -q "menuBarStatusAccessibilityLabel\\(\\)" "$view_model" "$controller" \
   || fail "menu bar accessibility helper is missing"
 

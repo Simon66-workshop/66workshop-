@@ -1308,12 +1308,15 @@ final class TaskLightViewModel: ObservableObject {
     }
 
     func menuBarStatusTitle() -> String {
-        let activeCount = runningDisplayCount() + pendingDisplayCount() + observedDisplayCount()
-        return "● \(menuBarShortStatusTitle()) \(activeCount)  \(quotaCompactText())"
+        let status = TaskLightProjectedPresentation.menuBarStatusLabel(from: uiState)
+        let count = TaskLightProjectedPresentation.menuBarActivityCount(from: uiState)
+        return "● \(menuBarShortStatusTitle(status)) \(count)  \(quotaCompactText())"
     }
 
     func menuBarStatusAccessibilityLabel() -> String {
-        "\(compactStatusTitle()), \(edgeRailThreadSummary()), quota \(quotaCompactText())"
+        let status = TaskLightProjectedPresentation.menuBarStatusLabel(from: uiState)
+        let staleDetail = uiState.counts.stale > 0 ? ", unresolved stale \(uiState.counts.stale)" : ""
+        return "\(status), \(edgeRailThreadSummary())\(staleDetail), quota \(quotaCompactText())"
     }
 
     func taskRadarActiveTasks() -> [TaskLightTaskSummary] {
@@ -1813,8 +1816,8 @@ final class TaskLightViewModel: ObservableObject {
         }
     }
 
-    private func menuBarShortStatusTitle() -> String {
-        switch compactStatusTitle() {
+    private func menuBarShortStatusTitle(_ status: String) -> String {
+        switch status {
         case "Running":
             return "Run"
         case "Blocked":
@@ -1824,7 +1827,7 @@ final class TaskLightViewModel: ObservableObject {
         case "Observed":
             return "Obs"
         default:
-            return compactStatusTitle()
+            return status
         }
     }
 

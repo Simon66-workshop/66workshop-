@@ -2253,6 +2253,84 @@ public enum TaskLightProjectedPresentation {
         }
     }
 
+    public static func menuBarStatusLabel(from state: TaskLightUIState) -> String {
+        switch primaryStatus(from: state) {
+        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+            return "Blocked"
+        case TaskLightStatus.running.rawValue, TaskLightStatus.queued.rawValue:
+            return "Running"
+        case "pending", TaskLightStatus.done_unverified.rawValue:
+            return "Pending"
+        case TaskLightStatus.done_verified.rawValue:
+            return "Done"
+        default:
+            if state.counts.stale > 0 {
+                return "Stale"
+            }
+            if state.counts.observed_active > 0 {
+                return "Observed"
+            }
+            if weakRuntimeCandidateCount(from: state) > 0 {
+                return "Watch"
+            }
+            return "Idle"
+        }
+    }
+
+    public static func menuBarActivityCount(from state: TaskLightUIState) -> Int {
+        switch primaryStatus(from: state) {
+        case TaskLightStatus.blocked.rawValue, TaskLightStatus.stale.rawValue:
+            return state.counts.blocked + state.counts.stale
+        case TaskLightStatus.running.rawValue, TaskLightStatus.queued.rawValue:
+            let managedCount = state.counts.running + state.counts.queued
+            return max(managedCount, authoritativeActiveCandidateCount(from: state))
+        case "pending", TaskLightStatus.done_unverified.rawValue:
+            return state.counts.pending_verify_count
+        case TaskLightStatus.done_verified.rawValue:
+            return state.counts.done_verified_visible
+        default:
+            if state.counts.stale > 0 {
+                return state.counts.stale
+            }
+            if state.counts.observed_active > 0 {
+                return state.counts.observed_active
+            }
+            return weakRuntimeCandidateCount(from: state)
+        }
+    }
+
+    private static func weakRuntimeCandidateCount(from state: TaskLightUIState) -> Int {
+        (state.runtime_candidates ?? []).filter { candidate in
+            let freshness = candidate.freshness_score ?? 0
+            guard freshness > 0 else { return false }
+            if candidate.display_scope == "observed_only" {
+                return true
+            }
+            guard candidate.display_scope == "ignored", freshness >= 0.5 else {
+                return false
+            }
+            let sources = Set(candidate.source_set)
+            let hasDiagnosticSource = sources.contains("codex_appserver")
+                || sources.contains("codex_private_probe")
+            let cause = candidate.state_cause ?? ""
+            let ignoredReason = candidate.why_ignored ?? ""
+            return hasDiagnosticSource && (
+                cause.contains("codex_appserver:unknown")
+                    || cause.contains("private_active")
+                    || ignoredReason == "runtime_score_below_threshold"
+            )
+        }.count
+    }
+
+    private static func authoritativeActiveCandidateCount(from state: TaskLightUIState) -> Int {
+        let candidateIDs = (state.runtime_candidates ?? []).compactMap { candidate -> String? in
+            guard candidate.display_scope == "active_execution" else { return nil }
+            guard (candidate.freshness_score ?? 0) > 0 else { return nil }
+            return candidate.candidate_id
+        }
+        return Set(candidateIDs).count
+    }
+
     private static func normalizedStatus(_ status: String) -> String {
         status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
