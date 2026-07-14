@@ -138,7 +138,7 @@ This keeps LuckyCat blue during active work while reducing repeated
 
 `TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `60`.
 
-`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `6`.
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`.
 
 If an active turn binding has no fresh hook signal after the lease, the bridge
 silently calls `tasklight release` only when the task is still active. This does

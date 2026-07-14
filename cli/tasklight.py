@@ -1269,10 +1269,13 @@ class TaskLightStore:
             )
 
     def rebuild_observations_state(self, *, scan_processes: bool = True) -> TaskLightObservationsState:
+        # Process enumeration is read-only and can be expensive when several
+        # observers are present. Keep it outside the state lock so a heartbeat
+        # cannot wait behind ps/cwd inspection for the full scan duration.
+        live_samples = _parse_ps_snapshot() if scan_processes else []
+        live_by_pid = {int(sample["pid"]): sample for sample in live_samples}
         with locked_state(self.config):
             existing_records = {record.observation_id: record for record in self._scan_observation_files()}
-            live_samples = _parse_ps_snapshot() if scan_processes else []
-            live_by_pid = {int(sample["pid"]): sample for sample in live_samples}
             live_by_id: dict[str, TaskLightObservationRecord] = {}
             seen_ids: set[str] = set()
             now = iso_now()
@@ -1747,8 +1750,27 @@ class TaskLightStore:
                 **details,
             },
         )
-        state = self.rebuild_state(extra_invalid=extra_invalid)
-        write_json_atomic(self.config.state_path, state.to_dict())
+        # Fresh active mutations are already represented by the current task
+        # record. Do not rescan a large historical task directory for every
+        # start/heartbeat/release; update the compatibility aggregate from
+        # the last state snapshot. Terminal and blocker mutations still take
+        # the full rebuild path so their aggregate counts are reconciled.
+        if event_name == "heartbeat":
+            # Heartbeats are high-frequency and the caller only needs the
+            # updated record. Build a bounded one-task result rather than
+            # parsing the compatibility aggregate while the state lock is
+            # contended by observers/projectors.
+            state = self._fast_state_for_record(record, extra_invalid=extra_invalid)
+        elif event_name in {"start", "release"}:
+            state = self._update_state_snapshot_for_task(record, extra_invalid=extra_invalid)
+        else:
+            state = self.rebuild_state(extra_invalid=extra_invalid)
+        # ui_state.json/projector and the per-task file are authoritative for
+        # fresh active display. Keep the large legacy aggregate untouched
+        # during active/release bursts; terminal/blocker mutations still
+        # rebuild it.
+        if event_name not in {"start", "heartbeat", "release"} or not self.config.state_path.exists():
+            write_json_atomic(self.config.state_path, state.to_dict())
         signal_map = {
             "start": ("task_started", 0.98),
             "heartbeat": ("heartbeat", 0.98),
@@ -1791,6 +1813,42 @@ class TaskLightStore:
                 }
             )
         return record, state
+
+    def _update_state_snapshot_for_task(
+        self,
+        record: TaskLightTaskRecord,
+        *,
+        extra_invalid: Optional[TaskLightTaskSummary] = None,
+    ) -> TaskLightAggregateState:
+        """Update the compatibility aggregate without enumerating task files."""
+        try:
+            snapshot = read_json_file(self.config.state_path)
+            state = self._state_from_dict(snapshot)
+        except (FileNotFoundError, OSError, json.JSONDecodeError, TaskLightStateError, TypeError, ValueError):
+            return self.rebuild_state(extra_invalid=extra_invalid)
+
+        updated = _task_summary_from_record(record, config=self.config, file_path=_task_file_path(self.config, record.task_id))
+        valid = [updated if item.task_id == record.task_id else item for item in state.tasks]
+        if not any(item.task_id == record.task_id for item in state.tasks):
+            valid.append(updated)
+        invalid = [item for item in state.invalid_tasks if item.task_id != record.task_id]
+        if extra_invalid is not None:
+            invalid.append(extra_invalid)
+        return self._build_state(valid, invalid, [], source_health=state.source_health)
+
+    def _fast_state_for_record(
+        self,
+        record: TaskLightTaskRecord,
+        *,
+        extra_invalid: Optional[TaskLightTaskSummary] = None,
+    ) -> TaskLightAggregateState:
+        summary = _task_summary_from_record(
+            record,
+            config=self.config,
+            file_path=_task_file_path(self.config, record.task_id),
+        )
+        invalid = [extra_invalid] if extra_invalid is not None else []
+        return self._build_state([summary], invalid, [], source_health=STATE_HEALTH_HEALTHY)
 
     def rebuild_state(self, extra_invalid: Optional[TaskLightTaskSummary] = None) -> TaskLightAggregateState:
         valid, invalid, raw_records = self._scan_task_files()

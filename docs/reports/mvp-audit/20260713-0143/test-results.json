@@ -1,0 +1,28 @@
+{
+  "schema_version": "m7.1",
+  "audit_id": "20260713-0143",
+  "decision": "NEEDS_HUMAN_REVIEW",
+  "score": 90,
+  "hard_gate_check_all": "pass_three_consecutive_final_runs",
+  "trial_status": "TRIAL_READY_PENDING_HUMAN_PREFLIGHT",
+  "tests": [
+    {"command":"python3 -m py_compile cli/*.py script/*.py script/self-review/*.py script/self-review/auditors/*.py","status":"pass","exit_code":0},
+    {"command":"python3 -m unittest discover -s cli/tests -p test_*.py","status":"pass","exit_code":0,"summary":"18 tests"},
+    {"command":"cd mac/66TaskLight && swift build && swift run TaskLightChecks","status":"pass","exit_code":0},
+    {"command":"./script/check_all.sh","status":"pass","exit_code":0,"summary":"three final consecutive runs"},
+    {"command":"./script/smoke_signal_retention_time_boundary.sh","status":"pass","exit_code":0},
+    {"command":"./script/smoke_hook_bridge_health_timeline.sh","status":"pass","exit_code":0,"summary":"three standalone runs"},
+    {"command":"./script/smoke_storage_lifecycle.sh","status":"pass","exit_code":0},
+    {"command":"./script/smoke_large_state_render_performance.sh","status":"pass","exit_code":0,"summary":"heartbeat 0.102s; start 0.099s; release 0.100s"},
+    {"command":"./script/check_state_projector.sh","status":"pass","exit_code":0},
+    {"command":"./script/check_ui_client.sh","status":"pass","exit_code":0},
+    {"command":"./script/check_codex_quota.sh","status":"pass","exit_code":0},
+    {"command":"./script/check_codex_quota_watcher_launch_agent.sh","status":"pass","exit_code":0},
+    {"command":"./script/check_codex_workspaces_coverage.sh --skip-appserver","status":"pass","exit_code":0,"summary":"42 total; 35 trusted; 7 missing; preferred 7/7"},
+    {"command":"./script/check_codex_hooks_trust.sh","status":"needs_human_review","exit_code":1,"summary":"hooks_trust_probe_unavailable; no trust action performed"},
+    {"command":"real LaunchAgent health sample","status":"needs_human_review","summary":"heartbeat timeout reproduced after full gate load; one-shot bridge processed 47 signals"}
+  ],
+  "render_recent_100": {"p50_ms":153.510,"p95_ms":178.573,"p99_ms":233.577,"max_ms":233.577,"over_160":35,"over_500":0,"over_1000":0},
+  "workspace": {"overall_total":42,"overall_trusted":35,"overall_missing":7,"preferred_total":7,"preferred_trusted":7,"active_recent_total":3,"active_recent_trusted":3,"workspace_discovery_probe_status":"available","hooks_trust_probe_status":"unavailable"},
+  "safety": {"auth_read":false,"secret_output":false,"raw_log_body_output":false,"external_api":false,"auto_trust":false,"auto_purchase":false,"auto_reset":false,"commit":false,"push":false,"maintenance_applied":false}
+}

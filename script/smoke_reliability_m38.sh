@@ -13,6 +13,8 @@ trap cleanup EXIT
 export TASKLIGHT_STATE_DIR="$TMP_ROOT/state"
 export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$TASKLIGHT_STATE_DIR/normalized_signals.jsonl"
 export TASKLIGHT_SIGNAL_BUS_MAX_BYTES=4096
+export TASKLIGHT_TEST_RETENTION_SECONDS="${TASKLIGHT_TEST_RETENTION_SECONDS:-120}"
+export TASKLIGHT_SIGNAL_BUS_RETENTION_SECONDS="$TASKLIGHT_TEST_RETENTION_SECONDS"
 export TASKLIGHT_HOOK_PENDING_AUTO_RELEASE_SECONDS=5
 
 python3 - "$ROOT_DIR" <<'PY'
@@ -21,6 +23,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 root = Path(sys.argv[1])
@@ -31,12 +34,23 @@ from check_codex_workspaces_coverage import classify_workspace
 from state_projector import collapse_visible_tasks, effective_hook_completion_status, runtime_candidate_id
 from tasklight_signal_bus import append_signal, compact_signal_bus, signal_bus_path
 
+retention = float(os.environ["TASKLIGHT_SIGNAL_BUS_RETENTION_SECONDS"])
+assert retention > 0
+now = datetime.now(timezone.utc)
+
+def iso(value):
+    return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+new_time = iso(now - timedelta(seconds=max(1.0, retention * 0.25)))
+boundary_time = iso(now - timedelta(seconds=max(0.0, retention - 1.0)))
+old_time = iso(now - timedelta(seconds=retention + 1.0))
+
 base = {
     "source": "codex_hook",
     "event_type": "turn_started",
     "thread_id": "thread-one",
     "turn_id": "turn-one",
-    "occurred_at": "2026-07-10T00:00:00Z",
+    "occurred_at": new_time,
     "status_hint": "running",
     "session_id": "session-one",
 }
@@ -73,13 +87,22 @@ assert effective_hook_completion_status("done_unverified", now - 2, now) == "don
 assert effective_hook_completion_status("done_unverified", now - 6, now) == "cancelled"
 
 append_signal(base)
+append_signal({**base, "turn_id": "turn-boundary", "occurred_at": boundary_time})
+append_signal({**base, "turn_id": "turn-old", "occurred_at": old_time})
 append_signal(base)
 path = signal_bus_path()
 compact_signal_bus(path)
 rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 ids = [row["signal_id"] for row in rows]
-assert len(ids) == 1, ids
+assert len(ids) == 2, ids
 assert len(ids) == len(set(ids)), ids
+assert {row["turn_id"] for row in rows} == {"turn-one", "turn-boundary"}, rows
+assert [row["turn_id"] for row in rows] == ["turn-one", "turn-boundary"], rows
+first_compaction = path.read_text()
+compact_signal_bus(path)
+assert path.read_text() == first_compaction
+for line in path.read_text().splitlines():
+    json.loads(line)
 PY
 
 mkdir -p "$TASKLIGHT_STATE_DIR"

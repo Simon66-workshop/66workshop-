@@ -8,6 +8,7 @@ import json
 import os
 import select
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -19,7 +20,30 @@ DEFAULT_PROJECT_ROOT = Path("/Users/macmini-simon66/Documents/Codex状态桌面�
 HOOK_HANDLER_REL = Path("script/codex_hook_event.py")
 HOOK_CONFIG_REL = Path(".codex/hooks.json")
 PROJECT_CONFIG_REL = Path(".codex/config.toml")
-CODEX_BIN = Path("/Applications/Codex.app/Contents/Resources/codex")
+CODEX_APP_BINARY_CANDIDATES = (
+    # ChatGPT Work now ships the local Codex app-server here. Keep the legacy
+    # Codex.app location for older installations, then fall back to PATH.
+    Path("/Applications/ChatGPT.app/Contents/Resources/codex"),
+    Path("/Applications/Codex.app/Contents/Resources/codex"),
+)
+
+
+def resolve_codex_binary() -> Path | None:
+    """Return a local executable for the read-only app-server probe.
+
+    This resolver deliberately does not inspect credentials or make network
+    requests. It only locates the already-installed Codex command.
+    """
+    configured = os.environ.get("TASKLIGHT_CODEX_BIN") or os.environ.get("CODEX_BIN")
+    candidates: list[Path] = [Path(configured).expanduser()] if configured else []
+    candidates.extend(CODEX_APP_BINARY_CANDIDATES)
+    path_binary = shutil.which("codex")
+    if path_binary:
+        candidates.append(Path(path_binary))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
 
 
 def load_hooks_json(path: Path) -> tuple[str, Any | None, str | None]:
@@ -139,11 +163,12 @@ def safe_hook_metadata(hook: dict[str, Any]) -> dict[str, Any]:
 
 
 def query_appserver_hooks(project_root: Path, timeout: float = 4.0) -> tuple[str, list[dict[str, Any]], str | None]:
-    if not CODEX_BIN.exists():
+    codex_binary = resolve_codex_binary()
+    if codex_binary is None:
         return "unavailable", [], "codex binary not found"
     try:
         proc = subprocess.Popen(
-            [str(CODEX_BIN), "app-server", "--listen", "stdio://"],
+            [str(codex_binary), "app-server", "--listen", "stdio://"],
             cwd=str(project_root),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

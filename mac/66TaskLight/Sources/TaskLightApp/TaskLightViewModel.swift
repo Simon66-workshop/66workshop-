@@ -188,7 +188,8 @@ final class TaskLightViewModel: ObservableObject {
         let telemetry = TaskLightRenderTelemetry(
             load_milliseconds: snapshot.loadMilliseconds,
             status: snapshot.cacheHit ? "cache_hit" : "loaded",
-            cache_hit: snapshot.cacheHit
+            cache_hit: snapshot.cacheHit,
+            stages: snapshot.stageMilliseconds
         )
         renderSnapshotTelemetry = telemetry
         recordQuotaHistoryIfNeeded(nextState.quota)
@@ -883,7 +884,8 @@ final class TaskLightViewModel: ObservableObject {
         let recorded = TaskLightRenderTelemetry(
             load_milliseconds: telemetry.load_milliseconds,
             status: status,
-            cache_hit: telemetry.cache_hit
+            cache_hit: telemetry.cache_hit,
+            stages: telemetry.stages
         )
         DispatchQueue.global(qos: .utility).async {
             TaskLightStore(config: config).appendRenderTelemetry(recorded)

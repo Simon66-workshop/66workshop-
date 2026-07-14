@@ -42,31 +42,54 @@ public final class TaskLightStore {
     public func loadFallbackDashboard() -> TaskLightAggregateState {
         ensureLayout()
         let stateResult = readStateSnapshot()
-        let scan = scanTaskFiles()
         let observations = loadObservationsState()
 
-        var dashboard: TaskLightAggregateState
-        if !scan.valid.isEmpty || !scan.invalid.isEmpty {
-            let sourceHealth = stateResult.health
-            let built = buildAggregate(valid: scan.valid, invalid: scan.invalid, sourceHealth: sourceHealth)
-            dashboard = refreshLiveState(built)
+        // A stale/unreadable projector is a UI fallback path, not permission
+        // to rescan thousands of historical task files on the main refresh
+        // cadence. The compatibility snapshot is already the bounded read
+        // model for this case. Only reconstruct from task files when the
+        // snapshot is absent or unreadable.
+        if let state = stateResult.state {
+            let recent = scanRecentTaskFiles(limit: 2_000)
+            let dashboardState: TaskLightAggregateState
+            if recent.valid.isEmpty && recent.invalid.isEmpty {
+                dashboardState = markSourceHealth(state, sourceHealth: stateResult.health)
+            } else {
+                var validByID = Dictionary(uniqueKeysWithValues: state.tasks.map { ($0.task_id, $0) })
+                for item in recent.valid {
+                    validByID[item.task_id] = item
+                }
+                var invalidByID = Dictionary(uniqueKeysWithValues: state.invalid_tasks.map { ($0.task_id, $0) })
+                for item in recent.invalid {
+                    invalidByID[item.task_id] = item
+                    validByID.removeValue(forKey: item.task_id)
+                }
+                dashboardState = buildAggregate(
+                    valid: Array(validByID.values),
+                    invalid: Array(invalidByID.values),
+                    sourceHealth: stateResult.health
+                )
+            }
+            var dashboard = refreshLiveState(dashboardState)
             dashboard.observations_state = observations
             return dashboard
         }
 
-        if let state = stateResult.state {
-            dashboard = refreshLiveState(markSourceHealth(state, sourceHealth: stateResult.health))
+        let scan = scanTaskFiles()
+        if !scan.valid.isEmpty || !scan.invalid.isEmpty {
+            let built = buildAggregate(valid: scan.valid, invalid: scan.invalid, sourceHealth: stateResult.health)
+            var dashboard = refreshLiveState(built)
             dashboard.observations_state = observations
             return dashboard
         }
 
         if let legacy = loadLegacyCurrentRecord() {
-            dashboard = refreshLiveState(buildAggregate(valid: [summary(from: legacy, filePath: config.currentURL)], invalid: [], sourceHealth: stateResult.health))
+            var dashboard = refreshLiveState(buildAggregate(valid: [summary(from: legacy, filePath: config.currentURL)], invalid: [], sourceHealth: stateResult.health))
             dashboard.observations_state = observations
             return dashboard
         }
 
-        dashboard = emptyState(sourceHealth: stateResult.health)
+        var dashboard = emptyState(sourceHealth: stateResult.health)
         dashboard.observations_state = observations
         return dashboard
     }
@@ -1363,6 +1386,44 @@ public final class TaskLightStore {
                     continue
                 }
                 valid.append(summary(from: record, filePath: url))
+            } catch {
+                invalid.append(invalidSummary(taskID: url.deletingPathExtension().lastPathComponent, filePath: url, error: error.localizedDescription))
+            }
+        }
+        return ScanResult(valid: valid, invalid: invalid)
+    }
+
+    private func scanRecentTaskFiles(limit: Int) -> ScanResult {
+        guard limit > 0,
+              FileManager.default.fileExists(atPath: config.tasksDirectoryURL.path)
+        else {
+            return ScanResult(valid: [], invalid: [])
+        }
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: config.tasksDirectoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]
+        )) ?? []
+        let candidates = urls.compactMap { url -> (URL, Date)? in
+            guard url.pathExtension == "json",
+                  let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                  values.isRegularFile == true,
+                  let modified = values.contentModificationDate
+            else { return nil }
+            return (url, modified)
+        }
+        .sorted { lhs, rhs in lhs.1 > rhs.1 }
+        .prefix(limit)
+
+        var valid: [TaskLightTaskSummary] = []
+        var invalid: [TaskLightTaskSummary] = []
+        for (url, _) in candidates {
+            do {
+                let record: TaskLightTaskRecord = try readJSON(from: url)
+                if record.task_id.isEmpty {
+                    invalid.append(invalidSummary(taskID: url.deletingPathExtension().lastPathComponent, filePath: url, error: "missing task_id"))
+                } else {
+                    valid.append(summary(from: record, filePath: url))
+                }
             } catch {
                 invalid.append(invalidSummary(taskID: url.deletingPathExtension().lastPathComponent, filePath: url, error: error.localizedDescription))
             }

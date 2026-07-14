@@ -79,13 +79,29 @@ public struct TaskLightRenderTelemetry: Codable, Equatable, Identifiable, Sendab
     public var load_milliseconds: Double
     public var status: String
     public var cache_hit: Bool
+    public var stages: [String: Double]
 
-    public init(id: String = UUID().uuidString, recorded_at: String = TaskLightTaskRecord.nowString(), load_milliseconds: Double, status: String, cache_hit: Bool) {
+    private enum CodingKeys: String, CodingKey {
+        case id, recorded_at, load_milliseconds, status, cache_hit, stages
+    }
+
+    public init(id: String = UUID().uuidString, recorded_at: String = TaskLightTaskRecord.nowString(), load_milliseconds: Double, status: String, cache_hit: Bool, stages: [String: Double] = [:]) {
         self.id = id
         self.recorded_at = recorded_at
         self.load_milliseconds = load_milliseconds
         self.status = status
         self.cache_hit = cache_hit
+        self.stages = stages
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        self.recorded_at = try container.decodeIfPresent(String.self, forKey: .recorded_at) ?? TaskLightTaskRecord.nowString()
+        self.load_milliseconds = try container.decodeIfPresent(Double.self, forKey: .load_milliseconds) ?? 0
+        self.status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
+        self.cache_hit = try container.decodeIfPresent(Bool.self, forKey: .cache_hit) ?? false
+        self.stages = try container.decodeIfPresent([String: Double].self, forKey: .stages) ?? [:]
     }
 }
 

@@ -395,7 +395,7 @@ def classify_thread(item: dict[str, Any], workspace_hook: dict[str, Any], *, now
                 reason = active_reason
                 appserver_status = "active"
                 evidence.extend(string_list(signal.get("appserver_activity_evidence")))
-            elif event_type in {"unknown", "appserver_quiet"}:
+            elif event_type in {"unknown", "appserver_quiet"} and current_age is not None and current_age <= ttl:
                 weak_appserver = True
                 diagnostic_only = True
         if source in DIAGNOSTIC_SOURCES:
@@ -431,7 +431,11 @@ def classify_thread(item: dict[str, Any], workspace_hook: dict[str, Any], *, now
     elif item.get("appserver_state_age_sec") is not None and item["appserver_state_age_sec"] <= ttl:
         decision = "uncovered_active_suspect"
         reason = "appserver_thread_without_active_evidence"
-    elif workspace_hook.get("hook_status") in {"missing", "invalid", "unknown_manual_required"}:
+    elif (
+        latest_age is not None
+        and latest_age <= ttl
+        and workspace_hook.get("hook_status") in {"missing", "invalid", "unknown_manual_required"}
+    ):
         decision = "uncovered_active_suspect"
         reason = "workspace_hooks_not_ready"
     else:

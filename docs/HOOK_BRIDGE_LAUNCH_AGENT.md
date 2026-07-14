@@ -78,7 +78,7 @@ The installer forwards these environment variables into the plist when present:
 
 `TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS` defaults to `2`.
 
-`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `6`, so a turn whose
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`, so a turn whose
 last signal was `item_completed` is silently released quickly if no `stop`
 arrives.
 

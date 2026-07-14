@@ -197,10 +197,13 @@ def start_task(title: str) -> str:
 
 
 def heartbeat(task_id: str, phase: str, progress: float) -> None:
-    subprocess_json(
-        [*tasklight_command(), "heartbeat", "--task-id", task_id, "--phase", phase, "--progress", str(progress)],
-        timeout=10,
-    )
+    try:
+        subprocess_json(
+            [*tasklight_command(), "heartbeat", "--task-id", task_id, "--phase", phase, "--progress", str(progress)],
+            timeout=10,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(f"heartbeat task_id={task_id}: {exc}") from exc
 
 
 def block(task_id: str, reason: str, message: str, evidence: str) -> None:
@@ -971,7 +974,10 @@ def main() -> int:
     parser.add_argument("--offsets-path")
     parser.add_argument("--health-path")
     parser.add_argument("--lease-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "60")))
-    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "6")))
+    # Keep the post-tool reasoning gap visible long enough for normal Codex
+    # hand-offs. Stop still wins immediately and the 60s turn lease remains
+    # the fail-closed upper bound for a silent turn.
+    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "20")))
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_POLL_SECONDS", "1")))
     parser.add_argument("--max-signal-age-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS", "600")))
     parser.add_argument("--coalesce-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS", "2")))

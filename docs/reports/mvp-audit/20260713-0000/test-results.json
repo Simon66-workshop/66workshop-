@@ -1,0 +1,166 @@
+{
+  "audit_id": "20260713-0000",
+  "audit_mode": "read_only",
+  "security": {
+    "auth_file_read": false,
+    "secret_output": false,
+    "external_api_used": false,
+    "auto_trust": false,
+    "auto_purchase_or_reset": false,
+    "commit": false,
+    "push": false
+  },
+  "commands": [
+    {
+      "command": "./script/check_all.sh",
+      "exit_code": 1,
+      "pass": false,
+      "summary": "Hard gate failed at smoke_reliability_m38: AssertionError: [] after signal retention compaction.",
+      "evidence": "script/smoke_reliability_m38.sh:39,75-81; script/check_all.sh:14",
+      "raw_log_saved": false
+    },
+    {
+      "command": "python3 -m py_compile script/*.py script/self-review/*.py script/self-review/auditors/*.py",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "Python sources compile.",
+      "evidence": "terminal audit run",
+      "raw_log_saved": false
+    },
+    {
+      "command": "cd mac/66TaskLight && swift build",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "SwiftPM build completed.",
+      "evidence": "terminal audit run",
+      "raw_log_saved": false
+    },
+    {
+      "command": "cd mac/66TaskLight && swift run TaskLightChecks",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "TaskLightChecks passed; 10 core tests.",
+      "evidence": "terminal audit run",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_ui_client.sh",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "STATUS=ok; no running app instance reported by this probe; latest runtime bundle metadata is readable.",
+      "evidence": "runtime check output",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_state_projector.sh",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "STATUS=ok; launchctl running; process_count=1; writer_status=ok; ui_state fresh.",
+      "evidence": "runtime check output",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_hook_bridge_launch_agent.sh",
+      "exit_code": 0,
+      "pass": false,
+      "summary": "Process and signal are present, but semantic STATUS=stale.",
+      "evidence": "runtime check output at audit time",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_codex_quota.sh",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "STATUS=ok; source=codex_appserver; quota probe healthy.",
+      "evidence": "runtime check output",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_codex_quota_watcher_launch_agent.sh",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "STATUS=ok; poll_fallback writer healthy.",
+      "evidence": "runtime check output",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_codex_workspaces_coverage.sh --skip-appserver",
+      "exit_code": 0,
+      "pass": false,
+      "summary": "STATUS=needs_hooks; 41 workspaces, 35 trusted, 6 missing hooks, 0 invalid.",
+      "evidence": "~/.66tasklight/workspace_coverage/latest.md",
+      "raw_log_saved": false
+    },
+    {
+      "command": "./script/check_codex_hooks_trust.sh",
+      "exit_code": 1,
+      "pass": false,
+      "summary": "STATUS=probe_unavailable; trust cannot be independently verified in this environment.",
+      "evidence": "runtime check output",
+      "raw_log_saved": false
+    },
+    {
+      "command": "selected smoke suite",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "State, quota, reset credits, runtime arbiter, interaction replay, menu bar, radar, expanded panel, visual matrix, readability, focus, hooks doctor, widget snapshot, provider safety and self-review smokes passed individually. smoke_hook_bridge_launch_agent passed on rerun after one transient nonzero invocation.",
+      "evidence": "script/smoke_*.sh and script/check_component_audit_guardrails.sh",
+      "raw_log_saved": false
+    },
+    {
+      "command": "TASKLIGHT_SIGNAL_BUS_RETENTION_SECONDS=0 ./script/smoke_reliability_m38.sh",
+      "exit_code": 0,
+      "pass": true,
+      "summary": "Diagnostic confirmation only: disabling retention makes the stale-date fixture pass; this does not clear the normal check_all hard gate.",
+      "evidence": "terminal audit run",
+      "raw_log_saved": false
+    }
+  ],
+  "runtime_snapshot": {
+    "global_status": "running",
+    "lamp_status": "running",
+    "managed_active": 2,
+    "running": 2,
+    "blocked": 0,
+    "pending_verify": 0,
+    "quota_source": "codex_appserver",
+    "quota_fresh": true,
+    "quota_short_percent": 77,
+    "quota_long_percent": 69,
+    "quota_effective_remaining_percent": 69,
+    "manual_resets_available": 3,
+    "manual_resets_next_expiry": "2026-07-18T08:28:29+08:00",
+    "quota_matches_sidecar": true,
+    "signal_source_counts": {
+      "codex_appserver": 146,
+      "codex_hook": 1390,
+      "codex_private_probe": 73,
+      "current_thread_watcher": 71,
+      "explicit": 1826,
+      "hook_bridge": 1494
+    }
+  },
+  "performance_snapshot": {
+    "render_telemetry_records": 1590,
+    "render_p50_ms": 49.95,
+    "render_p95_ms": 72.71,
+    "render_max_ms": 4323.51,
+    "menu_self_test_open_apply_ms": 303.44,
+    "radar_self_test_total_ms": 51.28,
+    "visual_matrix_self_test_open_apply_ms": 115.91,
+    "expanded_panel_self_test_visible_apply_ms": 507.67,
+    "edge_toggle_self_test_transition_ms": 60.0
+  },
+  "state_volume": {
+    "task_json_files": 10301,
+    "turn_binding_json_files": 2784,
+    "observation_json_files": 19,
+    "tasks_size": "40M",
+    "turn_bindings_size": "11M",
+    "events_size": "23M",
+    "ui_event_flow_size": "3.0M",
+    "normalized_signals_size": "4.0M",
+    "ui_client_files": 957,
+    "ui_clients_size": "3.7M"
+  }
+}

@@ -270,6 +270,12 @@ When the projector is unavailable, Swift still renders from a complete
 `TaskLightUIState(source=swift_fallback)` object. It should not reopen raw
 dashboard/task sidecars inside the view model and recompute the lamp there.
 
+Heartbeat writes keep the per-task file and normalized signal fresh, but do not
+force a full legacy `state.json` aggregate rebuild when that snapshot already
+exists. This bounds heartbeat latency under large historical task directories;
+`ui_state.json` remains the UI read model and terminal/blocker mutations still
+rebuild the legacy aggregate.
+
 ## UI Client Diagnostics
 
 The app writes `~/.66tasklight/ui_clients/<pid>.json` at startup/refresh. This

@@ -99,6 +99,30 @@ payload = json.load(open(sys.argv[1]))
 assert payload["summary"]["stale"] >= 1, payload
 PY
 
+# A workspace missing hooks is a coverage debt, not proof that an old or
+# signal-less binding is currently active. Do not inflate active-suspect counts
+# from historical bindings.
+python3 - "$CHECK" <<'PY'
+import importlib.util
+import sys
+from pathlib import Path
+
+check = Path(sys.argv[1])
+sys.path.insert(0, str(check.parent))
+spec = importlib.util.spec_from_file_location("coverage_check", check)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+result = module.classify_thread(
+    {"signals": [], "workspace": "/tmp/missing-hooks", "workspace_source": "default", "appserver_status": "unknown"},
+    {"hook_status": "missing"},
+    now_ts=1_000.0,
+    ttl=30.0,
+)
+assert result["decision"] == "diagnostic_only", result
+assert result["reason"] == "no_thread_signal", result
+PY
+
 "$INSTALL" "$WORKSPACE" >/dev/null
 python3 "$CHECK" --json --skip-appserver --state-dir "$STATE_DIR" --signals-path "$STATE_DIR/normalized_signals.jsonl" --workspace "$WORKSPACE" >"$STATE_DIR/installed.json"
 python3 - "$STATE_DIR/installed.json" <<'PY'

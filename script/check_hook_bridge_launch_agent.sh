@@ -40,148 +40,34 @@ if [ -z "$process_pid" ]; then
   process_pid="none"
 fi
 
-_health_output="$(python3 - "$SIGNAL_DIR" "$TURN_BINDINGS_DIR" "$OFFSETS_PATH" "$HEALTH_PATH" "$MAX_BRIDGE_AGE_SECONDS" "$MAX_PROCESSING_AGE_SECONDS" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-import time
-from datetime import datetime
-from collections import deque
-from pathlib import Path
-
-signal_dir = Path(sys.argv[1]).expanduser()
-bindings_dir = Path(sys.argv[2]).expanduser()
-offsets_path = Path(sys.argv[3]).expanduser()
-health_path = Path(sys.argv[4]).expanduser()
-max_age = float(sys.argv[5])
-
-
-def parse_ts(value):
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    try:
-        return float(str(value))
-    except ValueError:
-        pass
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return None
-
-
-latest_signal_ts = None
-if signal_dir.exists():
-    for path in sorted(signal_dir.glob("*.jsonl")):
-        try:
-            with path.open("r", encoding="utf-8") as handle:
-                lines = list(deque(handle, maxlen=50))
-        except OSError:
-            continue
-        for line in lines:
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            ts = parse_ts(payload.get("event_time"))
-            if ts is not None:
-                latest_signal_ts = max(latest_signal_ts or ts, ts)
-
-active = 0
-if bindings_dir.exists():
-    for path in bindings_dir.glob("*.json"):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        if payload.get("status") == "active":
-            active += 1
-
-offsets_status = "missing"
-offset_last_run_at = None
-offset_last_seen_at = None
-if offsets_path.exists():
-    try:
-        offsets = json.loads(offsets_path.read_text(encoding="utf-8"))
-        offsets_status = "readable"
-        offset_last_run_at = offsets.get("last_run_at")
-        offset_last_seen_at = offsets.get("last_seen_at")
-    except (json.JSONDecodeError, OSError):
-        offsets_status = "unreadable"
-
-health_status = "missing"
-health = {}
-if health_path.exists():
-    try:
-        health = json.loads(health_path.read_text(encoding="utf-8"))
-        health_status = "readable"
-    except (json.JSONDecodeError, OSError):
-        health_status = "unreadable"
-
-last_run_at = health.get("last_run_at") or offset_last_run_at
-last_seen_at = health.get("last_seen_at") or offset_last_seen_at
-last_run_ts = parse_ts(last_run_at)
-now = time.time()
-signal_age = "none" if latest_signal_ts is None else str(max(0, int(now - latest_signal_ts)))
-bridge_age = "none" if last_run_ts is None else str(max(0, int(now - last_run_ts)))
-bridge_fresh = last_run_ts is not None and now - last_run_ts <= max_age
-processing_fresh = (
-    health.get("status") == "processing"
-    and last_run_ts is not None
-    and now - last_run_ts <= float(sys.argv[6])
-)
-
-print(f"signal_dir={signal_dir}")
-print(f"latest_signal_age_sec={signal_age}")
-print(f"active_turn_bindings={health.get('active_turn_bindings', active)}")
-print(f"offsets_status={offsets_status}")
-print(f"hook_bridge_health_path={health_path}")
-print(f"hook_bridge_health_status={health_status}")
-print(f"hook_bridge_health_state={health.get('status', 'none') if health_status == 'readable' else 'none'}")
-print(f"latest_bridge_process_time={last_run_at or 'none'}")
-print(f"latest_bridge_seen_time={last_seen_at or 'none'}")
-print(f"latest_bridge_age_sec={bridge_age}")
-print(f"bridge_fresh={'yes' if bridge_fresh else 'no'}")
-print(f"processing_fresh={'yes' if processing_fresh else 'no'}")
-PY
-)"
-
-latest_signal_age_sec="$(printf '%s\n' "$_health_output" | awk -F= '/^latest_signal_age_sec=/{print $2}' | tail -1)"
-active_turn_bindings="$(printf '%s\n' "$_health_output" | awk -F= '/^active_turn_bindings=/{print $2}' | tail -1)"
-offsets_status="$(printf '%s\n' "$_health_output" | awk -F= '/^offsets_status=/{print $2}' | tail -1)"
-health_status="$(printf '%s\n' "$_health_output" | awk -F= '/^hook_bridge_health_status=/{print $2}' | tail -1)"
-health_state="$(printf '%s\n' "$_health_output" | awk -F= '/^hook_bridge_health_state=/{print $2}' | tail -1)"
-latest_bridge_process_time="$(printf '%s\n' "$_health_output" | awk -F= '/^latest_bridge_process_time=/{print $2}' | tail -1)"
-bridge_fresh="$(printf '%s\n' "$_health_output" | awk -F= '/^bridge_fresh=/{print $2}' | tail -1)"
-processing_fresh="$(printf '%s\n' "$_health_output" | awk -F= '/^processing_fresh=/{print $2}' | tail -1)"
-
-status="ok"
-if [ "$plist_exists" = "no" ] || [ "$launchctl_status" != "running" ] || [ "$process_pid" = "none" ]; then
-  status="not_running"
-elif [ "$offsets_status" = "unreadable" ] || [ "$health_status" = "unreadable" ]; then
-  status="error"
-elif [ "$health_state" = "error" ]; then
-  status="error"
-elif [ "$bridge_fresh" != "yes" ] && [ "$processing_fresh" != "yes" ]; then
-  status="stale"
+process_alive="no"
+if [ "$process_pid" != "none" ]; then
+  process_alive="yes"
 fi
+
+_health_output="$(python3 "$ROOT_DIR/script/hook_bridge_health.py" \
+  --signal-dir "$SIGNAL_DIR" \
+  --offsets-path "$OFFSETS_PATH" \
+  --health-path "$HEALTH_PATH" \
+  --process-alive "$process_alive" \
+  --launchctl-status "$launchctl_status" \
+  --stale-threshold-sec "$MAX_BRIDGE_AGE_SECONDS" \
+  --idle-threshold-sec "$MAX_PROCESSING_AGE_SECONDS")"
+
+status="$(printf '%s\n' "$_health_output" | awk -F= '/^STATUS=/{print $2}' | tail -1)"
+final_status_reason="$(printf '%s\n' "$_health_output" | awk -F= '/^final_status_reason=/{print $2}' | tail -1)"
 
 log_tail="none"
 if [ -s "$ERR_LOG" ]; then
-  log_tail="$(tail -5 "$ERR_LOG" | tr '\n' '|' | sed 's/|$//')"
+  log_tail="present"
 fi
 
 echo "plist_exists=$plist_exists"
 echo "launchctl_status=$launchctl_status"
 echo "process_pid=$process_pid"
-printf '%s\n' "$_health_output" | sed -n '/^signal_dir=/p'
-echo "latest_signal_age_sec=${latest_signal_age_sec:-none}"
-echo "active_turn_bindings=${active_turn_bindings:-0}"
-printf '%s\n' "$_health_output" | sed -n '/^hook_bridge_health_path=/p'
-echo "hook_bridge_health_status=${health_status:-missing}"
-echo "hook_bridge_health_state=${health_state:-none}"
-echo "latest_bridge_process_time=${latest_bridge_process_time:-none}"
+echo "signal_dir=$SIGNAL_DIR"
+printf '%s\n' "$_health_output"
+echo "hook_bridge_health_path=$HEALTH_PATH"
 echo "log_tail=$log_tail"
-echo "STATUS=$status"
+echo "final_status_reason=${final_status_reason:-unknown}"
+echo "STATUS=${status:-error}"

@@ -12,6 +12,35 @@ mkdir -p "$STATE_DIR"
 export TASKLIGHT_STATE_DIR="$STATE_DIR"
 export TASKLIGHT_NORMALIZED_SIGNALS_PATH="$STATE_DIR/normalized_signals.jsonl"
 
+# A Codex desktop update may move the bundled app-server binary. The probe must
+# honor an explicitly configured local binary instead of assuming Codex.app.
+python3 - "$CHECKER" "$TMP_DIR" <<'PY'
+import importlib.util
+import os
+import stat
+import sys
+from pathlib import Path
+
+checker = Path(sys.argv[1])
+tmp = Path(sys.argv[2])
+override = tmp / "codex-local"
+override.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+override.chmod(override.stat().st_mode | stat.S_IXUSR)
+spec = importlib.util.spec_from_file_location("hooks_check", checker)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+previous = os.environ.get("TASKLIGHT_CODEX_BIN")
+os.environ["TASKLIGHT_CODEX_BIN"] = str(override)
+try:
+    assert module.resolve_codex_binary() == override
+finally:
+    if previous is None:
+        os.environ.pop("TASKLIGHT_CODEX_BIN", None)
+    else:
+        os.environ["TASKLIGHT_CODEX_BIN"] = previous
+PY
+
 status_for() {
   local project_root="$1"
   python3 "$CHECKER" --project-root "$project_root" --expected-root "$project_root" --skip-appserver --json \

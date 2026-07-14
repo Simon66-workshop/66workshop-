@@ -48,7 +48,9 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_hook_signal_bridge.sh"
 "$ROOT_DIR/script/smoke_hook_bridge_idle_cache.sh"
 "$ROOT_DIR/script/smoke_check_all_total_schema.sh"
+"$ROOT_DIR/script/smoke_signal_retention_time_boundary.sh"
 "$ROOT_DIR/script/smoke_stop_priority_guard.sh"
+"$ROOT_DIR/script/smoke_hook_bridge_health_timeline.sh"
 "$ROOT_DIR/script/smoke_hook_bridge_launch_agent.sh"
 "$ROOT_DIR/script/smoke_signal_fusion.sh"
 "$ROOT_DIR/script/smoke_private_probe_confidence.sh"
@@ -73,6 +75,9 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_luckycat_visual_matrix_runtime.sh"
 "$ROOT_DIR/script/smoke_status_replay_history.sh"
 "$ROOT_DIR/script/smoke_focus_meeting_mode.sh"
+"$ROOT_DIR/script/smoke_storage_lifecycle.sh"
+"$ROOT_DIR/script/smoke_large_state_render_performance.sh"
+"$ROOT_DIR/script/check_tasklight_storage.sh"
 python3 "$ROOT_DIR/script/state_projector.py" --once >/dev/null
 "$ROOT_DIR/script/check_state_projector.sh" >/dev/null
 "$ROOT_DIR/script/build_and_run.sh" --verify

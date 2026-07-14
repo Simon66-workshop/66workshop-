@@ -229,12 +229,22 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "preferred_missing_hooks": sum(1 for item in preferred_records if item["coverage_status"] == "missing_hooks"),
         "preferred_invalid_hooks": sum(1 for item in preferred_records if item["coverage_status"] == "invalid_hooks"),
     }
+    active_recent_records = [item for item in records if int(item.get("covered_running") or 0) > 0]
+    group_counts = {}
+    for group in ("preferred", "active_recent", "optional", "archived", "temporary", "unknown"):
+        group_counts[f"{group}_total"] = sum(1 for item in records if item.get("workspace_group") == group)
+    group_counts["active_recent_total"] = len(active_recent_records)
+    group_counts["active_recent_trusted"] = sum(1 for item in active_recent_records if item["coverage_status"] == "trusted")
+    group_counts["active_recent_missing"] = sum(1 for item in active_recent_records if item["coverage_status"] == "missing_hooks")
+    group_counts["overall_total"] = len(records)
+    group_counts["overall_missing"] = counts["missing_hooks"]
+    group_counts["probe_status"] = "unavailable" if counts["probe_unavailable"] else "available"
 
     return {
         "schema_version": "0.1",
         "generated_at": now_string(),
         "status": status,
-        "summary": {"workspace_count": len(records), **counts, **preferred_counts},
+        "summary": {"workspace_count": len(records), **counts, **preferred_counts, **group_counts},
         "workspaces": sorted(records, key=lambda item: (not item.get("preferred", False), item["coverage_status"], item["workspace"])),
         "thread_summary": thread_report.get("summary", {}),
     }

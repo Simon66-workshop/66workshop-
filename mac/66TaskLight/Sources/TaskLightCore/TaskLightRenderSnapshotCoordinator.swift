@@ -8,6 +8,7 @@ public struct TaskLightRenderSnapshot: Equatable {
     public var loadMilliseconds: Double
     public var cacheHit: Bool
     public var uiState: TaskLightUIState
+    public var stageMilliseconds: [String: Double]
     public var recentEvents: [TaskLightEventRecord]
     public var statusReplay: [StatusReplayRecord]
     public var workspaceDoctorRows: [WorkspaceDoctorRow]
@@ -20,6 +21,7 @@ public struct TaskLightRenderSnapshot: Equatable {
         loadMilliseconds: Double,
         cacheHit: Bool = false,
         uiState: TaskLightUIState,
+        stageMilliseconds: [String: Double] = [:],
         recentEvents: [TaskLightEventRecord],
         statusReplay: [StatusReplayRecord],
         workspaceDoctorRows: [WorkspaceDoctorRow],
@@ -31,6 +33,7 @@ public struct TaskLightRenderSnapshot: Equatable {
         self.loadMilliseconds = loadMilliseconds
         self.cacheHit = cacheHit
         self.uiState = uiState
+        self.stageMilliseconds = stageMilliseconds
         self.recentEvents = recentEvents
         self.statusReplay = statusReplay
         self.workspaceDoctorRows = workspaceDoctorRows
@@ -84,7 +87,10 @@ public final class TaskLightRenderSnapshotCoordinator {
             snapshot = cachedSnapshot
         } else {
             let startedAt = DispatchTime.now()
+            let readModelStarted = DispatchTime.now()
             let uiState = store.loadProjectedUIState()
+            let readModelMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - readModelStarted.uptimeNanoseconds) / 1_000_000
+            let auxiliaryStarted = DispatchTime.now()
             let recentEvents = store.loadRecentEvents()
                 .sorted { lhs, rhs in
                     if lhs.created_at != rhs.created_at { return lhs.created_at > rhs.created_at }
@@ -98,12 +104,17 @@ public final class TaskLightRenderSnapshotCoordinator {
             let doctorRows = store.loadWorkspaceDoctorRows(limit: TaskLightUIPerformanceBudget.workspaceDoctorRenderLimit)
             let history = store.loadQuotaHistory()
             let externalProviders = store.loadExternalUsageProviderSnapshots()
+            let auxiliaryMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - auxiliaryStarted.uptimeNanoseconds) / 1_000_000
             let elapsed = Double(DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000
             snapshot = TaskLightRenderSnapshot(
                 fingerprint: fingerprint,
                 loadMilliseconds: elapsed,
                 cacheHit: false,
                 uiState: uiState,
+                stageMilliseconds: [
+                    "read_model_assembly": readModelMilliseconds,
+                    "auxiliary_reads": auxiliaryMilliseconds
+                ],
                 recentEvents: Array(recentEvents),
                 statusReplay: statusReplay,
                 workspaceDoctorRows: doctorRows,

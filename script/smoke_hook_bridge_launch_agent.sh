@@ -66,7 +66,9 @@ wait_for_status() {
   local expected="$1"
   local deadline=$((SECONDS + 12))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if "$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=$expected$"; then
+    local output
+    output="$("$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" || true)"
+    if printf '%s\n' "$output" | grep -Fqx "STATUS=$expected"; then
       return 0
     fi
     sleep 0.5
@@ -118,6 +120,21 @@ raise SystemExit(1)
 PY
 }
 
+wait_for_task_for_turn() {
+  local turn_id="$1"
+  local deadline=$((SECONDS + 15))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    local task_id
+    task_id="$(task_for_turn "$turn_id" 2>/dev/null || true)"
+    if [ -n "$task_id" ]; then
+      printf '%s\n' "$task_id"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
 task_status() {
   "$ROOT_DIR/tasklight" show "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'
 }
@@ -154,7 +171,8 @@ wait_for_task_status() {
 }
 
 TASKLIGHT_HOOK_BRIDGE_LABEL="$LABEL" TASKLIGHT_STATE_DIR="$STATE_DIR" "$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null 2>&1 || true
-"$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=not_running$"
+initial_status="$("$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" || true)"
+printf '%s\n' "$initial_status" | grep -Fqx "STATUS=not_running"
 
 "$ROOT_DIR/script/install_hook_bridge_launch_agent.sh" >/dev/null
 if ! wait_for_status ok; then
@@ -184,8 +202,7 @@ if [ "$heartbeat_count" -gt 2 ]; then
 fi
 
 append_signal "approval_pending" "turn-blocked" "approval"
-sleep 3
-blocked_task="$(task_for_turn turn-blocked)"
+blocked_task="$(wait_for_task_for_turn turn-blocked)"
 wait_for_task_status "$blocked_task" blocked
 
 append_signal "turn_started" "turn-stop" "stop-start"
@@ -201,7 +218,8 @@ wait_for_task_status "$stop_task" done_verified
 
 if [ "$BRIDGE_MODE" = "launch_agent" ]; then
   "$ROOT_DIR/script/uninstall_hook_bridge_launch_agent.sh" >/dev/null
-  "$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" | grep -q "^STATUS=not_running$"
+  final_status="$("$ROOT_DIR/script/check_hook_bridge_launch_agent.sh" || true)"
+  printf '%s\n' "$final_status" | grep -Fqx "STATUS=not_running"
 else
   kill "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
   wait "$DIRECT_BRIDGE_PID" >/dev/null 2>&1 || true
