@@ -26,7 +26,7 @@ assert payload["summary"]["workspace_count"] == 1, payload
 result = payload["results"][0]
 assert result["install_status"] == "installed", result
 assert result["coverage_hook_status"] == "ok", result
-assert result["hook_visibility"] == "unknown", result
+assert result["hook_visibility"] in {"unknown", "probe_unavailable"}, result
 assert result["onboarding_status"] == "configured_check_ui", result
 PY
 

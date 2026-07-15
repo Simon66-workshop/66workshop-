@@ -27,9 +27,9 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_json(args: list[str]) -> dict[str, Any]:
+def run_json(args: list[str], *, allow_nonzero: bool = False) -> dict[str, Any]:
     proc = run_command(args)
-    if proc.returncode != 0:
+    if proc.returncode != 0 and not allow_nonzero:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(args)}")
     try:
         payload = json.loads(proc.stdout)
@@ -111,7 +111,10 @@ def onboard_workspace(workspace_arg: str, *, skip_appserver: bool) -> dict[str, 
         trust_args.append("--skip-appserver")
 
     coverage_report = run_json(coverage_args)
-    trust_report = run_json(trust_args)
+    # A missing local app-server is an expected pre-Trust state for a newly
+    # added workspace. Keep the structured report so onboarding can still tell
+    # the user to open Codex UI and approve hooks manually.
+    trust_report = run_json(trust_args, allow_nonzero=True)
     coverage = ((coverage_report.get("workspaces") or {}).get(str(workspace)) or {})
     onboarding_status, next_action = derive_onboarding_state(
         coverage=coverage,
