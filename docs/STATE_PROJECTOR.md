@@ -114,9 +114,11 @@ Uninstall:
 
 - Hook `running` only displays as active when a matching turn binding is active
   and fresh.
-- `TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS` defaults to `12`.
+- `TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS` defaults to `300`, aligned with
+  the bounded Hook turn lease.
 - `item_completed` without a later `stop` is projected as released after
-  `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`, default `20`.
+  `TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS`, default `300`. This event is
+  item-level evidence, so it must not prematurely end an active turn.
 - If a late `stop` arrives after a soft completed-idle release, Hook Bridge
   recovers the task to `done_unverified`; the projector then displays
   `pending_verify` and global title `PENDING`.

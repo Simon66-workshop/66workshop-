@@ -31,6 +31,7 @@ python3 -m unittest discover -s "$ROOT_DIR/cli/tests" -p 'test_*.py'
 "$ROOT_DIR/script/smoke_usage_provider_adapter.sh"
 "$ROOT_DIR/script/smoke_operational_insights.sh"
 "$ROOT_DIR/script/smoke_turn_runtime_arbiter.sh"
+"$ROOT_DIR/script/smoke_hook_active_turn_lease.sh"
 "$ROOT_DIR/script/smoke_multitask.sh"
 "$ROOT_DIR/script/smoke_verify_gate.sh"
 "$ROOT_DIR/script/smoke_ttl.sh"

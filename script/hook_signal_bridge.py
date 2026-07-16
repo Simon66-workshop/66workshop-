@@ -964,7 +964,8 @@ def bridge_once_unlocked(args: argparse.Namespace, config_state_dir: Path) -> di
     }
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    hook_turn_lease_default = os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "300")
     parser = argparse.ArgumentParser(description="Bridge Codex hook signals into tasklight managed tasks")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--once", action="store_true")
@@ -973,18 +974,21 @@ def main() -> int:
     parser.add_argument("--turn-bindings-dir")
     parser.add_argument("--offsets-path")
     parser.add_argument("--health-path")
-    parser.add_argument("--lease-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "60")))
-    # Keep the post-tool reasoning gap visible long enough for normal Codex
-    # hand-offs. Stop still wins immediately and the 60s turn lease remains
-    # the fail-closed upper bound for a silent turn.
-    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "20")))
+    parser.add_argument("--lease-seconds", type=float, default=float(hook_turn_lease_default))
+    # PostToolUse/item_completed is item-level evidence. Keep its default lease
+    # aligned with the turn while Stop remains the immediate completion signal.
+    parser.add_argument("--completed-idle-release-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", hook_turn_lease_default)))
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_POLL_SECONDS", "1")))
     parser.add_argument("--max-signal-age-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_SIGNAL_MAX_AGE_SECONDS", "600")))
     parser.add_argument("--coalesce-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_COALESCE_SECONDS", "2")))
     parser.add_argument("--max-signals-per-cycle", type=int, default=int(os.environ.get("TASKLIGHT_HOOK_BRIDGE_MAX_SIGNALS_PER_CYCLE", "80")))
     parser.add_argument("--max-binding-status-checks", type=int, default=int(os.environ.get("TASKLIGHT_HOOK_BRIDGE_MAX_BINDING_STATUS_CHECKS", "12")))
     parser.add_argument("--binding-reconcile-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_BRIDGE_BINDING_RECONCILE_SECONDS", "60")))
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     if args.once:
         print(json.dumps(bridge_once(args), ensure_ascii=True, sort_keys=True, indent=2))

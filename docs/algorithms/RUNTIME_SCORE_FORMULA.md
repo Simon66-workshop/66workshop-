@@ -18,7 +18,7 @@ Recommended TTLs:
 
 | Candidate kind | TTL |
 |---|---:|
-| `codex_hook active` | 12s |
+| `codex_hook active` | 300s |
 | `codex_appserver active` | 10s |
 | `private_probe active` | 6s |
 | `process_observer` | 5s |
@@ -58,4 +58,3 @@ runtime_score < 0.35               -> ignored
 - Fresh `codex_appserver` active thread can become `active_execution` or high-confidence observed active.
 - `process_observer` alone cannot reach `active_execution` because identity and consistency are low.
 - `private_probe global-only` cannot drive global RUNNING.
-

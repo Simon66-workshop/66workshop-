@@ -240,13 +240,13 @@ Required binding fields include:
 `hook_bridge_offsets.json` stores file offsets, processed signal ids, and the
 last processing timestamps so repeated bridge runs do not replay old events.
 
-`TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `60`. When an active turn binding
+`TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `300`. When an active turn binding
 has no fresh signal beyond the lease, the bridge silently releases active tasks
 with `sound_type=none`; it does not block, complete, or verify the task.
 
-`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`. If a hook turn's
-last signal is `item_completed` and no `stop` follows, the bridge uses this
-shorter window to release the active projection. When a newer hook turn is
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `300`. A hook turn's
+`item_completed` signal is item-level activity, so it retains the same bounded
+lease while waiting for authoritative `stop`. When a newer hook turn is
 active, older hook-projected tasks that have already become `stale` can also be
 silently released so stale history does not mask the current running turn.
 

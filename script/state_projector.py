@@ -255,8 +255,9 @@ def runtime_confidence_config() -> dict[str, Any]:
 def runtime_ttl_config() -> dict[str, float]:
     payload = load_params_file("runtime_ttl.json")
     ttl = payload.get("ttl_seconds") if isinstance(payload.get("ttl_seconds"), dict) else {}
+    hook_turn_lease_default = os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", ttl.get("codex_hook_active", 300))
     return {
-        "codex_hook": float(os.environ.get("TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS", ttl.get("codex_hook_active", 12))),
+        "codex_hook": float(os.environ.get("TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS", hook_turn_lease_default)),
         "codex_appserver": float(os.environ.get("TASKLIGHT_APPSERVER_THREAD_ACTIVE_TTL_SECONDS", ttl.get("codex_appserver_active", 10))),
         "codex_private_probe": float(os.environ.get("TASKLIGHT_PRIVATE_PROBE_ACTIVE_TTL_SECONDS", ttl.get("private_probe_active", 6))),
         "process_observer": float(os.environ.get("TASKLIGHT_OBSERVED_ACTIVE_TTL_SECONDS", ttl.get("process_observer", 5))),
@@ -2314,14 +2315,15 @@ def write_health(path: Path, status: str, payload: dict[str, Any] | None, error:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    hook_turn_lease_default = os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "300")
     parser = argparse.ArgumentParser(description="Project 66TaskLight inputs into ui_state.json")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--once", action="store_true")
     mode.add_argument("--watch", action="store_true")
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("TASKLIGHT_STATE_PROJECTOR_POLL_SECONDS", "1")))
-    parser.add_argument("--hook-active-ttl", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS", "12")))
-    parser.add_argument("--completed-idle-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", "20")))
-    parser.add_argument("--hook-turn-lease-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_TURN_LEASE_SECONDS", "60")))
+    parser.add_argument("--hook-active-ttl", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_ACTIVE_DISPLAY_TTL_SECONDS", hook_turn_lease_default)))
+    parser.add_argument("--completed-idle-seconds", type=float, default=float(os.environ.get("TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS", hook_turn_lease_default)))
+    parser.add_argument("--hook-turn-lease-seconds", type=float, default=float(hook_turn_lease_default))
     parser.add_argument("--observed-active-ttl", type=float, default=float(os.environ.get("TASKLIGHT_OBSERVED_ACTIVE_TTL_SECONDS", "8")))
     parser.add_argument("--verification-ttl-seconds", type=float, default=verification_ttl_seconds())
     parser.add_argument("--done-visible-hours", type=float, default=float(os.environ.get("TASKLIGHT_DONE_VISIBLE_HOURS", "24")))

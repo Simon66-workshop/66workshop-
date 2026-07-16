@@ -136,17 +136,19 @@ This keeps LuckyCat blue during active work while reducing repeated
 
 ## Release Behavior
 
-`TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `60`.
+`TASKLIGHT_HOOK_TURN_LEASE_SECONDS` defaults to `300`.
 
-`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `20`.
+`TASKLIGHT_HOOK_COMPLETED_IDLE_RELEASE_SECONDS` defaults to `300`, aligned with
+the bounded turn lease.
 
 If an active turn binding has no fresh hook signal after the lease, the bridge
 silently calls `tasklight release` only when the task is still active. This does
 not play red or green sound and does not write `done_verified`.
 
-If the last signal is `item_completed`, the shorter completed-idle release window
-is used. This fail-closed behavior prevents turns that finished tool activity but
-did not emit `stop` from holding LuckyCat in `RUNNING`.
+`item_completed` means one tool item completed, not that the Codex turn ended.
+It therefore keeps the same bounded lease as the turn by default. A trusted
+`stop` remains the authoritative completion signal; if it is missing, the
+300-second lease still releases the task fail-closed.
 
 Completed-idle release is a soft timeout. The binding records
 `release_kind=soft_timeout`, `released_by=completed_idle_timeout`, and
